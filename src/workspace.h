@@ -459,6 +459,20 @@ public:
     void requestDpmsState(DpmsState state);
     DpmsState dpmsState() const;
 
+    bool vrMode() const
+    {
+        return m_vrMode;
+    }
+    void setVrMode(bool mode)
+    {
+        if (m_vrMode == mode) {
+            return;
+        }
+
+        m_vrMode = mode;
+        Q_EMIT vrModeChanged();
+    }
+
 public Q_SLOTS:
     void performWindowOperation(KWin::Window *window, Options::WindowOperation op);
     // Keybindings
@@ -584,6 +598,7 @@ Q_SIGNALS:
     void stackingOrderChanged();
     void aboutToRearrange();
     void dpmsStateChanged(std::chrono::milliseconds animationTime);
+    void vrModeChanged();
 
 private:
     void init();
@@ -766,6 +781,8 @@ private:
     QList<QString> m_recentlyRemovedDpmsOffOutputs;
     QTimer m_dpmsTimer;
     FileDescriptor m_sleepInhibitor;
+
+    bool m_vrMode = false;
 
 private:
     friend bool performTransiencyCheck();
