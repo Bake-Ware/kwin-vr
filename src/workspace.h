@@ -453,6 +453,20 @@ public:
     void setActivationToken(const QString &token, uint32_t serial, const QString &appId);
     bool mayActivate(Window *window, const QString &token) const;
 
+    bool vrMode() const
+    {
+        return m_vrMode;
+    }
+    void setVrMode(bool mode)
+    {
+        if (m_vrMode == mode) {
+            return;
+        }
+
+        m_vrMode = mode;
+        Q_EMIT vrModeChanged();
+    }
+
 public Q_SLOTS:
     void performWindowOperation(KWin::Window *window, Options::WindowOperation op);
     // Keybindings
@@ -576,6 +590,7 @@ Q_SIGNALS:
      */
     void stackingOrderChanged();
     void aboutToRearrange();
+    void vrModeChanged();
 
 private:
     void init();
@@ -750,6 +765,8 @@ private:
     QString m_activationToken;
     QString m_activationTokenAppId;
     uint32_t m_activationTokenSerial = 0;
+
+    bool m_vrMode = false;
 
 private:
     friend bool performTransiencyCheck();
