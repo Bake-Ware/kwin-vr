@@ -31,6 +31,7 @@
 #include "outline.h"
 #include "placement.h"
 #include "pluginmanager.h"
+#include "plugins/qpa/window.h"
 #include "pointer_input.h"
 #include "rules.h"
 #include "screenedge.h"

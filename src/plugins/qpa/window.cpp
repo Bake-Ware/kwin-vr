@@ -145,6 +145,15 @@ InternalWindow *Window::internalWindow() const
     return m_handle;
 }
 
+void Window::setTransientFor(KWin::Window *window)
+{
+    m_transientFor = window;
+    if (m_handle) {
+        QObject::disconnect(m_transientChangedConnection);
+        m_handle->setTransientFor(window);
+    }
+}
+
 void Window::map()
 {
     if (m_handle) {
@@ -176,6 +185,7 @@ void Window::unmap()
         return;
     }
 
+    m_transientChangedConnection = {};
     m_handle->destroyWindow();
     m_handle = nullptr;
 
