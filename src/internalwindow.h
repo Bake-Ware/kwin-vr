@@ -15,6 +15,8 @@
 namespace KWin
 {
 
+inline constexpr const char s_kwinTransientForPropertyName[] = "_kwin_transientFor";
+
 struct InternalWindowFrame
 {
     GraphicsBuffer *buffer = nullptr;
@@ -69,6 +71,7 @@ public:
     qreal bufferScale() const;
     void doSetNextTargetScale() override;
     QWindow *handle() const;
+    void initQWindowTransientTracking(std::function<void(QWindow *)> resolveTransient);
 
 Q_SIGNALS:
     void presented(const InternalWindowFrame &frame);
@@ -96,6 +99,7 @@ private:
     DecorationPolicy m_decorationPolicy = DecorationPolicy::PreferredByClient;
     GraphicsBufferRef m_graphicsBufferRef;
     OutputTransform m_bufferTransform = OutputTransform::Normal;
+    QMetaObject::Connection m_qWindowTransientConnection;
 
     Q_DISABLE_COPY(InternalWindow)
 };

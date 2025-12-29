@@ -151,7 +151,20 @@ void Window::map()
         return;
     }
 
-    m_handle = new InternalWindow(window());
+    auto qWindow = window();
+    auto internalWindow = new InternalWindow(qWindow);
+    m_handle = internalWindow;
+
+    internalWindow->initQWindowTransientTracking([internalWindow](QWindow *transientParent) {
+        if (transientParent) {
+            auto parentQPAWindow = static_cast<Window *>(transientParent->handle());
+            if (parentQPAWindow) {
+                internalWindow->setTransientFor(parentQPAWindow->internalWindow());
+            }
+        } else {
+            internalWindow->setTransientFor(nullptr);
+        }
+    });
 
     m_exposed = true;
     QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(), geometry().size()));

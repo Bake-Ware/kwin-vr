@@ -312,6 +312,8 @@ void UserActionsMenu::menuAboutToShow()
         return;
     }
 
+    Workspace::setQWidgetTransientFor(m_menu, m_window);
+
     m_window->blockActivityUpdates(true);
 
     if (VirtualDesktopManager::self()->count() == 1) {
@@ -1012,6 +1014,9 @@ void Workspace::setupWindowShortcut(Window *window)
         pos.setY(r.bottom() - size.height());
     }
     m_windowKeysDialog->move(pos.toPoint());
+
+    Workspace::setQWidgetTransientFor(m_windowKeysDialog, window);
+
     m_windowKeysDialog->show();
     active_popup = m_windowKeysDialog;
     m_activePopupWindow = window;

@@ -2107,6 +2107,36 @@ Window *Workspace::findInternal(QWindow *w) const
     return nullptr;
 }
 
+void Workspace::setQWidgetTransientFor(QWidget *child, Window *parent)
+{
+    QWindow *childQWindow = child->windowHandle();
+    if (!childQWindow) {
+        child->createWinId();
+        childQWindow = child->windowHandle();
+    }
+    if (!childQWindow) {
+        qCWarning(KWIN_CORE, "Failed to set transient: Failed to create a child QWindow for a QWidget");
+        return;
+    }
+
+    auto oldParent = childQWindow->property(s_kwinTransientForPropertyName).value<Window *>();
+    if (oldParent == parent) {
+        return;
+    }
+
+    if (oldParent) {
+        QObject::disconnect(oldParent, &QObject::destroyed, childQWindow, nullptr);
+    }
+
+    childQWindow->setProperty(s_kwinTransientForPropertyName, QVariant::fromValue(parent));
+
+    if (parent) {
+        QObject::connect(parent, &QObject::destroyed, childQWindow, [childQWindow]() {
+            childQWindow->setProperty(s_kwinTransientForPropertyName, QVariant());
+        });
+    }
+}
+
 void Workspace::setWasUserInteraction()
 {
     was_user_interaction = true;
