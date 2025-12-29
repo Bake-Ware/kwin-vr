@@ -17,6 +17,7 @@ namespace KWin
 
 class InternalWindow;
 class EglContext;
+class Window;
 
 namespace QPA
 {
@@ -43,6 +44,8 @@ public:
     InternalWindow *internalWindow() const;
     Swapchain *swapchain(const std::shared_ptr<EglContext> &context, const QHash<uint32_t, QList<uint64_t>> &formats);
 
+    virtual void setTransientFor(KWin::Window *window);
+
 private:
     void map();
     void unmap();
@@ -54,6 +57,8 @@ private:
     quint32 m_windowId;
     qreal m_scale = 1;
     bool m_exposed = false;
+    QPointer<KWin::Window> m_transientFor;
+    QMetaObject::Connection m_transientChangedConnection;
 };
 
 }

@@ -145,13 +145,43 @@ InternalWindow *Window::internalWindow() const
     return m_handle;
 }
 
+void Window::setTransientFor(KWin::Window *window)
+{
+    m_transientFor = window;
+    if (m_handle) {
+        QObject::disconnect(m_transientChangedConnection);
+        m_handle->setTransientFor(window);
+    }
+}
+
 void Window::map()
 {
     if (m_handle) {
         return;
     }
 
-    m_handle = new InternalWindow(window());
+    auto qWindow = window();
+    auto internalWindow = new InternalWindow(qWindow);
+    m_handle = internalWindow;
+
+    auto onTransientChanged = [internalWindow](QWindow *transientParent) {
+        if (transientParent) {
+            auto parentQPAWindow = static_cast<Window *>(transientParent->handle());
+            if (parentQPAWindow) {
+                auto parentInternalWindow = parentQPAWindow->internalWindow();
+                internalWindow->setTransientFor(parentInternalWindow);
+            }
+        } else {
+            internalWindow->setTransientFor(nullptr);
+        }
+    };
+
+    if (m_transientFor) {
+        internalWindow->setTransientFor(m_transientFor);
+    } else {
+        m_transientChangedConnection = QObject::connect(qWindow, &QWindow::transientParentChanged, internalWindow, onTransientChanged);
+        onTransientChanged(qWindow->transientParent());
+    }
 
     m_exposed = true;
     QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(), geometry().size()));
@@ -163,6 +193,7 @@ void Window::unmap()
         return;
     }
 
+    m_transientChangedConnection = {};
     m_handle->destroyWindow();
     m_handle = nullptr;
 
