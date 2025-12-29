@@ -17,6 +17,7 @@
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/Decoration>
 
+#include <QApplication>
 #include <QDebug>
 #include <QMenu>
 #include <QStyle>
@@ -84,6 +85,12 @@ DecoratedWindowImpl::DecoratedWindowImpl(Window *window, KDecoration3::Decorated
         this->m_toolTipFallAsleep.setRemainingTime(fallAsleepDelay);
 
         QToolTip::showText(Cursors::self()->currentCursor()->pos().toPoint(), this->m_toolTipText);
+        for (QWidget *w : QApplication::topLevelWidgets()) {
+            if (w->windowType() == Qt::ToolTip && w->isVisible()) {
+                Workspace::setQWidgetTransientFor(w, this->m_window);
+                break;
+            }
+        }
         m_toolTipShowing = true;
     });
 }

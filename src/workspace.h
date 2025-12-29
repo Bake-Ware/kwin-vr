@@ -123,6 +123,18 @@ public:
      */
     Window *findInternal(QWindow *w) const;
 
+    /**
+     * Sets a QWidget as transient for a KWin Window.
+     *
+     * Makes the QWidget's internal QWindow transient to the specified parent Window,
+     * establishing a parent-child relationship in the window hierarchy. If the QWidget
+     * does not have a QWindow yet, it will be created.
+     *
+     * @param child The QWidget whose internal QWindow will become transient
+     * @param parent The KWin Window that will be the transient parent
+     */
+    static void setQWidgetTransientFor(QWidget *child, Window *parent);
+
     QRectF clientArea(clientAreaOption, const Output *output, const VirtualDesktop *desktop) const;
     QRectF clientArea(clientAreaOption, const Window *window) const;
     QRectF clientArea(clientAreaOption, const Window *window, const Output *output) const;

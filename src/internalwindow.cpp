@@ -112,6 +112,11 @@ bool InternalWindow::eventFilter(QObject *watched, QEvent *event)
         if (pe->propertyName() == s_shadowEnabledPropertyName) {
             updateShadow();
         }
+        if (pe->propertyName() == s_kwinTransientForPropertyName) {
+            QObject::disconnect(m_qWindowTransientConnection);
+            auto parent = m_handle->property(s_kwinTransientForPropertyName).value<Window *>();
+            setTransientFor(parent);
+        }
     }
     return false;
 }
@@ -400,6 +405,18 @@ void InternalWindow::present(const InternalWindowFrame &frame)
 QWindow *InternalWindow::handle() const
 {
     return m_handle;
+}
+
+void InternalWindow::initQWindowTransientTracking(std::function<void(QWindow *)> resolveTransient)
+{
+    auto transientFor = m_handle->property(s_kwinTransientForPropertyName).value<Window *>();
+    if (transientFor) {
+        setTransientFor(transientFor);
+        return;
+    }
+
+    m_qWindowTransientConnection = connect(m_handle, &QWindow::transientParentChanged, this, resolveTransient);
+    resolveTransient(m_handle->transientParent());
 }
 
 bool InternalWindow::acceptsFocus() const
