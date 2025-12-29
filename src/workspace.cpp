@@ -31,6 +31,7 @@
 #include "outline.h"
 #include "placement.h"
 #include "pluginmanager.h"
+#include "plugins/qpa/window.h"
 #include "pointer_input.h"
 #include "rules.h"
 #include "screenedge.h"
@@ -2083,6 +2084,28 @@ Window *Workspace::findInternal(QWindow *w) const
         }
     }
     return nullptr;
+}
+
+void Workspace::setQWidgetTransientFor(QWidget *child, Window *parent)
+{
+    QWindow *childQWindow = child->windowHandle();
+    if (!childQWindow) {
+        child->createWinId();
+        childQWindow = child->windowHandle();
+    }
+    if (childQWindow) {
+        /* platform window might be not be yet created */
+        childQWindow->create();
+        QPlatformWindow *platformWindow = childQWindow->handle();
+        if (platformWindow) {
+            auto qpaPlatformWindow = static_cast<QPA::Window *>(platformWindow);
+            qpaPlatformWindow->setTransientFor(parent);
+        } else {
+            qCWarning(KWIN_CORE, "Failed to set transient: Failed to get QPA PlatformWindow from QWindow");
+        }
+    } else {
+        qCWarning(KWIN_CORE, "Failed to set transient: Failed to create a child QWindow for a QWidget");
+    }
 }
 
 void Workspace::setWasUserInteraction()
