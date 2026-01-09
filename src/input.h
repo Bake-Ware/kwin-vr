@@ -485,6 +485,7 @@ Q_SIGNALS:
 protected:
     explicit InputDeviceHandler(InputRedirection *parent);
 
+    virtual Window *findHoverWindow();
     virtual void cleanupDecoration(Decoration::DecoratedWindowImpl *old, Decoration::DecoratedWindowImpl *now) = 0;
 
     virtual void focusUpdate(Window *old, Window *now) = 0;

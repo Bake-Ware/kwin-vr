@@ -83,6 +83,36 @@ CursorTheme PointerInputRedirection::cursorTheme() const
     return m_cursor->theme();
 }
 
+void PointerInputRedirection::setForcedFocusWindow(Window *window)
+{
+    if (m_forcedFocusWindow == window) {
+        return;
+    }
+    m_forcedFocusWindow = window;
+    update();
+}
+
+Window *PointerInputRedirection::forcedFocusWindow() const
+{
+    return m_forcedFocusWindow;
+}
+
+Window *PointerInputRedirection::findHoverWindow()
+{
+    if (workspace()->vrMode()) {
+        if (!m_forcedFocusWindow) {
+            return nullptr;
+        }
+
+        if (m_forcedFocusWindow->isDeleted()) {
+            return nullptr;
+        }
+
+        return m_forcedFocusWindow;
+    }
+    return InputDeviceHandler::findHoverWindow();
+}
+
 void PointerInputRedirection::init()
 {
     Q_ASSERT(!inited());
