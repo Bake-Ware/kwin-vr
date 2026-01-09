@@ -3565,6 +3565,14 @@ InputDeviceHandler::InputDeviceHandler(InputRedirection *input)
 
 InputDeviceHandler::~InputDeviceHandler() = default;
 
+Window *InputDeviceHandler::findHoverWindow()
+{
+    if (positionValid()) {
+        return input()->findToplevel(position());
+    }
+    return nullptr;
+}
+
 void InputDeviceHandler::init()
 {
     m_hoveredWindowFinder = defaultHoveredWindowFinder();
@@ -3669,8 +3677,9 @@ void InputDeviceHandler::update()
         return;
     }
 
+    Window *window = findHoverWindow();
     // Always set the window at the position of the input device.
-    setHover(m_hoveredWindowFinder());
+    setHover(window);
 
     if (focusUpdatesBlocked()) {
         workspace()->updateFocusMousePosition(position());
