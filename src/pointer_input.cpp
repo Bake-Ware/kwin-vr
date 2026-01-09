@@ -971,12 +971,15 @@ void PointerInputRedirection::updatePosition(const QPointF &pos, const QPointF &
         return;
     }
 
-    QPointF p = m_positionLimiter(pos, relativeMotion, time);
-    if (p == m_pos) {
-        return;
+    if (workspace()->vrMode()) {
+        m_pos = pos;
+    } else {
+        QPointF p = m_positionLimiter(pos, relativeMotion, time);
+        if (p == m_pos) {
+            return;
+        }
+        m_pos = p;
     }
-
-    m_pos = p;
 
     workspace()->setActiveOutput(m_pos);
     m_cursor->updateCursorOutputs(m_pos);
@@ -1015,7 +1018,7 @@ bool PointerInputRedirection::supportsWarping() const
 
 void PointerInputRedirection::updateAfterScreenChange()
 {
-    if (!inited()) {
+    if (!inited() || workspace()->vrMode()) {
         return;
     }
 
