@@ -948,21 +948,25 @@ void PointerInputRedirection::updatePosition(const QPointF &pos, std::chrono::mi
         // locked pointer should not move
         return;
     }
-    // verify that at least one screen contains the pointer position
-    const Output *currentOutput = workspace()->outputAt(pos);
-    QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
-    p = applyEdgeBarrier(p, currentOutput, time);
-    p = applyPointerConfinement(p);
-    if (p == m_pos) {
-        // didn't change due to confinement
-        return;
-    }
-    // verify screen confinement
-    if (!screenContainsPos(p)) {
-        return;
-    }
 
-    m_pos = p;
+    if (workspace()->vrMode()) {
+        m_pos = pos;
+    } else {
+        // verify that at least one screen contains the pointer position
+        const Output *currentOutput = workspace()->outputAt(pos);
+        QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
+        p = applyEdgeBarrier(p, currentOutput, time);
+        p = applyPointerConfinement(p);
+        if (p == m_pos) {
+            // didn't change due to confinement
+            return;
+        }
+        // verify screen confinement
+        if (!screenContainsPos(p)) {
+            return;
+        }
+        m_pos = p;
+    }
 
     workspace()->setActiveOutput(m_pos);
     m_cursor->updateCursorOutputs(m_pos);
@@ -1001,7 +1005,7 @@ bool PointerInputRedirection::supportsWarping() const
 
 void PointerInputRedirection::updateAfterScreenChange()
 {
-    if (!inited()) {
+    if (!inited() || workspace()->vrMode()) {
         return;
     }
 
