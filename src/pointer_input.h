@@ -81,6 +81,13 @@ public:
     bool focusUpdatesBlocked() override;
 
     /**
+     * @brief Sets a window that should receive pointer/hover events regardless of the pointer position.
+     * This is only effective when Workspace::vrMode() is true.
+     */
+    void setForcedFocusWindow(Window *window);
+    Window *forcedFocusWindow() const;
+
+    /**
      * @internal
      */
     void processMotionAbsolute(const QPointF &pos, std::chrono::microseconds time, InputDevice *device = nullptr);
@@ -162,6 +169,7 @@ private:
     void processMotionInternal(const QPointF &pos, const QPointF &delta, const QPointF &deltaNonAccelerated, std::chrono::microseconds time, InputDevice *device, MotionType type);
     void cleanupDecoration(Decoration::DecoratedWindowImpl *old, Decoration::DecoratedWindowImpl *now) override;
 
+    Window *findHoverWindow() override;
     void focusUpdate(Window *focusOld, Window *focusNow) override;
 
     QPointF position() const override;
@@ -180,6 +188,7 @@ private:
     void breakPointerConstraints(SurfaceInterface *surface);
     CursorImage *m_cursor;
     QPointF m_pos;
+    QPointer<Window> m_forcedFocusWindow;
     QHash<uint32_t, PointerButtonState> m_buttons;
     Qt::MouseButtons m_qtButtons;
     QMetaObject::Connection m_focusGeometryConnection;

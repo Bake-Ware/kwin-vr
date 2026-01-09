@@ -3640,6 +3640,14 @@ InputDeviceHandler::InputDeviceHandler(InputRedirection *input)
 
 InputDeviceHandler::~InputDeviceHandler() = default;
 
+Window *InputDeviceHandler::findHoverWindow()
+{
+    if (positionValid()) {
+        return input()->findToplevel(position());
+    }
+    return nullptr;
+}
+
 void InputDeviceHandler::init()
 {
     connect(workspace(), &Workspace::stackingOrderChanged, this, &InputDeviceHandler::update);
@@ -3728,10 +3736,7 @@ void InputDeviceHandler::update()
         return;
     }
 
-    Window *window = nullptr;
-    if (positionValid()) {
-        window = input()->findToplevel(position());
-    }
+    Window *window = findHoverWindow();
     // Always set the window at the position of the input device.
     setHover(window);
 
