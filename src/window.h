@@ -612,6 +612,12 @@ class KWIN_EXPORT Window : public QObject
      * It will also be applied for all transient windows recursively.
      */
     Q_PROPERTY(bool excludeFromCapture READ excludeFromCapture WRITE setExcludeFromCapture NOTIFY excludeFromCaptureChanged FINAL)
+
+    /**
+     * Whether the window is currently in VR mode.
+     */
+    Q_PROPERTY(bool vr READ isVr WRITE setVr NOTIFY vrChanged)
+
 public:
     ~Window() override;
 
@@ -1402,6 +1408,9 @@ public:
     QString tag() const;
     QString description() const;
 
+    bool isVr() const;
+    void setVr(bool set);
+
     void setActivationToken(const QString &token);
     QString activationToken() const;
 
@@ -1527,6 +1536,7 @@ Q_SIGNALS:
     void nextTargetScaleChanged();
     void tagChanged();
     void descriptionChanged();
+    void vrChanged();
     void borderRadiusChanged();
     void excludeFromCaptureChanged();
     void decorationPolicyChanged();
@@ -1930,6 +1940,7 @@ protected:
 
     QString m_tag;
     QString m_description;
+    bool m_vr = false;
 
     QString m_activationToken;
 };
