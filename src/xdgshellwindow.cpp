@@ -1902,7 +1902,25 @@ void XdgPopupWindow::handleRepositionRequested(quint32 token)
 void XdgPopupWindow::updateRelativePlacement()
 {
     const QPointF parentPosition = transientFor()->nextFramePosToClientPos(transientFor()->pos());
-    const RectF bounds = workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor()).translated(-parentPosition);
+    RectF bounds;
+
+    if (workspace()->vrMode()) {
+        Window *parent = transientFor();
+        bounds = parent->clientGeometry();
+        while (Window *next = parent->transientFor()) {
+            parent = next;
+            bounds = bounds.united(parent->clientGeometry());
+        }
+
+        if (!parent->isVr()) {
+            bounds = bounds.united(workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor()));
+        }
+    } else {
+        bounds = workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor());
+    }
+
+    bounds.translate(-parentPosition);
+
     const XdgPositioner positioner = m_shellSurface->positioner();
 
     if (m_plasmaShellSurface && m_plasmaShellSurface->isPositionSet()) {
