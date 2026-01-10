@@ -1870,7 +1870,24 @@ std::function<QRectF(Window *parent)> XdgPopupWindow::defaultPopupBoundsResolver
 void XdgPopupWindow::updateRelativePlacement()
 {
     const QPointF parentPosition = transientFor()->nextFramePosToClientPos(transientFor()->pos());
-    const QRectF bounds = workspace()->popupBoundsResolver()(transientFor()).translated(-parentPosition);
+    QRectF bounds;
+
+    if (workspace()->vrMode()) {
+        Window *parent = transientFor();
+        bounds = parent->clientGeometry();
+        while (Window *next = parent->transientFor()) {
+            parent = next;
+            bounds = bounds.united(parent->clientGeometry());
+        }
+
+        if (!parent->isVr()) {
+            bounds = bounds.united(workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor()));
+        }
+    } else {
+        bounds = workspace()->popupBoundsResolver()(transientFor());
+    }
+
+    bounds.translate(-parentPosition);
     const XdgPositioner positioner = m_shellSurface->positioner();
 
     if (m_plasmaShellSurface && m_plasmaShellSurface->isPositionSet()) {
