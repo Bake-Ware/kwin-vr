@@ -11,6 +11,7 @@
 #include <QUuid>
 
 #include <epoxy/gl.h>
+#include <qtimer.h>
 
 namespace KWin
 {
@@ -51,6 +52,7 @@ private:
     std::unique_ptr<GLFramebuffer> m_offscreenTarget;
     GLsync m_acquireFence = 0;
     bool m_dirty = true;
+    QTimer m_timer;
 };
 
 class WindowThumbnailItem : public QQuickItem
@@ -58,6 +60,18 @@ class WindowThumbnailItem : public QQuickItem
     Q_OBJECT
     Q_PROPERTY(QUuid wId READ wId WRITE setWId NOTIFY wIdChanged)
     Q_PROPERTY(KWin::Window *client READ client WRITE setClient NOTIFY clientChanged)
+
+    /**
+     * The logical size of the texture for this window, including shadows.
+     * This is in device-independent coordinates, not physical pixels.
+     */
+    Q_PROPERTY(QSizeF textureSizeLogical READ textureSizeLogical NOTIFY textureSizeLogicalChanged FINAL)
+
+    /**
+     * The rectangular area within the texture that contains the actual window content, excluding shadows.
+     * This is in device-independent coordinates relative to the texture's top-left corner.
+     */
+    Q_PROPERTY(QRectF textureFrameRect READ textureFrameRect NOTIFY textureFrameRectChanged FINAL)
 
 public:
     explicit WindowThumbnailItem(QQuickItem *parent = nullptr);
@@ -68,6 +82,9 @@ public:
 
     Window *client() const;
     void setClient(Window *client);
+
+    QSizeF textureSizeLogical() const;
+    QRectF textureFrameRect() const;
 
     QSGTextureProvider *textureProvider() const override;
     bool isTextureProvider() const override;
@@ -80,6 +97,8 @@ protected:
 Q_SIGNALS:
     void wIdChanged();
     void clientChanged();
+    void textureSizeLogicalChanged();
+    void textureFrameRectChanged();
 
 private Q_SLOTS:
    /**
@@ -95,13 +114,18 @@ private Q_SLOTS:
     void invalidateSceneGraph();
 
 private:
+    void setTextureSizeLogical(const QSizeF &newTextureSizeLogical);
+    void setTextureFrameRect(const QRectF &newTextureFrameRect);
+
     QRectF paintedRect() const;
-    void updateImplicitSize();
+    void updateSizes();
     void updateSource();
     void resetSource();
 
     QUuid m_wId;
     QPointer<Window> m_client;
+    QSizeF m_textureSizeLogical = QSizeF(1, 1);
+    QRectF m_textureFrameRect = QRectF(0, 0, 1, 1);
 
     mutable ThumbnailTextureProvider *m_provider = nullptr;
     std::shared_ptr<WindowThumbnailSource> m_source;
