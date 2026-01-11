@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Stanislav Aleksandrov <lightofmysoul@gmail.com>
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+File=kwinvr.kcfg
+ClassName=KWinVRConfig
+NameSpace=KWin
+Mutators=true
+DefaultValueGetters=true
+GenerateProperties=true
+ParentInConstructor=true
+Notifiers=true
