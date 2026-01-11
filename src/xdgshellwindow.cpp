@@ -99,6 +99,11 @@ WindowType XdgSurfaceWindow::windowType() const
     return m_windowType;
 }
 
+QRectF XdgSurfaceWindow::windowGeometry() const
+{
+    return m_windowGeometry;
+}
+
 XdgSurfaceConfigure *XdgSurfaceWindow::lastAcknowledgedConfigure() const
 {
     return m_lastAcknowledgedConfigure.get();

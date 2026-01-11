@@ -56,13 +56,15 @@ public:
     double scale;
 };
 
-class XdgSurfaceWindow : public WaylandWindow
+class KWIN_EXPORT XdgSurfaceWindow : public WaylandWindow
 {
     Q_OBJECT
 
 public:
     explicit XdgSurfaceWindow(XdgSurfaceInterface *shellSurface);
     ~XdgSurfaceWindow() override;
+
+    QRectF windowGeometry() const;
 
     WindowType windowType() const override;
     RectF frameRectToBufferRect(const RectF &rect) const override;

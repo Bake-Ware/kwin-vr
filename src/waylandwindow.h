@@ -11,7 +11,7 @@
 namespace KWin
 {
 
-class WaylandWindow : public Window
+class KWIN_EXPORT WaylandWindow : public Window
 {
     Q_OBJECT
 
