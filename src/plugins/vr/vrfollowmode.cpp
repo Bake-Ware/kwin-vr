@@ -6,12 +6,8 @@
 
 #include "vrfollowmode.h"
 #include "kwinvrhelpers.h"
-
 #include <QtMath>
 #include <limits>
-
-namespace KWin
-{
 
 VrFollowMode::VrFollowMode(QObject *parent)
     : QObject(parent)
@@ -27,9 +23,8 @@ QQuick3DNode *VrFollowMode::camera() const
 
 void VrFollowMode::setCamera(QQuick3DNode *camera)
 {
-    if (m_camera == camera) {
+    if (m_camera == camera)
         return;
-    }
 
     if (m_camera) {
         disconnect(m_camera, &QObject::destroyed, this, nullptr);
@@ -54,9 +49,8 @@ QQuick3DNode *VrFollowMode::rotationTarget() const
 
 void VrFollowMode::setRotationTarget(QQuick3DNode *rotationTarget)
 {
-    if (m_rotationTarget == rotationTarget) {
+    if (m_rotationTarget == rotationTarget)
         return;
-    }
 
     if (m_rotationTarget) {
         disconnect(m_rotationTarget, &QObject::destroyed, this, nullptr);
@@ -81,9 +75,8 @@ bool VrFollowMode::worldUpAlignment() const
 
 void VrFollowMode::setFovH(int fovH)
 {
-    if (m_fovH == fovH) {
+    if (m_fovH == fovH)
         return;
-    }
     m_fovH = fovH;
     Q_EMIT fovHChanged();
 }
@@ -95,9 +88,8 @@ int VrFollowMode::fovV() const
 
 void VrFollowMode::setFovV(int fovV)
 {
-    if (m_fovV == fovV) {
+    if (m_fovV == fovV)
         return;
-    }
     m_fovV = fovV;
     Q_EMIT fovVChanged();
 }
@@ -109,9 +101,8 @@ int VrFollowMode::stopFovH() const
 
 void VrFollowMode::setStopFovH(int stopFovH)
 {
-    if (m_stopFovH == stopFovH) {
+    if (m_stopFovH == stopFovH)
         return;
-    }
     m_stopFovH = stopFovH;
     Q_EMIT stopFovHChanged();
 }
@@ -123,9 +114,8 @@ int VrFollowMode::stopFovV() const
 
 void VrFollowMode::setStopFovV(int stopFovV)
 {
-    if (m_stopFovV == stopFovV) {
+    if (m_stopFovV == stopFovV)
         return;
-    }
     m_stopFovV = stopFovV;
     Q_EMIT stopFovVChanged();
 }
@@ -137,9 +127,8 @@ bool VrFollowMode::active() const
 
 void VrFollowMode::setActive(bool active)
 {
-    if (m_active == active) {
+    if (m_active == active)
         return;
-    }
     m_active = active;
     Q_EMIT activeChanged();
 }
@@ -151,9 +140,8 @@ double VrFollowMode::delay() const
 
 void VrFollowMode::setDelay(double delay)
 {
-    if (qFuzzyCompare(m_delay, delay)) {
+    if (qFuzzyCompare(m_delay, delay))
         return;
-    }
     m_delay = delay;
     Q_EMIT delayChanged();
 }
@@ -165,18 +153,16 @@ double VrFollowMode::speed() const
 
 void VrFollowMode::setSpeed(double speed)
 {
-    if (qFuzzyCompare(m_speed, speed)) {
+    if (qFuzzyCompare(m_speed, speed))
         return;
-    }
     m_speed = speed;
     Q_EMIT speedChanged();
 }
 
 void VrFollowMode::setWorldUpAlignment(bool worldUpAlignment)
 {
-    if (m_worldUpAlignment == worldUpAlignment) {
+    if (m_worldUpAlignment == worldUpAlignment)
         return;
-    }
     m_worldUpAlignment = worldUpAlignment;
     Q_EMIT worldUpAlignmentChanged();
 }
@@ -188,9 +174,8 @@ int VrFollowMode::fovH() const
 
 void VrFollowMode::registerObject(QQuick3DNode *node)
 {
-    if (!node || m_trackedNodes.contains(node)) {
+    if (!node || m_trackedNodes.contains(node))
         return;
-    }
 
     m_trackedNodes.append(node);
 
@@ -202,9 +187,8 @@ void VrFollowMode::registerObject(QQuick3DNode *node)
 void VrFollowMode::unregisterObject(QQuick3DNode *node)
 {
     m_trackedNodes.removeAll(node);
-    if (node) {
+    if (node)
         disconnect(node, &QObject::destroyed, this, nullptr);
-    }
 }
 
 void VrFollowMode::updateConnections()
@@ -221,11 +205,10 @@ void VrFollowMode::updateConnections()
     }
 }
 
-QVector2D VrFollowMode::anglesToNode(const QQuick3DNode *node) const
+QVector2D VrFollowMode::getAnglesToNode(const QQuick3DNode *node) const
 {
-    if (!m_camera || !node) {
+    if (!m_camera || !node)
         return QVector2D(180, 180);
-    }
 
     const QVector3D toNode = node->scenePosition() - m_camera->scenePosition();
     const QVector3D localDir = m_camera->mapDirectionFromScene(toNode).normalized();
@@ -238,12 +221,11 @@ QVector2D VrFollowMode::anglesToNode(const QQuick3DNode *node) const
 
 bool VrFollowMode::anyNodeInFov() const
 {
-    for (auto node : m_trackedNodes) {
+    for (QQuick3DNode *node : m_trackedNodes) {
         if (node && node->visible()) {
-            QVector2D angles = anglesToNode(node);
-            if (angles.x() <= m_fovH && angles.y() <= m_fovV) {
+            QVector2D angles = getAnglesToNode(node);
+            if (angles.x() <= m_fovH && angles.y() <= m_fovV)
                 return true;
-            }
         }
     }
     return false;
@@ -254,9 +236,9 @@ QQuick3DNode *VrFollowMode::findClosestNode() const
     QQuick3DNode *closest = nullptr;
     float minDistSq = std::numeric_limits<float>::max();
 
-    for (auto node : m_trackedNodes) {
+    for (QQuick3DNode *node : m_trackedNodes) {
         if (node && node->visible()) {
-            QVector2D angles = anglesToNode(node);
+            QVector2D angles = getAnglesToNode(node);
             float distSq = angles.x() * angles.x() + angles.y() * angles.y();
             if (distSq < minDistSq) {
                 minDistSq = distSq;
@@ -270,28 +252,25 @@ QQuick3DNode *VrFollowMode::findClosestNode() const
 
 bool VrFollowMode::isNodeInStopFov(const QQuick3DNode *node) const
 {
-    if (!node) {
+    if (!node)
         return false;
-    }
 
-    QVector2D angles = anglesToNode(node);
+    QVector2D angles = getAnglesToNode(node);
     return angles.x() <= m_stopFovH && angles.y() <= m_stopFovV;
 }
 
 void VrFollowMode::onFrame()
 {
-    if (!m_camera || !m_rotationTarget) {
+    if (!m_camera || !m_rotationTarget)
         return;
-    }
 
     const double deltaTime = m_timer.elapsed() / 1000.0;
     m_timer.restart();
     const double dt = qMin(deltaTime, 0.1);
 
-    auto closest = findClosestNode();
-    if (!closest) {
+    QQuick3DNode *closest = findClosestNode();
+    if (!closest)
         return;
-    }
 
     if (m_active) {
         if (isNodeInStopFov(closest)) {
@@ -317,9 +296,8 @@ void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
 {
     // Calculate rotation to bring node into view
     QVector3D toClosest = node->scenePosition() - m_camera->scenePosition();
-    if (toClosest.lengthSquared() < 0.0001f) {
+    if (toClosest.lengthSquared() < 0.0001f)
         return;
-    }
 
     toClosest.normalize();
     QVector3D cameraForward = m_camera->forward().normalized();
@@ -349,7 +327,7 @@ void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
     QQuaternion referenceRot = m_worldUpAlignment ? QQuaternion() : m_camera->sceneRotation();
 
     // This makes -Z point away from camera, thus +Z points toward camera
-    QQuaternion targetSceneRot = KwinVrHelpers::rotationToFaceDirection(awayFromCamera, referenceRot);
+    QQuaternion targetSceneRot = KWin::KwinVrHelpers::rotationToFaceDirection(awayFromCamera, referenceRot);
 
     // Interpolate in scene space
     const float t = qMin(1.0f, static_cast<float>(dt * m_speed));
@@ -368,8 +346,6 @@ void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
         newScenePos = pivotPoint + newDir * distance;
     }
 
-    KwinVrHelpers::setNodeRotationFromScene(m_rotationTarget, newSceneRot);
-    KwinVrHelpers::setNodePositionFromScene(m_rotationTarget, newScenePos);
+    KWin::KwinVrHelpers::setNodeRotationFromScene(m_rotationTarget, newSceneRot);
+    KWin::KwinVrHelpers::setNodePositionFromScene(m_rotationTarget, newScenePos);
 }
-
-} // namespace KWin

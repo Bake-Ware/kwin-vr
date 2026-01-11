@@ -4,7 +4,8 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINGRAPHICSHELPERS_H
+#define KWINGRAPHICSHELPERS_H
 
 #include <epoxy/egl.h>
 #include <epoxy/gl.h>
@@ -36,4 +37,5 @@ struct GraphicsBufferTextures
 QList<uint32_t> supportedDmabufFormats();
 GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQuickWindow *win);
 
-} // namespace KWin
+}; //
+#endif // KWINGRAPHICSHELPERS_H

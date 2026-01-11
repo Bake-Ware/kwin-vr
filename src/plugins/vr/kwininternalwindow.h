@@ -4,7 +4,8 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWININTERNALWINDOW_H
+#define KWININTERNALWINDOW_H
 
 #include "internalwindow.h"
 #include "textureprovideritem.h"
@@ -22,10 +23,10 @@ class KwinInternalWindow : public TextureProviderItem
     QML_ELEMENT
 public:
     KwinInternalWindow();
-    ~KwinInternalWindow() override;
+    ~KwinInternalWindow();
 
-    InternalWindow *client() const;
-    void setClient(InternalWindow *newClient);
+    KWin::InternalWindow *client() const;
+    void setClient(KWin::InternalWindow *newClient);
 
     QSGNode *updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) override;
 
@@ -37,23 +38,25 @@ Q_SIGNALS:
     void flipUChanged();
     void flipVChanged();
 
+private Q_SLOTS:
+    void onPresented(const KWin::InternalWindowFrame &frame);
+    void onClientGeometryChanged();
+    void onWindowDestoyed();
+
 protected:
     void releaseResources() override;
     void setFlipU(bool newFlipU);
     void setFlipV(bool newFlipV);
 
 private:
-    void onPresented(const InternalWindowFrame &frame);
-    void onClientGeometryChanged();
-    void onWindowDestroyed();
+    KWin::InternalWindow *m_client = nullptr;
 
-    InternalWindow *m_client = nullptr;
-
-    GraphicsBufferRef m_bufferRef;
+    GraphicsBufferRef m_bufferref;
     OutputTransform m_bufferTransform = OutputTransform::Kind::Normal;
 
-    bool m_flipU = false;
-    bool m_flipV = false;
+    bool m_flipU;
+    bool m_flipV;
 };
+}
 
-} // namespace KWin
+#endif // KWININTERNALWINDOW_H

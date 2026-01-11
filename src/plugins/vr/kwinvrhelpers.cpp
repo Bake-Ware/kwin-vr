@@ -8,48 +8,52 @@
 
 #include "kwinvrhelpers.h"
 
-#include "compositor.h"
-#include "core/graphicsbuffer.h"
-#include "core/outputbackend.h"
-#include "core/outputconfiguration.h"
-#include "core/renderbackend.h"
-#include "cursor.h"
-#include "cursorsource.h"
-#include "effect/effect.h"
-#include "effect/effecthandler.h"
-#include "input.h"
-#include "kwingraphicshelpers.h"
-#include "kwinvr_logging.h"
-#include "opengl/eglcontext.h"
-#include "opengl/egldisplay.h"
+#include <cursor.h>
+#include <cursorsource.h>
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
+#include <input.h>
+#include <qquick3dobject.h>
+#include <waylandwindow.h>
+#include <window.h>
+#include <workspace.h>
+// #include "x11window.h"
+#include <compositor.h>
+#include <core/graphicsbuffer.h>
+#include <opengl/eglcontext.h>
+#include <opengl/egldisplay.h>
+#include <rhi/qrhi.h>
+#include <scene/scene.h>
+#include <scene/workspacescene.h>
+#include <wayland/surface.h>
+#include <workspace.h>
+// #include <QOpenGLFunctions>
+#include <QSGSimpleTextureNode>
+#include <core/outputbackend.h>
+#include <core/outputconfiguration.h>
+#include <core/renderbackend.h>
+#include <drm/drm_fourcc.h>
+#include <input.h>
+#include <pointer_input.h>
+#include <utils/drm_format_helper.h>
+#include <wayland/plasmawindowmanagement.h>
+#include <wayland_server.h>
+
 #include "scene/decorationitem.h"
-#include "scene/scene.h"
 #include "scene/windowitem.h"
-#include "scene/workspacescene.h"
-#include "utils/drm_format_helper.h"
-#include "wayland/plasmawindowmanagement.h"
-#include "wayland/surface.h"
-#include "wayland_server.h"
-#include "waylandwindow.h"
-#include "window.h"
-#include "workspace.h"
-#include "xdgshellwindow.h"
 
 #include <QQmlProperty>
-#include <QQuick3DObject>
-#include <QQuickItem>
-#include <QSGSimpleTextureNode>
-
-#include <drm/drm_fourcc.h>
-#include <rhi/qrhi.h>
-
-// Private Qt headers
 #include <QtQuick3D/private/qquick3dquaternionutils_p.h>
+
 #include <QtQuick3DXr/private/qquick3dxrmanager_openxr_p.h>
 #include <QtQuick3DXr/private/qquick3dxrmanager_p.h>
 
-namespace KWin
-{
+#include "kwingraphicshelpers.h"
+#include "kwinvr_logging.h"
+#include <QQuickItem>
+#include <xdgshellwindow.h>
+
+using namespace KWin;
 KwinVrHelpers::KwinVrHelpers(QObject *parent)
     : QObject(parent)
 {
@@ -75,19 +79,24 @@ bool KwinVrHelpers::isScreenLocked() const
     return false;
 }
 
+void KwinVrHelpers::setHackedFocus(Window *window)
+{
+    input()->pointer()->setForcedFocusWindow(window);
+}
+
 void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale)
 {
     OutputConfiguration config;
     config.changeSet(o)->enabled = true;
-    auto cnt = Workspace::self()->outputs().size();
+    auto cnt = Workspace::self()->outputs().count();
 
     config.changeSet(o)->scale = scale;
 
     if (cnt == 1 && kwinGetBackendOutput(Workspace::self()->outputs()[0]) == o) {
-        qCWarning(KWINVR) << "VR output is the last active output, setting 0,0";
+        qWarning() << "VR output is the last active output, setting 0,0";
         config.changeSet(o)->pos = QPoint(0, 0);
     } else {
-        qCWarning(KWINVR) << "Setting VR output pos to 3000,3000";
+        qWarning() << "Setting VR output pos to 2000,0";
         config.changeSet(o)->pos = QPoint(3000, 3000);
     }
     Workspace::self()->applyOutputConfiguration(config);
@@ -104,14 +113,16 @@ SurfaceInterface *KwinVrHelpers::winGetSurf(Window *window)
 
 int KwinVrHelpers::surfaceIndex(SurfaceInterface *surface)
 {
-    return surface ? surface->below().size() : 0;
+    return surface ? surface->below().count() : 0;
 }
 
 void KwinVrHelpers::windowOffscreenRef(Window *window, bool ref)
 {
     if (ref) {
+        // qWarning() << ">> Increasing offscreen rendering for window" << window;
         window->refOffscreenRendering();
     } else {
+        // qWarning() << ">> Decreasing offscreen rendering for window" << window;
         window->unrefOffscreenRendering();
     }
 }
@@ -123,9 +134,8 @@ bool KwinVrHelpers::windowIsInternal(Window *window)
 
 void KwinVrHelpers::windowMove(Window *window, const QPointF &topLeft)
 {
-    if (window) {
+    if (window)
         window->move(topLeft);
-    }
 }
 
 bool KwinVrHelpers::keyMatch(int key, int modifiers, const QString &binding)
@@ -139,7 +149,7 @@ bool KwinVrHelpers::keyMatch(int key, int modifiers, const QString &binding)
         return false;
     }
 
-    // QKeySequence from int constructor expects Qt::Key combined with Qt::KeyboardModifiers
+    /* QKeySequence from int constructor expects Qt::Key combined with Qt::KeyboardModifiers */
     int keyInt = key | modifiers;
     QKeySequence eventSeq(keyInt);
 
@@ -158,6 +168,21 @@ QString KwinVrHelpers::normalizeKey(const QString &binding)
         return QString();
     }
     return QKeySequence(binding, QKeySequence::PortableText).toString(QKeySequence::PortableText);
+}
+
+Window *KwinVrHelpers::forcedFocusWindow() const
+{
+    return input()->pointer()->forcedFocusWindow();
+}
+
+void KwinVrHelpers::setForcedFocusWindow(KWin::Window *newForcedFocusWindow)
+{
+    if (input()->pointer()->forcedFocusWindow() == newForcedFocusWindow) {
+        return;
+    }
+
+    input()->pointer()->setForcedFocusWindow(newForcedFocusWindow);
+    Q_EMIT forcedFocusWindowChanged();
 }
 
 IntersectionResult KwinVrHelpers::rayPlaneIntersection(
@@ -183,16 +208,16 @@ IntersectionResult KwinVrHelpers::rayPlaneIntersection(
 
 IntersectionResult KwinVrHelpers::rayPlaneIntersection(const QQuick3DNode *source, const QQuick3DNode *target)
 {
-    auto sourcePosition = source->scenePosition();
-    auto sourceForward = source->forward();
-    auto planeCenter = target->scenePosition();
-    auto planeNormal = target->mapDirectionToScene({0, 0, 1});
-    planeNormal.normalize();
+    auto sp = source->scenePosition();
+    auto sf = source->forward();
+    auto pp = target->scenePosition();
+    auto no = target->mapDirectionToScene({0, 0, 1});
+    no.normalize();
 
-    return rayPlaneIntersection(sourcePosition, sourceForward, planeCenter, planeNormal);
+    return rayPlaneIntersection(sp, sf, pp, no);
 }
 
-// Returns a quaternion that can be used to rotate source to get destination
+/* Returns a quaternion that can be used to rotate source to get destination */
 QQuaternion KwinVrHelpers::getRotationDelta(const QQuaternion &source, const QQuaternion &destination)
 {
     return source.inverted() * destination;
@@ -503,12 +528,16 @@ float KwinVrHelpers::rollAngleBetween(const QQuaternion &referenceRotation,
 RelativePose KwinVrHelpers::rotateRelativePose(const RelativePose &pose,
                                                const QQuaternion &rotation)
 {
-    return RelativePose(rotation * pose.rotation,
-                        rotation.rotatedVector(pose.position));
+    RelativePose result;
+    result.setRotation(rotation * pose.rotation());
+    result.setPosition(rotation.rotatedVector(pose.position()));
+    return result;
 }
 
-// Helper: Rotates node to face along 'forward' direction, using 'referenceRotation'
-// to derive up vector for roll alignment and fallback vectors for edge cases.
+/*
+ * Helper: Rotates node to face along 'forward' direction, using 'referenceRotation'
+ * to derive up vector for roll alignment and fallback vectors for edge cases.
+ */
 static void rotateNodeToFaceDirection(QQuick3DNode *node,
                                       const QVector3D &forward,
                                       const QQuaternion &referenceRotation)
@@ -554,7 +583,7 @@ void KwinVrHelpers::turnToFaceKeepRoll(QQuick3DNode *node, const QQuick3DNode *t
 
 RelativePose KwinVrHelpers::getRelativePose(QQuick3DNode *node, const QQuick3DNode *target)
 {
-    return RelativePose(getNodesSceneRotationDelta(node, target),
+    return RelativePose(KWin::KwinVrHelpers::getNodesSceneRotationDelta(node, target),
                         node->mapPositionFromScene(target->scenePosition()));
 }
 
@@ -562,14 +591,14 @@ void KwinVrHelpers::applyRelativePose(const QQuick3DNode *node, QQuick3DNode *ta
 {
     auto targetParent = qobject_cast<QQuick3DNode *>(target->parentNode());
     if (!targetParent) {
-        qCWarning(KWINVR) << "Target node has no parent node while applying relative pose";
+        qWarning() << "Target node has no parent node while applying relative pose";
         return;
     }
 
-    const auto newPosition = node->mapPositionToNode(targetParent, pose.position);
+    const auto newPosition = node->mapPositionToNode(targetParent, pose.position());
     QQmlProperty::write(target, "position", newPosition);
 
-    const auto newRotation = sceneRotationToNodeRotation(target, node->sceneRotation() * pose.rotation);
+    const auto newRotation = KWin::KwinVrHelpers::sceneRotationToNodeRotation(target, node->sceneRotation() * pose.rotation());
     QQmlProperty::write(target, "rotation", newRotation);
 }
 
@@ -579,8 +608,8 @@ RelativePose KwinVrHelpers::relativePoseToScenePose(const QQuick3DNode *node, co
         return RelativePose();
     }
 
-    return RelativePose(node->sceneRotation() * pose.rotation,
-                        node->mapPositionToScene(pose.position));
+    return RelativePose(node->sceneRotation() * pose.rotation(),
+                        node->mapPositionToScene(pose.position()));
 }
 
 RelativePose KwinVrHelpers::relativePoseToRelativePose(const QQuick3DNode *currentNode,
@@ -591,8 +620,8 @@ RelativePose KwinVrHelpers::relativePoseToRelativePose(const QQuick3DNode *curre
         return RelativePose();
     }
 
-    return RelativePose(relativeRotationToRelativeRotation(currentNode, newNode, pose.rotation),
-                        newNode->mapPositionFromNode(currentNode, pose.position));
+    return RelativePose(relativeRotationToRelativeRotation(currentNode, newNode, pose.rotation()),
+                        newNode->mapPositionFromNode(currentNode, pose.position()));
 }
 
 QQuaternion KwinVrHelpers::relativeRotationToRelativeRotation(const QQuick3DNode *currentNode,
@@ -606,5 +635,3 @@ QQuaternion KwinVrHelpers::relativeRotationToRelativeRotation(const QQuick3DNode
     const QQuaternion currentSceneRotation = currentNode->sceneRotation();
     return getRotationDelta(newNode->sceneRotation(), currentSceneRotation * rotation);
 }
-
-} // namespace KWin

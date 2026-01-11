@@ -18,7 +18,7 @@
 #include "utils/drm_format_helper.h"
 #include <drm/drm_fourcc.h>
 
-#include <QOpenGLContext>
+#include <QtGui/QOpenGLContext>
 
 #ifndef DRM_FORMAT_R16F
 #define DRM_FORMAT_R16F fourcc_code('R', ' ', ' ', 'H') /* [15:0] R 16 little endian */
@@ -93,6 +93,11 @@ QList<uint32_t> supportedDmabufFormats()
     };
 }
 
+QRhiTexture::Format drmFormatToQRhiFormat(uint32_t drmFormat);
+EGLImageKHR importDmaBufAsEGLImage(const DmaBufAttributes &dmabuf, EGLDisplay dpy);
+EGLImageKHR importDmaBufAsEGLImage(const DmaBufAttributes &dmabuf, EGLDisplay dpy, int plane, int format, const QSize &size);
+GLuint createTexFromEGLImage(EGLImageKHR image, bool externalOnly);
+EGLDisplay getDisplayFromWin(QQuickWindow *quickWin);
 static EglDisplay *eglDisplayFromCompositor();
 static bool isExternalOnlyForQt(uint32_t format, uint64_t modifier);
 
@@ -217,9 +222,8 @@ EGLImageKHR importDmaBufAsEGLImage(const DmaBufAttributes &dmabuf, EGLDisplay dp
 
 GLuint createTexFromEGLImage(EGLImageKHR image, bool externalOnly)
 {
-    if (image == EGL_NO_IMAGE) {
+    if (image == EGL_NO_IMAGE)
         return 0;
-    }
 
     GLuint texture = 0;
 
@@ -236,9 +240,9 @@ GLuint createTexFromEGLImage(EGLImageKHR image, bool externalOnly)
     return texture;
 }
 
-EGLDisplay getDisplayFromWin(QQuickWindow *quickWindow)
+EGLDisplay getDisplayFromWin(QQuickWindow *quickWin)
 {
-    QRhi *rhi = quickWindow->rhi();
+    QRhi *rhi = quickWin->rhi();
     if (!rhi) {
         qCWarning(KWINVR) << "No rhi";
         return EGL_NO_DISPLAY;
@@ -276,7 +280,7 @@ static bool isExternalOnlyForQt(uint32_t format, uint64_t modifier)
     return false;
 }
 
-QRhiTexture *rhiTextureFromGL(QRhi *rhi, GLuint texture, QRhiTexture::Format rhiFormat, const QSize &size, QRhiTexture::Flags flags)
+QRhiTexture *RHITextureFromGL(QRhi *rhi, GLuint texture, QRhiTexture::Format rhiFormat, const QSize &size, QRhiTexture::Flags flags)
 {
     auto rhiTex = rhi->newTexture(rhiFormat, size, 1, flags);
     if (!rhiTex) {
@@ -285,21 +289,21 @@ QRhiTexture *rhiTextureFromGL(QRhi *rhi, GLuint texture, QRhiTexture::Format rhi
     }
 
     if (!rhiTex->createFrom({texture, 0})) {
-        qCWarning(KWINVR) << "Failed to create a new QRhi texture from OpenGL texture";
+        qCWarning(KWINVR) << "Failed to create a new QRhi texture from OpemGL texture";
         delete rhiTex;
         return nullptr;
     }
     return rhiTex;
 }
 
-QSGTexture *qsgTextureFromGL(const QQuickWindow *quickWindow, GLuint texture, QRhiTexture::Format rhiFormat, const QSize &size, bool hasAlphaChannel, QRhiTexture::Flags flags)
+QSGTexture *QSGTextureFromGL(const QQuickWindow *quickWin, GLuint texture, QRhiTexture::Format rhiFormat, const QSize &size, bool hasAlphaChannel, QRhiTexture::Flags flags)
 {
-    auto rhiTex = rhiTextureFromGL(quickWindow->rhi(), texture, rhiFormat, size, flags);
+    auto rhiTex = RHITextureFromGL(quickWin->rhi(), texture, rhiFormat, size, flags);
     if (!rhiTex) {
         return nullptr;
     }
 
-    auto qsgTex = quickWindow->createTextureFromRhiTexture(rhiTex, hasAlphaChannel ? QQuickWindow::TextureHasAlphaChannel : QQuickWindow::CreateTextureOptions{});
+    auto qsgTex = quickWin->createTextureFromRhiTexture(rhiTex, hasAlphaChannel ? QQuickWindow::TextureHasAlphaChannel : QQuickWindow::CreateTextureOptions{});
     if (!qsgTex) {
         qCWarning(KWINVR) << "Failed to create QSGTexture from RHI texture";
         delete rhiTex;
@@ -309,7 +313,7 @@ QSGTexture *qsgTextureFromGL(const QQuickWindow *quickWindow, GLuint texture, QR
     return qsgTex;
 }
 
-QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWindow,
+QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWin,
                                                const DmaBufAttributes &dmabuf,
                                                int plane,
                                                int drmFormat,
@@ -317,7 +321,8 @@ QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWindow,
                                                const QSize &size,
                                                bool hasAlphaChannel)
 {
-    EGLDisplay dpy = getDisplayFromWin(quickWindow);
+
+    EGLDisplay dpy = getDisplayFromWin(quickWin);
     if (dpy == EGL_NO_DISPLAY) {
         qCWarning(KWINVR) << "Could not get egl display";
         return {};
@@ -331,7 +336,7 @@ QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWindow,
                           << dmabuf.planeCount << "pitch:"
                           << dmabuf.pitch << "width:"
                           << dmabuf.width << "height:"
-                          << dmabuf.height;
+                          << dmabuf.height << "";
         return {};
     }
 
@@ -345,7 +350,7 @@ QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWindow,
     }
 
     const auto flags = externalOnly ? QRhiTexture::ExternalOES : QRhiTexture::Flags{};
-    QSGTexture *qsgTexture = qsgTextureFromGL(quickWindow, texture, rhiFormat, size, hasAlphaChannel, flags);
+    QSGTexture *qsgTexture = QSGTextureFromGL(quickWin, texture, rhiFormat, size, hasAlphaChannel, flags);
     if (!qsgTexture) {
         qCWarning(KWINVR) << "Failed to create QSGTexture from OpenGL texture";
         glDeleteTextures(1, &texture);
@@ -355,13 +360,14 @@ QtTexturePair importDmaBufPlaneToQtTexturePair(QQuickWindow *quickWindow,
     return {texture, qsgTexture};
 }
 
-QtTexturePair importDmaBufToQtTexturePair(QQuickWindow *quickWindow,
+QtTexturePair importDmaBufToQtTexturePair(QQuickWindow *quickWin,
                                           const DmaBufAttributes &dmabuf,
                                           QRhiTexture::Format rhiFormat,
                                           const QSize &size,
                                           bool hasAlphaChannel)
 {
-    EGLDisplay dpy = getDisplayFromWin(quickWindow);
+
+    EGLDisplay dpy = getDisplayFromWin(quickWin);
     if (dpy == EGL_NO_DISPLAY) {
         qCWarning(KWINVR) << "Could not get egl display";
         return {};
@@ -375,7 +381,7 @@ QtTexturePair importDmaBufToQtTexturePair(QQuickWindow *quickWindow,
                           << dmabuf.planeCount << "pitch:"
                           << dmabuf.pitch << "width:"
                           << dmabuf.width << "height:"
-                          << dmabuf.height;
+                          << dmabuf.height << "";
         return {};
     }
 
@@ -389,19 +395,19 @@ QtTexturePair importDmaBufToQtTexturePair(QQuickWindow *quickWindow,
     }
 
     const auto flags = externalOnly ? QRhiTexture::ExternalOES : QRhiTexture::Flags{};
-    QSGTexture *qsgTexture = qsgTextureFromGL(quickWindow, texture, rhiFormat, size, hasAlphaChannel, flags);
-    if (!qsgTexture) {
+    QSGTexture *qttexture = QSGTextureFromGL(quickWin, texture, rhiFormat, size, hasAlphaChannel, flags);
+    if (!qttexture) {
         qCWarning(KWINVR) << "Failed to create QSGTexture from OpenGL texture";
         glDeleteTextures(1, &texture);
         return {};
     }
 
-    return {texture, qsgTexture};
+    return {texture, qttexture};
 }
 
-GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWindow, GraphicsBuffer *buf)
+GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWin, GraphicsBuffer *buf)
 {
-    if (!quickWindow) {
+    if (!quickWin) {
         qCWarning(KWINVR) << "No quick window when trying to import dmabuf";
         return {};
     }
@@ -421,7 +427,7 @@ GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWindow, Grap
     if (const auto yuvConv = info->yuvConversion()) {
         GraphicsBufferTextures qtTextures;
 
-        for (qsizetype plane = 0; plane < yuvConv->plane.size(); ++plane) {
+        for (uint plane = 0; plane < yuvConv->plane.count(); ++plane) {
             const auto &currentPlane = yuvConv->plane[plane];
             QSize size = buf->size();
             size.rwidth() /= currentPlane.widthDivisor;
@@ -434,7 +440,8 @@ GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWindow, Grap
                 return {};
             }
 
-            auto texpair = importDmaBufPlaneToQtTexturePair(quickWindow, *dmaBufAttrs, plane, currentPlane.format, rhiFormat, size, false);
+            /* What about size of texture? */
+            auto texpair = importDmaBufPlaneToQtTexturePair(quickWin, *dmaBufAttrs, plane, currentPlane.format, rhiFormat, size, false);
             if (!texpair.qtTexture) {
                 qCWarning(KWINVR) << "Failed to import dmabuf to qttexture";
                 qtTextures.release();
@@ -452,7 +459,7 @@ GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWindow, Grap
             qCWarning(KWINVR) << "Failed to map dmabuf format to QRhi texture format";
             return {};
         }
-        auto texPair = importDmaBufToQtTexturePair(quickWindow, *dmaBufAttrs, rhiFormat, buf->size(), buf->hasAlphaChannel());
+        auto texPair = importDmaBufToQtTexturePair(quickWin, *dmaBufAttrs, rhiFormat, buf->size(), buf->hasAlphaChannel());
         if (!texPair.qtTexture) {
             qCWarning(KWINVR) << "Failed to import dmabuf texture";
             return {};
@@ -474,11 +481,14 @@ GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQui
             return {};
         }
 
-        // NOTE: createTextureFromImage() defers the GPU upload to commitTextureOperations().
-        // QImage is implicitly shared, so the pixel data stays alive via refcount.
-        // However, GraphicsBufferView wraps the shm buffer without copying, so the data
-        // could theoretically become stale if the buffer is recycled before the render pass.
-        // In practice this hasn't been an issue since the texture is committed in the same frame.
+        /* Is it safe ?
+         *
+         * GraphicsBufferView makes QImages by wrapping it around shm buffer.
+         * Does createTextureFromImage() loads the image to the texture before return
+         * or it loads it later?
+         *
+         * So far, I've seen no problems, but need to dig Qt Sources to verify that it is safe...
+         */
         auto tex = win->createTextureFromImage(*v.image());
         if (!tex) {
             qCWarning(KWINVR) << "Failed to create QSGTexture from QImage";
@@ -487,20 +497,19 @@ GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQui
 
         return {
             .planeTextures = {{0, tex}},
-            .planeCount = 1,
-        };
+            .planeCount = 1};
     } else {
         return importDmaBufToQSGTextures(win, buf);
     }
-}
+};
 
 void GraphicsBufferTextures::release()
 {
-    for (const auto &texPair : std::span<QtTexturePair>(planeTextures, planeCount)) {
+    for (auto texPair : std::span<QtTexturePair>(planeTextures, planeCount)) {
         delete texPair.qtTexture;
         glDeleteTextures(1, &texPair.glTexture);
     }
     planeCount = 0;
 }
 
-} // namespace KWin
+};

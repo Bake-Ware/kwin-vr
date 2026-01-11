@@ -6,31 +6,25 @@
 
 #include "kwinshadowitem.h"
 
-#include <QPainter>
-
-namespace KWin
-{
-
-KwinShadowItem::KwinShadowItem(QQuickItem *parent)
+using namespace KWin;
+KWin::KwinShadowItem::KwinShadowItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
     setOpaquePainting(false);
 }
 
-KDecoration3::DecorationShadow *KwinShadowItem::shadow() const
+KDecoration3::DecorationShadow *KWin::KwinShadowItem::shadow() const
 {
     return m_shadow;
 }
 
-void KwinShadowItem::setShadow(KDecoration3::DecorationShadow *shadow)
+void KWin::KwinShadowItem::setShadow(KDecoration3::DecorationShadow *shadow)
 {
-    if (m_shadow == shadow) {
+    if (m_shadow == shadow)
         return;
-    }
 
-    if (m_shadow) {
+    if (m_shadow)
         disconnect(m_shadow, nullptr, this, nullptr);
-    }
 
     m_shadow = shadow;
 
@@ -49,22 +43,21 @@ void KwinShadowItem::setShadow(KDecoration3::DecorationShadow *shadow)
     Q_EMIT shadowChanged();
 }
 
-bool KwinShadowItem::debug() const
+bool KWin::KwinShadowItem::debug() const
 {
     return m_debug;
 }
 
-void KwinShadowItem::setDebug(bool newDebug)
+void KWin::KwinShadowItem::setDebug(bool d)
 {
-    if (m_debug == newDebug) {
+    if (m_debug == d)
         return;
-    }
-    m_debug = newDebug;
+    m_debug = d;
     update();
     Q_EMIT debugChanged();
 }
 
-void KwinShadowItem::updateShadow()
+void KWin::KwinShadowItem::updateShadow()
 {
     if (m_shadow && !m_shadow->shadow().isNull()) {
         QImage img = m_shadow->shadow();
@@ -75,15 +68,13 @@ void KwinShadowItem::updateShadow()
     update();
 }
 
-void KwinShadowItem::paint(QPainter *painter)
+void KWin::KwinShadowItem::paint(QPainter *painter)
 {
-    if (!m_shadow) {
+    if (!m_shadow)
         return;
-    }
     QImage img = m_shadow->shadow();
-    if (img.isNull()) {
+    if (img.isNull())
         return;
-    }
 
     if (m_debug) {
         painter->fillRect(QRect(0, 0, img.width(), img.height()), Qt::magenta);
@@ -91,5 +82,3 @@ void KwinShadowItem::paint(QPainter *painter)
         painter->drawImage(0, 0, img);
     }
 }
-
-} // namespace KWin

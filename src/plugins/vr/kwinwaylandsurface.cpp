@@ -7,9 +7,10 @@
 #include "kwinwaylandsurface.h"
 #include "kwingraphicshelpers.h"
 #include "kwinvr_logging.h"
+#include <QRunnable>
+#include <qsgtextureprovider.h>
 
-namespace KWin
-{
+using namespace KWin;
 
 static QVector4D calculateUVCoords(const QRectF &box, const QSize &bufsz)
 {
@@ -36,14 +37,13 @@ SurfaceInterface *KwinWaylandSurface::surface() const
     return m_surface;
 }
 
-void KwinWaylandSurface::setSurface(SurfaceInterface *newSurface)
+void KwinWaylandSurface::setSurface(KWin::SurfaceInterface *newSurface)
 {
-    if (m_surface == newSurface) {
+    if (m_surface == newSurface)
         return;
-    }
 
     if (m_surface) {
-        disconnect(m_surface, &SurfaceInterface::committed, this, &KwinWaylandSurface::onSurfaceCommitted);
+        disconnect(m_surface, &SurfaceInterface::committed, this, &KwinWaylandSurface::onSurfaceCommited);
         disconnect(m_surface, &SurfaceInterface::destroyed, this, &KwinWaylandSurface::onSurfaceDestroyed);
 
         disconnect(m_surface, &SurfaceInterface::bufferSourceBoxChanged, this, &KwinWaylandSurface::onSurfaceBoxChanged);
@@ -61,11 +61,11 @@ void KwinWaylandSurface::setSurface(SurfaceInterface *newSurface)
     m_surface = newSurface;
 
     if (m_surface) {
-        connect(m_surface, &SurfaceInterface::committed, this, &KwinWaylandSurface::onSurfaceCommitted);
+        connect(m_surface, &SurfaceInterface::committed, this, &KwinWaylandSurface::onSurfaceCommited);
         connect(m_surface, &SurfaceInterface::destroyed, this, &KwinWaylandSurface::onSurfaceDestroyed);
 
         connect(m_surface, &SurfaceInterface::bufferSourceBoxChanged, this, &KwinWaylandSurface::onSurfaceBoxChanged);
-        // For some reason bufferSourceBoxChanged alone is not enough
+        /* For some reason bufferSourceBoxChanged alone is not enough */
         connect(m_surface, &SurfaceInterface::bufferChanged, this, &KwinWaylandSurface::onSurfaceBoxChanged);
 
         connect(m_surface, &SurfaceInterface::sizeChanged, this, &KwinWaylandSurface::calculateFullOpaque);
@@ -79,7 +79,7 @@ void KwinWaylandSurface::setSurface(SurfaceInterface *newSurface)
         onSurfaceBoxChanged();
         calculateFullOpaque();
         calculateNoInput();
-        onSurfaceCommitted();
+        onSurfaceCommited();
         Q_EMIT yuvMatrixChanged();
     }
 
@@ -89,7 +89,7 @@ void KwinWaylandSurface::setSurface(SurfaceInterface *newSurface)
 QSGNode *KwinWaylandSurface::updatePaintNode(QSGNode *, UpdatePaintNodeData *)
 {
     auto clear = [&] {
-        m_bufferRef = nullptr;
+        m_bufferref = nullptr;
         clearTexture();
     };
 
@@ -99,7 +99,7 @@ QSGNode *KwinWaylandSurface::updatePaintNode(QSGNode *, UpdatePaintNodeData *)
         return nullptr;
     }
 
-    auto buf = m_bufferRef.buffer();
+    auto buf = m_bufferref.buffer();
     if (!buf || buf->size().isEmpty()) {
         clear();
         return nullptr;
@@ -147,20 +147,19 @@ QSGNode *KwinWaylandSurface::updatePaintNode(QSGNode *, UpdatePaintNodeData *)
     return nullptr;
 }
 
-void KwinWaylandSurface::onSurfaceCommitted()
+void KwinWaylandSurface::onSurfaceCommited()
 {
-    m_bufferRef = m_surface->buffer();
-    qCDebug(KWINVR) << "On committed" << m_surface << "sur size" << m_surface->size() << "buf" << m_surface->buffer() << "bufsize" << (m_surface->buffer() ? m_surface->buffer()->size() : QSize());
+    m_bufferref = m_surface->buffer();
+    qCDebug(KWINVR) << "On commited" << m_surface << "sur size" << m_surface->size() << "buf" << m_surface->buffer() << "bufsize" << (m_surface->buffer() ? m_surface->buffer()->size() : QSize());
     update();
 }
 
 void KwinWaylandSurface::calculateFullOpaque()
 {
-    if (!m_surface) {
+    if (!m_surface)
         return;
-    }
 
-    // TODO: Need a better way to know if this surface is fully opaque
+    // TODO: Need a beter way to know if this surface is fully opaque
     auto opq = m_surface->opaque();
 
     // Kwin 6.5 compat
@@ -178,14 +177,14 @@ void KwinWaylandSurface::calculateNoInput()
 
 void KwinWaylandSurface::releaseResources()
 {
-    m_bufferRef = nullptr;
+    m_bufferref = nullptr;
     TextureProviderItem::releaseResources();
 }
 
 void KwinWaylandSurface::onSurfaceDestroyed()
 {
     m_surface = nullptr;
-    m_bufferRef = nullptr;
+    m_bufferref = nullptr;
     Q_EMIT surfaceChanged();
 }
 
@@ -203,9 +202,8 @@ void KwinWaylandSurface::onSurfaceBoxChanged()
     }
 
     auto coords = calculateUVCoords(m_surface->bufferSourceBox(), buf->size());
-    if (coords == m_uvCoords) {
+    if (coords == m_uvCoords)
         return;
-    }
 
     m_uvCoords = coords;
     Q_EMIT uvCoordsChanged();
@@ -223,9 +221,8 @@ bool KwinWaylandSurface::fullyOpaque() const
 
 void KwinWaylandSurface::setFullyOpaque(bool newFullyOpaque)
 {
-    if (m_fullyOpaque == newFullyOpaque) {
+    if (m_fullyOpaque == newFullyOpaque)
         return;
-    }
     m_fullyOpaque = newFullyOpaque;
     Q_EMIT fullyOpaqueChanged();
 }
@@ -237,10 +234,9 @@ bool KwinWaylandSurface::noInput() const
 
 void KwinWaylandSurface::setNoInput(bool newNoInput)
 {
-    if (m_noInput == newNoInput) {
+    if (m_noInput == newNoInput)
         return;
-    }
-    qCDebug(KWINVR) << "Setting no input to" << newNoInput << m_surface;
+    qCWarning(KWINVR) << "Setting no input to" << newNoInput << m_surface;
     m_noInput = newNoInput;
     Q_EMIT noInputChanged();
 }
@@ -250,15 +246,13 @@ TextureProviderItem *KwinWaylandSurface::uvTextureItem() const
     return m_uvTextureItem;
 }
 
-void KwinWaylandSurface::setUvTextureItem(TextureProviderItem *newUvTextureItem)
+void KwinWaylandSurface::setUvTextureItem(KWin::TextureProviderItem *newUvTextureItem)
 {
-    if (m_uvTextureItem == newUvTextureItem) {
+    if (m_uvTextureItem == newUvTextureItem)
         return;
-    }
 
-    if (m_uvTextureItem) {
+    if (m_uvTextureItem)
         m_uvTextureItem->deleteLater();
-    }
 
     m_uvTextureItem = newUvTextureItem;
     Q_EMIT uvTextureItemChanged();
@@ -272,5 +266,3 @@ QMatrix4x4 KwinWaylandSurface::yuvMatrix() const
 
     return m_surface->colorDescription()->yuvMatrix();
 }
-
-} // namespace KWin

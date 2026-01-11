@@ -4,12 +4,15 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINWAYLANDSURFACE_H
+#define KWINWAYLANDSURFACE_H
 
 #include "core/graphicsbuffer.h"
 #include "textureprovideritem.h"
+#include "wayland/subcompositor.h"
 #include "wayland/surface.h"
-
+#include "window.h"
+#include <QAbstractListModel>
 #include <QQuickItem>
 
 namespace KWin
@@ -27,18 +30,18 @@ class KwinWaylandSurface : public TextureProviderItem
     QML_ELEMENT
 public:
     KwinWaylandSurface();
-    ~KwinWaylandSurface() override;
+    ~KwinWaylandSurface();
 
-    SurfaceInterface *surface() const;
-    void setSurface(SurfaceInterface *newSurface);
+    KWin::SurfaceInterface *surface() const;
+    void setSurface(KWin::SurfaceInterface *newSurface);
 
     QSGNode *updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) override;
 
     QVector4D uvCoords() const;
     bool fullyOpaque() const;
     bool noInput() const;
-    TextureProviderItem *uvTextureItem() const;
-    void setUvTextureItem(TextureProviderItem *newUvTexture);
+    KWin::TextureProviderItem *uvTextureItem() const;
+    void setUvTextureItem(KWin::TextureProviderItem *newUvTexture);
     QMatrix4x4 yuvMatrix() const;
 
 Q_SIGNALS:
@@ -50,25 +53,30 @@ Q_SIGNALS:
     void uvTextureItemChanged();
     void yuvMatrixChanged();
 
+private Q_SLOTS:
+    void onSurfaceCommited();
+    void onSurfaceDestroyed();
+    void onSurfaceBoxChanged();
+
 protected:
     void releaseResources() override;
 
 private:
-    void onSurfaceCommitted();
-    void onSurfaceDestroyed();
-    void onSurfaceBoxChanged();
     void setFullyOpaque(bool newFullyOpaque);
     void setNoInput(bool newNoInput);
     void calculateFullOpaque();
     void calculateNoInput();
 
-    SurfaceInterface *m_surface = nullptr;
-    GraphicsBufferRef m_bufferRef;
+    KWin::SurfaceInterface *m_surface = nullptr;
+    GraphicsBufferRef m_bufferref;
 
+    mutable QSGTextureProvider *m_textprov = nullptr;
     QVector4D m_uvCoords;
     bool m_fullyOpaque = false;
     bool m_noInput = false;
 
-    TextureProviderItem *m_uvTextureItem = nullptr;
+    KWin::TextureProviderItem *m_uvTextureItem = nullptr;
 };
-} // namespace KWin
+}
+
+#endif // KWINWAYLANDSURFACE_H

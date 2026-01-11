@@ -4,16 +4,14 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
-
+#ifndef KWINVRCONFIGWRAPPER_H
+#define KWINVRCONFIGWRAPPER_H
 #include "kwinvrconfig.h"
-
 #include <QQmlApplicationEngine>
-
 namespace KWin
 {
 
-class KWinVRConfigWrapper : public KWinVRConfig
+class KWinVRConfigWrapper : public KWin::KWinVRConfig
 {
     Q_OBJECT
     QML_SINGLETON
@@ -39,5 +37,6 @@ protected:
     {
     }
 };
+}
 
-} // namespace KWin
+#endif // KWINVRCONFIGWRAPPER_H

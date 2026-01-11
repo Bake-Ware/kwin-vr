@@ -10,7 +10,6 @@ import QtQuick.Layouts
 
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCMUtils
-import org.kde.kquickcontrols as KQuickControls
 
 ColumnLayout {
     id: root
@@ -65,8 +64,6 @@ ColumnLayout {
                 ButtonKeySequenceItem {
                     Layout.fillWidth: true
                     binding: kcm.settings[delegateRoot.fullSettingName]
-                    checkForConflictsAgainst: KQuickControls.ShortcutType.None
-                    patterns: KQuickControls.ShortcutPattern.Key | KQuickControls.ShortcutPattern.Modifier
                     onBindingModified: (newBinding) => {
                         kcm.settings[delegateRoot.fullSettingName] = newBinding
                     }

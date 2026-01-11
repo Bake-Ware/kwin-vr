@@ -6,9 +6,6 @@
 
 #include "xrtestresult.h"
 
-#include <QCoreApplication>
-#include <QTextStream>
-
 QString XrTestResult::message() const
 {
     return m_message;
@@ -16,9 +13,8 @@ QString XrTestResult::message() const
 
 void XrTestResult::setMessage(const QString &msg)
 {
-    if (m_sent) {
+    if (m_sent)
         return;
-    }
     m_sent = true;
     m_message = msg;
     Q_EMIT messageChanged();

@@ -31,7 +31,6 @@ target_link_libraries(kwinvr-xrtest PRIVATE
     Qt6::Quick
     Qt6::Quick3D
     Qt6::Quick3DXr
-    KF6::ConfigCore
 )
 
 install(TARGETS kwinvr-xrtest

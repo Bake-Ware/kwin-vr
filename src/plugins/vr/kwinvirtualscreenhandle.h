@@ -4,38 +4,46 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
-
-#include "kwincompat.h"
+#ifndef KWINVIRTUALSCREENHANDLE_H
+#define KWINVIRTUALSCREENHANDLE_H
 
 #include <QObject>
 #include <QQmlEngine>
-#include <QSize>
+#include <qsize.h>
+
+#include "kwincompat.h"
 
 namespace KWin
 {
+// class BackendOutput;
 class KwinVirtualScreenParams
 {
     Q_GADGET
-    Q_PROPERTY(QSize size MEMBER size FINAL)
-    Q_PROPERTY(QString name MEMBER name FINAL)
-    Q_PROPERTY(QString description MEMBER description FINAL)
-    Q_PROPERTY(qreal scale MEMBER scale FINAL)
+    Q_PROPERTY(QSize size READ size WRITE setSize FINAL)
+    Q_PROPERTY(QString name READ name WRITE setName FINAL)
+    Q_PROPERTY(QString description READ description WRITE setDescription FINAL)
+    Q_PROPERTY(qreal scale READ scale WRITE setScale FINAL)
     QML_VALUE_TYPE(kwinVirtualScreenParams)
 public:
-    bool operator==(const KwinVirtualScreenParams &other) const
-    {
-        return size == other.size && name == other.name
-            && description == other.description && qFuzzyCompare(scale, other.scale);
-    }
+    QSize size() const;
+    void setSize(const QSize &newSize);
+    QString name() const;
+    void setName(const QString &newName);
 
-    QString name;
-    QString description;
-    QSize size;
-    qreal scale = 1.0;
+    QString description() const;
+    void setDescription(const QString &newDescription);
+
+    qreal scale() const;
+    void setScale(qreal newScale);
+
+    // private:
+    QString m_name;
+    QString m_description;
+    QSize m_size;
+    qreal m_scale;
 };
 
-/** Creates a virtual output (virtual screen) in KWin. */
+/* Create a virtual output (virtual screen) in KWin */
 class KwinVirtualScreenHandle : public QObject
 {
     Q_OBJECT
@@ -44,21 +52,22 @@ class KwinVirtualScreenHandle : public QObject
     QML_ELEMENT
 public:
     explicit KwinVirtualScreenHandle(QObject *parent = nullptr);
-    ~KwinVirtualScreenHandle() override;
-    BackendOutput *output() const;
+    ~KwinVirtualScreenHandle();
+    KWin::BackendOutput *output() const;
 
-    KwinVirtualScreenParams params() const;
-    void setParams(const KwinVirtualScreenParams &newParams);
+    KWin::KwinVirtualScreenParams params() const;
+    void setParams(const KWin::KwinVirtualScreenParams &newParams);
 
 Q_SIGNALS:
     void outputChanged();
     void paramsChanged();
 
 private:
-    void setOutput(BackendOutput *newOutput);
+    void setOutput(KWin::BackendOutput *newOutput);
 
-    BackendOutput *m_output = nullptr;
-    KwinVirtualScreenParams m_params;
+    KWin::BackendOutput *m_output = nullptr;
+    KWin::KwinVirtualScreenParams m_params;
 };
+}
 
-} // namespace KWin
+#endif // KWINVIRTUALSCREENHANDLE_H

@@ -10,20 +10,18 @@
 #include <QPointer>
 #include <QQuaternion>
 #include <QVector2D>
+#include <QtQml/qqmlregistration.h>
 #include <QtQuick3D/private/qquick3dnode_p.h>
-
-namespace KWin
-{
 
 class VrHeadScroll : public QObject
 {
     Q_OBJECT
     QML_ELEMENT
-    Q_PROPERTY(QQuick3DNode *camera READ camera WRITE setCamera NOTIFY cameraChanged FINAL)
-    Q_PROPERTY(bool headScrollActive READ headScrollActive WRITE setHeadScrollActive NOTIFY headScrollActiveChanged FINAL)
-    Q_PROPERTY(float verticalScrollMultiplier READ verticalScrollMultiplier WRITE setVerticalScrollMultiplier NOTIFY verticalScrollMultiplierChanged FINAL)
-    Q_PROPERTY(float horizontalScrollMultiplier READ horizontalScrollMultiplier WRITE setHorizontalScrollMultiplier NOTIFY horizontalScrollMultiplierChanged FINAL)
-    Q_PROPERTY(float threshold READ threshold WRITE setThreshold NOTIFY thresholdChanged FINAL)
+    Q_PROPERTY(QQuick3DNode *camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(bool headScrollActive READ headScrollActive WRITE setHeadScrollActive NOTIFY headScrollActiveChanged)
+    Q_PROPERTY(float verticalScrollMultiplier READ verticalScrollMultiplier WRITE setVerticalScrollMultiplier NOTIFY verticalScrollMultiplierChanged)
+    Q_PROPERTY(float horizontalScrollMultiplier READ horizontalScrollMultiplier WRITE setHorizontalScrollMultiplier NOTIFY horizontalScrollMultiplierChanged)
+    Q_PROPERTY(float threshold READ threshold WRITE setThreshold NOTIFY thresholdChanged)
 
 public:
     explicit VrHeadScroll(QObject *parent = nullptr);
@@ -51,9 +49,10 @@ Q_SIGNALS:
     void thresholdChanged();
     void wheel(QVector2D delta);
 
-private:
+private Q_SLOTS:
     void calcHeadScroll();
 
+private:
     QPointer<QQuick3DNode> m_camera = nullptr;
     bool m_headScrollActive = false;
     float m_verticalScrollMultiplier = 40.0f;
@@ -64,5 +63,3 @@ private:
     float m_lastHAngle = 0.0f;
     float m_threshold = 0.002f; // ~0.1 degrees in radians
 };
-
-} // namespace KWin

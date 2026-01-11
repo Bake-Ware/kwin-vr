@@ -4,7 +4,8 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef TEXTUREPROVIDERITEM_H
+#define TEXTUREPROVIDERITEM_H
 
 #include <QQuickItem>
 
@@ -18,9 +19,9 @@ class TextureProviderItem : public QQuickItem
     Q_OBJECT
 public:
     explicit TextureProviderItem(QQuickItem *parent = nullptr);
-    ~TextureProviderItem() override;
+    ~TextureProviderItem();
 
-    // All 5 methods below must be called only from render thread
+    /* ALL 5 methods below must be called only from render thread */
     bool isTextureProvider() const override
     {
         return true;
@@ -31,7 +32,7 @@ public:
     void clearTexture();
 
 private Q_SLOTS:
-    // Called by scenegraph when it is going to destroy window
+    /* Called by scenegraph when it is going to destroy window */
     void invalidateSceneGraph();
 
 protected:
@@ -42,4 +43,5 @@ private:
     mutable QSGTextureProvider *m_provider = nullptr;
 };
 
-} // namespace KWin
+}
+#endif // TEXTUREPROVIDERITEM_H

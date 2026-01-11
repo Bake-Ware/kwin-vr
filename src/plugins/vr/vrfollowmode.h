@@ -13,9 +13,6 @@
 #include <QTimer>
 #include <QtQuick3D/private/qquick3dnode_p.h>
 
-namespace KWin
-{
-
 /**
  * Rotates and moves the rotationTarget if no tracked objects are inside FOV
  * to bring the closest tracked object into the center of the camera's view.
@@ -23,20 +20,21 @@ namespace KWin
  *
  * NOTE: Tracked objects should be children of the rotationTarget or this will break.
  */
+
 class VrFollowMode : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QQuick3DNode *camera READ camera WRITE setCamera NOTIFY cameraChanged FINAL)
-    Q_PROPERTY(QQuick3DNode *rotationTarget READ rotationTarget WRITE setRotationTarget NOTIFY rotationTargetChanged FINAL)
-    Q_PROPERTY(int fovH READ fovH WRITE setFovH NOTIFY fovHChanged FINAL)
-    Q_PROPERTY(int fovV READ fovV WRITE setFovV NOTIFY fovVChanged FINAL)
-    Q_PROPERTY(int stopFovH READ stopFovH WRITE setStopFovH NOTIFY stopFovHChanged FINAL)
-    Q_PROPERTY(int stopFovV READ stopFovV WRITE setStopFovV NOTIFY stopFovVChanged FINAL)
-    Q_PROPERTY(bool active READ active NOTIFY activeChanged FINAL)
-    Q_PROPERTY(double delay READ delay WRITE setDelay NOTIFY delayChanged FINAL)
-    Q_PROPERTY(double speed READ speed WRITE setSpeed NOTIFY speedChanged FINAL)
-    Q_PROPERTY(bool worldUpAlignment READ worldUpAlignment WRITE setWorldUpAlignment NOTIFY worldUpAlignmentChanged FINAL)
+    Q_PROPERTY(QQuick3DNode *camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(QQuick3DNode *rotationTarget READ rotationTarget WRITE setRotationTarget NOTIFY rotationTargetChanged)
+    Q_PROPERTY(int fovH READ fovH WRITE setFovH NOTIFY fovHChanged)
+    Q_PROPERTY(int fovV READ fovV WRITE setFovV NOTIFY fovVChanged)
+    Q_PROPERTY(int stopFovH READ stopFovH WRITE setStopFovH NOTIFY stopFovHChanged)
+    Q_PROPERTY(int stopFovV READ stopFovV WRITE setStopFovV NOTIFY stopFovVChanged)
+    Q_PROPERTY(bool active READ active NOTIFY activeChanged)
+    Q_PROPERTY(double delay READ delay WRITE setDelay NOTIFY delayChanged)
+    Q_PROPERTY(double speed READ speed WRITE setSpeed NOTIFY speedChanged)
+    Q_PROPERTY(bool worldUpAlignment READ worldUpAlignment WRITE setWorldUpAlignment NOTIFY worldUpAlignmentChanged)
 
     QML_ELEMENT
 public:
@@ -86,10 +84,12 @@ Q_SIGNALS:
     void stopFovVChanged();
     void activeChanged();
 
-private:
+private Q_SLOTS:
     void onFrame();
+
+private:
     void updateConnections();
-    QVector2D anglesToNode(const QQuick3DNode *node) const;
+    QVector2D getAnglesToNode(const QQuick3DNode *node) const;
     bool anyNodeInFov() const;
     QQuick3DNode *findClosestNode() const;
     bool isNodeInStopFov(const QQuick3DNode *node) const;
@@ -113,5 +113,3 @@ private:
     QElapsedTimer m_timer;
     QTimer m_frameTimer;
 };
-
-} // namespace KWin

@@ -4,14 +4,15 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
+#ifndef ZSTACKER_H
+#define ZSTACKER_H
+
 #pragma once
 
 #include <QPointer>
 #include <QQuick3DObject>
 #include <QTimer>
-
-namespace KWin
-{
+#include <qdebug.h>
 
 struct ZMargins
 {
@@ -30,12 +31,20 @@ public:
     {
     }
 
-    bool operator==(const ZMargins &other) const noexcept
+    // Comparison operators
+    constexpr bool operator==(const ZMargins &other) const noexcept
     {
+        // return qFuzzyCompare(top, other.top) && qFuzzyCompare(bottom, other.bottom);
         return qFuzzyCompare(top, other.top) && qFuzzyCompare(bottom, other.bottom)
-            && qFuzzyCompare(flexibleTop, other.flexibleTop) && qFuzzyCompare(flexibleBottom, other.flexibleBottom);
+            && qFuzzyCompare(flexibleTop, other.top) && qFuzzyCompare(flexibleBottom, other.flexibleBottom);
     }
 
+    constexpr bool operator!=(const ZMargins &other) const noexcept
+    {
+        return !(*this == other);
+    }
+
+    // Optional helper for QML
     Q_INVOKABLE bool equals(const ZMargins &other) const noexcept
     {
         return *this == other;
@@ -57,49 +66,55 @@ public:
     float flexibleBottom = 0;
 };
 
-/**
- * Positions children of a specified target along the Z axis,
- * similar to Row and Column in Qt Quick.
+/* This class tries to position children of a specified target along Z axis.
+ * It works somewhat similar to Row and Column in Qt Quick.
  *
  * Iterates over target's children and reads two properties:
- * index and itemDepth. Then it sets the calculated zOffset property for each child.
+ * index and itemDepth. Then it sets calculated zOffset property for each child.
  *
- * Children can use zOffset property to apply their position around Z axis.
+ * Children can use zOffset property to apply their position around Z axis,
  *
- * For this class to work each child of a specified target should have
- * these three properties defined:
- * @code
+ * For this class to work each child of a specified target should have those three properties defined:
+ *
  *   property int index
  *   property real zOffset
- *   property ZMargins itemDepth
- * @endcode
+ *   property Margins itemDepth
+ *
  */
 class ZStacker : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QQuick3DObject *target READ target WRITE setTarget NOTIFY targetChanged)
+
     Q_PROPERTY(int centerIndex READ centerIndex WRITE setCenterIndex NOTIFY centerIndexChanged FINAL)
-    Q_PROPERTY(ZMargins initialMargins READ initialMargins WRITE setInitialMargins NOTIFY initialMarginsChanged FINAL)
+
+    Q_PROPERTY(ZMargins initalMargins READ initalMargins WRITE setInitalMargins NOTIFY initalMarginsChanged FINAL)
     Q_PROPERTY(ZMargins depth READ depth NOTIFY depthChanged FINAL)
+
     Q_PROPERTY(qreal globalOffset READ globalOffset WRITE setGlobalOffset NOTIFY globalOffsetChanged FINAL)
-    Q_PROPERTY(QString childIndexPropertyName READ childIndexPropertyName WRITE setChildIndexPropertyName NOTIFY childIndexPropertyNameChanged FINAL)
+
+    /* By default this is "index" */
+    Q_PROPERTY(QString childIndexProperyName READ childIndexProperyName WRITE setChildIndexProperyName NOTIFY childIndexProperyNameChanged FINAL)
 
     QML_ELEMENT
 public:
     explicit ZStacker(QObject *parent = nullptr);
 
-    QQuick3DObject *target() const;
+    QQuick3DObject *target() const
+    {
+        return m_target;
+    }
     void setTarget(QQuick3DObject *newTarget);
 
     int centerIndex() const;
     void setCenterIndex(int newCenterIndex);
 
     ZMargins depth() const;
-    ZMargins initialMargins() const;
-    void setInitialMargins(const ZMargins &newInitialMargins);
+    ZMargins initalMargins() const;
+    void setInitalMargins(const ZMargins &newInitalMargins);
 
-    QString childIndexPropertyName() const;
-    void setChildIndexPropertyName(const QString &newChildIndexPropertyName);
+    QString childIndexProperyName() const;
+    void setChildIndexProperyName(const QString &newChildIndexProperyName);
 
     qreal globalOffset() const;
     void setGlobalOffset(qreal newGlobalOffset);
@@ -108,20 +123,21 @@ Q_SIGNALS:
     void targetChanged();
     void centerIndexChanged();
     void depthChanged();
-    void initialMarginsChanged();
-    void childIndexPropertyNameChanged();
+    void initalMarginsChanged();
+    void childIndexProperyNameChanged();
     void globalOffsetChanged();
 
 private Q_SLOTS:
-    void scheduleRecompute();
-
-private:
     void onChildrenChanged();
     void onChildParentChanged();
+    void scheduleRecompute();
     void recomputeLayout();
+
+private:
     void hookChildren(const QList<QQuick3DObject *> &children);
-    void unhookChild(QQuick3DObject &child);
-    void unhookChildren(const QList<QQuick3DObject *> &children);
+    void unHookChild(QQuick3DObject &child);
+    void unHookChildren(const QList<QQuick3DObject *> &children);
+    void startTimerIfNeeded();
 
     void setDepth(const ZMargins &newDepth);
 
@@ -129,14 +145,14 @@ private:
     QTimer m_timer;
     int m_centerIndex = 0;
     ZMargins m_depth;
-    ZMargins m_initialMargins;
-    QString m_childIndexPropertyName;
-    QByteArray m_childIndexPropertyNameUtf8;
+    ZMargins m_initalMargins;
+    QString m_childIndexProperyName;
+    QByteArray m_childIndexProperyNameUtf8;
     QString m_childDepthPropertyName;
 
     QMetaMethod m_scheduleRecomputeMeta;
-    bool m_updateConnections = false;
+    bool m_update_connections = false;
     qreal m_globalOffset = 0;
 };
 
-} // namespace KWin
+#endif // MYROWWATCHER_H

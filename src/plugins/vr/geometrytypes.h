@@ -13,7 +13,7 @@
 namespace KWin
 {
 
-/** Layout for the vertex buffer using Qt types. */
+// Layout for the vertex buffer using Qt types
 struct Vertex
 {
     QVector3D position;
@@ -31,7 +31,7 @@ struct VertexQuad
 };
 static_assert(sizeof(VertexQuad) == sizeof(Vertex) * 4, "VertexQuad struct size mismatch");
 
-/** Layout for the index buffer. */
+// Layout for the index buffer
 struct Triangle
 {
     quint16 indices[3];
@@ -53,4 +53,4 @@ inline void setQuad(VertexQuad *q, float xMin, float xMax, float yMin, float yMa
     q->br = {{xMax, yMin, 0.0f}, {0.0f, 0.0f, 1.0f}, {uMax, vMin}};
 }
 
-} // namespace KWin
+}

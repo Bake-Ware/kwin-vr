@@ -5,21 +5,28 @@
 */
 
 #include "main.h"
-#include "plugin.h"
-
 #include "kwinvr.h"
+#include <KPluginFactory>
+#include <QObject>
+#include <plugin.h>
 
-class KWIN_EXPORT KwinVrManagerFactory : public KWin::PluginFactory
+using namespace KWin;
+
+class KWIN_EXPORT KwinVrManagerFactory : public PluginFactory
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID PluginFactory_iid FILE "metadata.json")
     Q_INTERFACES(KWin::PluginFactory)
 
 public:
-    std::unique_ptr<KWin::Plugin> create() const override
-    {
-        return std::make_unique<KWin::KwinVr>();
-    }
+    explicit KwinVrManagerFactory() = default;
+
+    std::unique_ptr<Plugin> create() const override;
 };
+
+std::unique_ptr<Plugin> KwinVrManagerFactory::create() const
+{
+    return std::make_unique<KwinVr>();
+}
 
 #include "main.moc"

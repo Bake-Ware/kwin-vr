@@ -8,9 +8,7 @@
 #include "core/output.h"
 #include "workspace.h"
 
-namespace KWin
-{
-
+using namespace KWin;
 OutputModel::OutputModel(QObject *parent)
     : QAbstractListModel{parent}
 {
@@ -30,7 +28,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
 
 QVariant OutputModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_outputs.size()) {
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_outputs.count()) {
         return QVariant();
     }
 
@@ -46,12 +44,12 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
 
 int OutputModel::rowCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : m_outputs.size();
+    return parent.isValid() ? 0 : m_outputs.count();
 }
 
 void OutputModel::handleOutputAdded(LogicalOutput *output)
 {
-    beginInsertRows(QModelIndex(), m_outputs.size(), m_outputs.size());
+    beginInsertRows(QModelIndex(), m_outputs.count(), m_outputs.count());
     m_outputs.append(output);
     endInsertRows();
 }
@@ -65,5 +63,3 @@ void OutputModel::handleOutputRemoved(LogicalOutput *output)
     m_outputs.removeAt(index);
     endRemoveRows();
 }
-
-} // namespace KWin

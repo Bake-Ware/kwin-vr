@@ -52,8 +52,8 @@ Node {
     ZStacker {
         id: stacker
         target: root
-        childIndexPropertyName: "stackingOrder"
-        initialMargins: frame.itemDepth
+        childIndexProperyName: "stackingOrder"
+        initalMargins: frame.itemDepth
         globalOffset: 0
     }
 }

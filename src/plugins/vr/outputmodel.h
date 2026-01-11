@@ -4,6 +4,9 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
+#ifndef OUTPUTMODEL_H
+#define OUTPUTMODEL_H
+
 #pragma once
 
 #include "kwincompat.h"
@@ -12,6 +15,7 @@
 
 namespace KWin
 {
+// class LogicalOutput;
 class OutputModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -31,7 +35,9 @@ private:
     void handleOutputAdded(LogicalOutput *output);
     void handleOutputRemoved(LogicalOutput *output);
 
-    QList<LogicalOutput *> m_outputs;
+    QList<KWin::LogicalOutput *> m_outputs;
 };
 
-} // namespace KWin
+}
+
+#endif // OUTPUTMODEL_H

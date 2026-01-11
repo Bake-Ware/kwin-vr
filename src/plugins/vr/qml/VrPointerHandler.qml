@@ -137,11 +137,11 @@ QtObject {
     // Active client for KWin focus: this way we tell kwin that all pointer events should be delivered to this window
     readonly property var activeClient: currentMovingResizingWindow?.client ?? hoverState.activePickHandler?.client ?? null
 
-    readonly property KwinVrHoveredWindowResolver hoveredWindowResolver: KwinVrHoveredWindowResolver {}
-
+    // Explicit target/property/value form required because KwinVrHelpers is a singleton.
+    // The shorthand "Singleton.prop: value" syntax is parsed as an attached property.
     readonly property Binding forcedFocusBinding: Binding {
-        target: root.hoveredWindowResolver
-        property: "hoveredWindow"
+        target: KwinVrHelpers
+        property: "forcedFocusWindow"
         value: root.activeClient
     }
 }

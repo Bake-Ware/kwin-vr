@@ -9,38 +9,36 @@
 #include <QRunnable>
 #include <qsgtextureprovider.h>
 
-namespace KWin
-{
+using namespace KWin;
 
 class SimpleTextureProvider : public QSGTextureProvider
 {
 public:
     ~SimpleTextureProvider()
     {
-        if (m_glTexture) {
-            glDeleteTextures(1, &m_glTexture);
+        if (m_gl_texture) {
+            glDeleteTextures(1, &m_gl_texture);
         }
     }
 
     QSGTexture *texture() const override
     {
-        return m_qsgTexture.get();
+        return m_qsg_texture.get();
     }
 
-    void setTexture(QSGTexture *texture, GLuint glTexture)
+    void setTexture(QSGTexture *tex, GLuint gl_texture)
     {
-        m_qsgTexture.reset(texture);
-        if (m_glTexture) {
-            glDeleteTextures(1, &m_glTexture);
-        }
+        m_qsg_texture.reset(tex);
+        if (m_gl_texture)
+            glDeleteTextures(1, &m_gl_texture);
 
-        m_glTexture = glTexture;
+        m_gl_texture = gl_texture;
         Q_EMIT textureChanged();
     }
 
 private:
-    std::unique_ptr<QSGTexture> m_qsgTexture;
-    GLuint m_glTexture = 0;
+    std::unique_ptr<QSGTexture> m_qsg_texture;
+    GLuint m_gl_texture = 0;
 };
 
 TextureProviderItem::TextureProviderItem(QQuickItem *parent)
@@ -94,23 +92,20 @@ void TextureProviderItem::releaseResources()
 
 void TextureProviderItem::doReleaseResources()
 {
-    if (!m_provider) {
+    if (!m_provider)
         return;
-    }
 
-    auto quickWindow = window();
-    if (!quickWindow) {
+    auto win = window();
+    if (!win) {
         qCWarning(KWINVR) << "Failed to release texture, no QQuickWindow";
         return;
     }
 
-    qCDebug(KWINVR) << "TextureProviderItem: Scheduling texture release";
+    qCDebug(KWINVR) << "TextureProviderItem: Scheduling texture releasee";
     auto texprov = static_cast<SimpleTextureProvider *>(m_provider);
-    quickWindow->scheduleRenderJob(QRunnable::create([texprov] {
+    win->scheduleRenderJob(QRunnable::create([texprov] {
         delete texprov;
     }),
-                                   QQuickWindow::AfterRenderingStage);
+                           QQuickWindow::AfterRenderingStage);
     m_provider = nullptr;
 }
-
-} // namespace KWin

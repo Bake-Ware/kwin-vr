@@ -6,28 +6,28 @@
 
 #pragma once
 
-/**
- * This file is needed to build this plugin with KWin 6.5.
- * Once 6.5 is dead it will be removed.
- */
+// This file is needed to build this plugin with KWin 6.5
+// Once 6.5 is dead it will be removed
 
-#include "core/output.h"
-
-#if __has_include("core/backendoutput.h")
+#if __has_include(<core/backendoutput.h>)
 // Newer KWin versions (6.6+)
-#include "core/backendoutput.h"
+#include <core/backendoutput.h>
+#include <core/output.h>
 
+// Helper to compare/access backend from logical output across versions
 inline KWin::BackendOutput *kwinGetBackendOutput(KWin::LogicalOutput *o)
 {
     return o->backendOutput();
 }
 #else
-// Older KWin versions (6.5)
+// Older KWin versions
+#include <core/output.h>
+
 namespace KWin
 {
 using LogicalOutput = Output;
 using BackendOutput = Output;
-} // namespace KWin
+}
 
 inline KWin::BackendOutput *kwinGetBackendOutput(KWin::LogicalOutput *o)
 {

@@ -4,10 +4,10 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINVR_H
+#define KWINVR_H
 
-#include "openxrtest.h"
-#include "plugin.h"
+#pragma once
 
 #include <KConfigWatcher>
 #include <KNotification>
@@ -15,7 +15,11 @@
 #include <QKeySequence>
 #include <QObject>
 #include <QQmlApplicationEngine>
-#include <QString>
+
+#include <plugin.h>
+
+#include "kwinvrbridge.h"
+#include "openxrtest.h"
 
 namespace KWin
 {
@@ -27,7 +31,7 @@ class KwinVr : public Plugin
     Q_PROPERTY(bool vrActive READ vrActive WRITE setVrActive NOTIFY vrActiveChanged)
 public:
     explicit KwinVr();
-    ~KwinVr() override;
+    ~KwinVr();
 
     bool vrActive() const;
     void setVrActive(bool active);
@@ -46,15 +50,14 @@ private:
     void closeNotification();
 
     void registerDBusService();
-    bool initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString *errorMessage) const;
 
     bool m_active = false;
     QQmlApplicationEngine *m_engine = nullptr;
+    KwinVrBridge m_vrbridge;
     OpenXRTest m_xrTest;
     KConfigWatcher::Ptr m_watcher;
     KNotification *m_notification = nullptr;
-    bool m_openXRLoaderInitialized = false;
-    QString m_openXRLoaderRuntimePath;
 };
+}
 
-} // namespace KWin
+#endif // KWINVR_H

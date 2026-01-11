@@ -17,8 +17,8 @@ import org.kde.kwin.vr
 
 XrView {
     id: xrView
-    onInitializeFailed: (errorString) => KwinVrBridge.xrFailed(errorString);
-    onSessionEnded: (errorString) => KwinVrBridge.xrFailed("Session ended")
+    onInitializeFailed: (errorString) => kwinVrBridge.xrFailed(errorString);
+    onSessionEnded: (errorString) => kwinVrBridge.xrFailed("Session ended")
     referenceSpace: XrView.ReferenceSpaceLocal
     depthSubmissionEnabled: false
 

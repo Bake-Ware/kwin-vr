@@ -4,7 +4,8 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINWINDOWDECORATION_H
+#define KWINWINDOWDECORATION_H
 
 #include <KDecoration3/Decoration>
 #include <KDecoration3/DecorationShadow>
@@ -15,8 +16,8 @@ namespace KWin
 class KwinWindowDecoration : public QQuickPaintedItem
 {
     Q_OBJECT
-    Q_PROPERTY(KDecoration3::Decoration *decoration READ decoration WRITE setDecoration NOTIFY decorationChanged FINAL)
-    Q_PROPERTY(KDecoration3::DecorationShadow *shadow READ shadow NOTIFY shadowChanged FINAL)
+    Q_PROPERTY(KDecoration3::Decoration *decoration READ decoration WRITE setDecoration NOTIFY decorationChanged)
+    Q_PROPERTY(KDecoration3::DecorationShadow *shadow READ shadow NOTIFY shadowChanged)
 
     QML_ELEMENT
 public:
@@ -28,19 +29,20 @@ public:
     KDecoration3::DecorationShadow *shadow() const;
 
     void paint(QPainter *painter) override;
-
 Q_SIGNALS:
     void decorationChanged();
     void shadowChanged();
-
-private:
+private Q_SLOTS:
     void onDecorationDamaged(const QRegion &region);
     void onDecorationBordersChanged();
     void onDecorationDestroyed();
 
+private:
     KDecoration3::Decoration *m_decoration = nullptr;
 
-    QRegion m_decoDamage;
+    QRegion m_deco_damage;
+    // QQuickPaintedItem interface
 };
 
 } // namespace KWin
+#endif // KWINWINDOWDECORATION_H

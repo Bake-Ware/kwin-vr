@@ -36,11 +36,6 @@ Item {
         settingName: "resetViewDelay"
     }
 
-    KCMUtils.SettingStateBinding {
-        configObject: kcm.settings
-        settingName: "overlayPlacement"
-    }
-
     ColumnLayout {
         id: innerLayout
         anchors.horizontalCenter: parent.horizontalCenter
@@ -51,27 +46,6 @@ Item {
             text: i18nc("@title", "Advanced")
             font.bold: true
             font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
-        }
-
-        // Overlay Placement
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Kirigami.Units.smallSpacing
-
-            Controls.Label {
-                text: i18nc("@label:spinbox", "Overlay Placement:")
-            }
-
-            Controls.SpinBox {
-                id: tOverlayPlacement
-                from: 0
-                to: 50
-                value: kcm.settings.overlayPlacement
-            }
-
-            Kirigami.ContextualHelpButton {
-                toolTipText: xi18nc("@info:tooltip", "Applications with higher <interface>Overlay Placement</interface> value will be rendered on top of other VR applications. Practically this allows to display KWin's windows over other running VR applications.")
-            }
         }
 
         // Transparency section
@@ -200,11 +174,5 @@ Item {
         target: kcm.settings
         property: "resetViewDelay"
         value: tResetViewEnabled.checked ? tResetViewDelay.realValue : -1.0
-    }
-
-    Binding {
-        target: kcm.settings
-        property: "overlayPlacement"
-        value: tOverlayPlacement.value
     }
 }

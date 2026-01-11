@@ -4,13 +4,11 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef OPENXRTEST_H
+#define OPENXRTEST_H
 
 #include <QObject>
 #include <QProcess>
-
-namespace KWin
-{
 
 class OpenXRTest : public QObject
 {
@@ -18,7 +16,7 @@ class OpenXRTest : public QObject
 
 public:
     explicit OpenXRTest(QObject *parent = nullptr);
-    ~OpenXRTest() override;
+    ~OpenXRTest();
 
     void start();
     void stop();
@@ -26,14 +24,16 @@ public:
 Q_SIGNALS:
     void sessionResult(bool success, const QString &message);
 
-private:
+private Q_SLOTS:
     void onReadyRead();
     void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onProcessError(QProcess::ProcessError error);
+
+private:
     void emitResult(bool success, const QString &message);
 
     QProcess *m_process = nullptr;
     bool m_resultEmitted = false;
 };
 
-} // namespace KWin
+#endif // OPENXRTEST_H

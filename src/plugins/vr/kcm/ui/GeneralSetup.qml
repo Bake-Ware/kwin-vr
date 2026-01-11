@@ -15,12 +15,15 @@ Item {
     id: root
 
     implicitHeight: innerLayout.implicitHeight
-    property bool openXrRuntimeInitialized: false
-    Component.onCompleted: kcm.refreshOpenXrRuntimeCandidates()
 
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
         settingName: "xrTestEnabled"
+    }
+
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "overlayPlacement"
     }
 
     KCMUtils.SettingStateBinding {
@@ -31,11 +34,6 @@ Item {
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
         settingName: "windowMode"
-    }
-
-    KCMUtils.SettingStateBinding {
-        configObject: kcm.settings
-        settingName: "openXrRuntimeJson"
     }
 
     // Centered content wrapper
@@ -79,6 +77,27 @@ Item {
             }
         }
 
+        // Overlay Placement
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.Label {
+                text: i18nc("@label:spinbox", "Overlay Placement:")
+            }
+
+            Controls.SpinBox {
+                id: tOverlayPlacement
+                from: 0
+                to: 50
+                value: kcm.settings.overlayPlacement
+            }
+
+            Kirigami.ContextualHelpButton {
+                toolTipText: xi18nc("@info:tooltip", "Applications with higher <interface>Overlay Placement</interface> value will be rendered on top of other VR applications. Practically this allows to display KWin's windows over other running VR applications.")
+            }
+        }
+
         // Transparent Background (Blend)
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
@@ -118,49 +137,6 @@ Item {
                 toolTipText: wqt3d + "<br><br>" + wkw3d + "<br><br>" + wkw2d
             }
         }
-
-        WindowSpacingSetup {
-            Layout.fillWidth: true
-        }
-
-        // OpenXR Runtime section
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        Controls.Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: i18nc("@title:group", "OpenXR Runtime")
-            font.bold: true
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Controls.ComboBox {
-                id: tOpenXrRuntimeJson
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 20
-                editable: true
-                model: [" "].concat(kcm.openXrRuntimeCandidates)
-                onActivated: editText = currentText.trim()
-                Component.onCompleted: {
-                    currentIndex = -1;
-                    editText = kcm.settings.openXrRuntimeJson;
-                    root.openXrRuntimeInitialized = true;
-                }
-                Connections {
-                    target: kcm.settings
-                    function onOpenXrRuntimeJsonChanged() {
-                        tOpenXrRuntimeJson.editText = kcm.settings.openXrRuntimeJson;
-                    }
-                }
-            }
-
-            Kirigami.ContextualHelpButton {
-                toolTipText: xi18nc("@info:tooltip", "Absolute path to runtime JSON for OpenXR loader initialization.<br/><br/>Leave empty to skip explicit loader initialization.")
-            }
-        }
     }
 
     Binding {
@@ -171,15 +147,13 @@ Item {
 
     Binding {
         target: kcm.settings
-        property: "blend"
-        value: tBlend.checked
+        property: "overlayPlacement"
+        value: tOverlayPlacement.value
     }
 
     Binding {
         target: kcm.settings
-        property: "openXrRuntimeJson"
-        value: tOpenXrRuntimeJson.editText.trim()
-        when: root.openXrRuntimeInitialized
+        property: "blend"
+        value: tBlend.checked
     }
-
 }

@@ -70,10 +70,6 @@
       <label>Run OpenXR test before starting VR mode</label>
       <default>true</default>
     </entry>
-    <entry name="openXrRuntimeJson" type="String">
-      <label>Absolute path to OpenXR runtime JSON used to initialize the loader before VR activation</label>
-      <default></default>
-    </entry>
     <entry name="resetViewDelay" type="Double">
       <label>Delay before resetting view after startup (seconds)</label>
       <default>2.0</default>
@@ -83,35 +79,6 @@
     <entry name="overlayPlacement" type="Int">
       <label>XR overlay placement depth</label>
       <default>20</default>
-    </entry>
-    <entry name="zWindowMarginTop" type="Double">
-      <label>Default top Z margin for windows, acts as minimum window depth (cm)</label>
-      <default>1.0</default>
-      <min>0.01</min>
-      <max>5.0</max>
-    </entry>
-    <entry name="zWindowMarginBottom" type="Double">
-      <label>Default bottom Z margin for windows, acts as minimum window depth (cm)</label>
-      <default>0.0</default>
-      <min>0.0</min>
-      <max>5.0</max>
-    </entry>
-    <entry name="zSurfaceMarginTop" type="Double">
-      <label>Default top Z margin for surfaces within a window (cm)</label>
-      <default>1.0</default>
-      <min>0.01</min>
-      <max>5.0</max>
-    </entry>
-    <entry name="zSurfaceMarginBottom" type="Double">
-      <label>Default bottom Z margin for surfaces within a window (cm)</label>
-      <default>0.0</default>
-      <min>0.0</min>
-      <max>5.0</max>
-    </entry>
-    <entry name="minTransientNormalSpacing" type="Double">
-      <label>Minimum space between transient normal windows (cm)</label>
-      <default>4.0</default>
-      <min>0.0</min>
     </entry>
     <entry name="blend" type="Bool">
       <label>Enable transparent background by default</label>

@@ -54,15 +54,12 @@ KwinWaylandSurface3D {
         }
     }
 
-    property zMargins itemDepth: ({
-                                      top: Math.max(rwa.depth.top, root.visible ? KWinVRConfig.zWindowMarginTop : 0),
-                                      bottom: Math.max(rwa.depth.bottom, root.visible ? KWinVRConfig.zWindowMarginBottom : 0)
-                                  })
+    property alias itemDepth: rwa.depth
     // onItemDepthChanged: console.log("---> item Depth (main)", itemDepth)
     ZStacker {
         id: rwa
         target: subSurfaceRepeater
-        initialMargins: root.surfaceModelDepth
+        initalMargins.top: root.surfaceDepth
         centerIndex: root.surfaceIndex
         globalOffset: root.zOffsetGlobal
     }

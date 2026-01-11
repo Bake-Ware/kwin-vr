@@ -10,7 +10,6 @@ import QtQuick.Layouts
 
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCMUtils
-import org.kde.kquickcontrols as KQuickControls
 
 ColumnLayout {
     id: root
@@ -49,7 +48,6 @@ ColumnLayout {
 
             ButtonKeySequenceItem {
                 binding: modelData
-                patterns: KQuickControls.ShortcutPattern.Key
                 onBindingModified: (newBinding) => {
                     let bindings = kcm.settings.headScrollBindings.slice()
                     bindings[index] = newBinding

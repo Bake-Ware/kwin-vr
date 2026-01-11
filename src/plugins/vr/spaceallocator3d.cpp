@@ -120,7 +120,7 @@ void SpaceAllocator3D::unregisterObject(QQuick3DNode *object)
     m_trackedObjects.removeAll(object);
 }
 
-SpaceAllocator3D::ViewBasis SpaceAllocator3D::viewBasis() const
+SpaceAllocator3D::ViewBasis SpaceAllocator3D::getViewBasis() const
 {
     ViewBasis basis;
     if (m_viewpoint) {
@@ -159,7 +159,7 @@ AngularBounds SpaceAllocator3D::projectToAngular(QQuick3DNode *object, const Vie
     qreal minEl = std::numeric_limits<qreal>::infinity();
     qreal maxEl = -std::numeric_limits<qreal>::infinity();
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; i++) {
         const QVector3D worldCorner = transform.map(localCorners[i]);
         const QVector3D toCorner = (worldCorner - view.position).normalized();
 
@@ -236,7 +236,7 @@ QList<std::pair<qreal, qreal>> SpaceAllocator3D::generateSpherePoints(qreal angu
         const qreal circumference = 2.0 * M_PI * std::sin(alpha);
         const int numPoints = std::max(4, static_cast<int>(std::ceil(circumference / angularStep)));
 
-        for (int i = 0; i < numPoints; ++i) {
+        for (int i = 0; i < numPoints; i++) {
             // Angle around the forward axis (0 to 2*PI)
             const qreal theta = 2.0 * M_PI * i / numPoints;
 
@@ -264,7 +264,7 @@ QList<std::pair<qreal, qreal>> SpaceAllocator3D::generateSpherePoints(qreal angu
 
 QVector3D SpaceAllocator3D::findFreePosition(qreal width, qreal height)
 {
-    const ViewBasis view = viewBasis();
+    const ViewBasis view = getViewBasis();
 
     // Pre-calculate angular bounds for all tracked objects
     QList<AngularBounds> existingBounds;
@@ -302,7 +302,7 @@ QVector3D SpaceAllocator3D::findFreePosition(qreal width, qreal height)
 
 QVariantList SpaceAllocator3D::debugGetSpherePoints(qreal angularStep, qreal maxAngle)
 {
-    const ViewBasis view = viewBasis();
+    const ViewBasis view = getViewBasis();
     const auto points = generateSpherePoints(angularStep, maxAngle);
 
     QVariantList result;
@@ -315,4 +315,4 @@ QVariantList SpaceAllocator3D::debugGetSpherePoints(qreal angularStep, qreal max
     return result;
 }
 
-} // namespace KWin
+}

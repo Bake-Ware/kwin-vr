@@ -31,11 +31,11 @@ struct AngularBounds
 class SpaceAllocator3D : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QQuick3DNode *viewpoint READ viewpoint WRITE setViewpoint NOTIFY viewpointChanged FINAL)
-    Q_PROPERTY(qreal distance READ distance WRITE setDistance NOTIFY distanceChanged FINAL)
-    Q_PROPERTY(qreal spacing READ spacing WRITE setSpacing NOTIFY spacingChanged FINAL)
-    Q_PROPERTY(QString sizePropertyName READ sizePropertyName WRITE setSizePropertyName NOTIFY sizePropertyNameChanged FINAL)
-    Q_PROPERTY(qreal searchGranularity READ searchGranularity WRITE setSearchGranularity NOTIFY searchGranularityChanged FINAL)
+    Q_PROPERTY(QQuick3DNode *viewpoint READ viewpoint WRITE setViewpoint NOTIFY viewpointChanged)
+    Q_PROPERTY(qreal distance READ distance WRITE setDistance NOTIFY distanceChanged)
+    Q_PROPERTY(qreal spacing READ spacing WRITE setSpacing NOTIFY spacingChanged)
+    Q_PROPERTY(QString sizePropertyName READ sizePropertyName WRITE setSizePropertyName NOTIFY sizePropertyNameChanged)
+    Q_PROPERTY(qreal searchGranularity READ searchGranularity WRITE setSearchGranularity NOTIFY searchGranularityChanged)
     QML_ELEMENT
 
 public:
@@ -77,7 +77,7 @@ private:
         QVector3D up;
     };
 
-    ViewBasis viewBasis() const;
+    ViewBasis getViewBasis() const;
     AngularBounds projectToAngular(QQuick3DNode *object, const ViewBasis &view);
     AngularBounds boundsForCandidate(qreal azimuth, qreal elevation, qreal width, qreal height);
     bool angularBoundsOverlap(const AngularBounds &a, const AngularBounds &b);
@@ -97,4 +97,4 @@ private:
     QList<QQuick3DNode *> m_trackedObjects;
 };
 
-} // namespace KWin
+}

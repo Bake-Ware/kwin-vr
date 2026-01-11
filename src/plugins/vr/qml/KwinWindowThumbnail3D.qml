@@ -38,8 +38,8 @@ Node {
     property alias pickable: model.pickable
 
     property zMargins itemDepth: ({
-                                      top: root.visible ? KWinVRConfig.zWindowMarginTop : 0,
-                                      bottom: root.visible ? KWinVRConfig.zWindowMarginBottom : 0
+                                      top: root.visible ? 1 : 0,
+                                      bottom: 0
                                   })
     property real zOffsetGlobal: 0
 

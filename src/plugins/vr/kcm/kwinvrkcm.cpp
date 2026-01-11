@@ -7,20 +7,14 @@
 #include "kwinvrkcm.h"
 
 #include <KPluginFactory>
+
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
-#include <QDir>
-#include <QDirIterator>
-#include <QFileInfo>
 #include <QProcess>
-#include <QSet>
 #include <QStandardPaths>
 
-#include <algorithm>
-
-namespace KWin
-{
+using namespace KWin;
 
 K_PLUGIN_CLASS_WITH_JSON(KwinVRKcm, "kwinvr_kcm.json")
 
@@ -109,54 +103,5 @@ void KwinVRKcm::setVrActive(bool active)
         iface->setProperty("vrActive", active);
     }
 }
-
-QStringList KwinVRKcm::openXrRuntimeCandidates() const
-{
-    return m_openXrRuntimeCandidates;
-}
-
-void KwinVRKcm::refreshOpenXrRuntimeCandidates()
-{
-    QStringList searchRoots;
-    const QStringList dataLocations = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    for (const QString &location : dataLocations) {
-        searchRoots.append(QDir(location).filePath(QStringLiteral("openxr/1")));
-    }
-
-    const QStringList configLocations = QStandardPaths::standardLocations(QStandardPaths::ConfigLocation);
-    for (const QString &location : configLocations) {
-        searchRoots.append(QDir(location).filePath(QStringLiteral("openxr/1")));
-    }
-    searchRoots.append(QStringLiteral("/etc/openxr/1"));
-
-    QSet<QString> discoveredPaths;
-    for (const QString &root : searchRoots) {
-        const QFileInfo rootInfo(root);
-        if (!rootInfo.exists() || !rootInfo.isDir()) {
-            continue;
-        }
-
-        QDirIterator it(root, {QStringLiteral("*.json")}, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QString path = it.next();
-            const QFileInfo runtimeFile(path);
-            const QString canonicalPath = runtimeFile.canonicalFilePath();
-            if (!canonicalPath.isEmpty() && runtimeFile.isReadable()) {
-                discoveredPaths.insert(canonicalPath);
-            }
-        }
-    }
-
-    QStringList candidates = discoveredPaths.values();
-    std::sort(candidates.begin(), candidates.end());
-    if (candidates == m_openXrRuntimeCandidates) {
-        return;
-    }
-
-    m_openXrRuntimeCandidates = candidates;
-    Q_EMIT openXrRuntimeCandidatesChanged();
-}
-
-} // namespace KWin
 
 #include "kwinvrkcm.moc"

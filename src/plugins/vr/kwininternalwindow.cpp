@@ -6,9 +6,10 @@
 
 #include "kwininternalwindow.h"
 #include "kwingraphicshelpers.h"
+#include <QRunnable>
+#include <qsgtextureprovider.h>
 
-namespace KWin
-{
+using namespace KWin;
 
 KwinInternalWindow::KwinInternalWindow()
 {
@@ -24,16 +25,14 @@ InternalWindow *KwinInternalWindow::client() const
     return m_client;
 }
 
-void KwinInternalWindow::setClient(InternalWindow *newClient)
+void KwinInternalWindow::setClient(KWin::InternalWindow *newClient)
 {
-    if (m_client == newClient) {
+    if (m_client == newClient)
         return;
-    }
 
     if (m_client) {
         disconnect(m_client, &InternalWindow::presented, this, &KwinInternalWindow::onPresented);
         disconnect(m_client, &InternalWindow::clientGeometryChanged, this, &KwinInternalWindow::onClientGeometryChanged);
-        disconnect(m_client, &InternalWindow::destroyed, this, &KwinInternalWindow::onWindowDestroyed);
     }
 
     m_client = newClient;
@@ -41,7 +40,6 @@ void KwinInternalWindow::setClient(InternalWindow *newClient)
     if (newClient) {
         connect(newClient, &InternalWindow::presented, this, &KwinInternalWindow::onPresented);
         connect(newClient, &InternalWindow::clientGeometryChanged, this, &KwinInternalWindow::onClientGeometryChanged);
-        connect(newClient, &InternalWindow::destroyed, this, &KwinInternalWindow::onWindowDestroyed);
     }
 
     onClientGeometryChanged();
@@ -59,7 +57,7 @@ QSGNode *KwinInternalWindow::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
         node->setTextureCoordinatesTransform(QSGImageNode::NoTransform);
     }
 
-    auto buf = m_bufferRef.buffer();
+    auto buf = m_bufferref.buffer();
     if (!buf) {
         delete node;
         clearTexture();
@@ -67,7 +65,7 @@ QSGNode *KwinInternalWindow::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
     }
 
     if (buf->size().isEmpty()) {
-        m_bufferRef = nullptr;
+        m_bufferref = nullptr;
         delete node;
         clearTexture();
         return nullptr;
@@ -75,13 +73,13 @@ QSGNode *KwinInternalWindow::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
 
     auto textures = loadGraphicsBufferToQSGTextures(buf, window());
     if (!textures.planeCount) {
-        m_bufferRef = nullptr;
+        m_bufferref = nullptr;
         delete node;
         clearTexture();
         return nullptr;
     }
 
-    // Use the first plane
+    // Use the last plane justs for fun
     auto currentPair = textures.planeTextures[0];
 
     // TODO: YUV
@@ -97,11 +95,12 @@ QSGNode *KwinInternalWindow::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
 
     setTexture(qsgTexture, glTexture);
 
-    // Well, this is kinda limited
+    /* Well, this is kinda limited */
     node->setTextureCoordinatesTransform(
         (m_bufferTransform == OutputTransform::FlipX ? QSGImageNode::MirrorHorizontally : QSGImageNode::NoTransform) | (m_bufferTransform == OutputTransform::FlipY ? QSGImageNode::MirrorVertically : QSGImageNode::NoTransform));
 
     node->setTexture(qsgTexture);
+    // node->setSourceRect({QPointF(0,0), buf->size()});
     node->setRect(boundingRect());
 
     return node;
@@ -109,24 +108,26 @@ QSGNode *KwinInternalWindow::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
 
 void KwinInternalWindow::releaseResources()
 {
-    m_bufferRef = nullptr;
+    m_bufferref = nullptr;
     TextureProviderItem::releaseResources();
 }
 
-void KwinInternalWindow::onPresented(const InternalWindowFrame &)
+void KwinInternalWindow::onPresented(const KWin::InternalWindowFrame &frame)
 {
+    Q_UNUSED(frame);
+
     if (!m_client) {
-        m_bufferRef = nullptr;
+        m_bufferref = nullptr;
         return;
     }
 
     auto buf = m_client->graphicsBuffer();
     if (!buf) {
-        m_bufferRef = nullptr;
+        m_bufferref = nullptr;
         return;
     }
 
-    m_bufferRef = buf;
+    m_bufferref = buf;
     m_bufferTransform = m_client->bufferTransform();
 
     setFlipU(m_bufferTransform == OutputTransform::FlipX);
@@ -146,13 +147,10 @@ void KwinInternalWindow::onClientGeometryChanged()
     setImplicitSize(geo.width(), geo.height());
 }
 
-void KwinInternalWindow::onWindowDestroyed()
+void KwinInternalWindow::onWindowDestoyed()
 {
-    m_client = nullptr;
-    m_bufferRef = nullptr;
+    m_bufferref = nullptr;
     setImplicitSize(1, 1);
-    update();
-    Q_EMIT clientChanged();
 }
 
 bool KwinInternalWindow::flipU() const
@@ -162,9 +160,8 @@ bool KwinInternalWindow::flipU() const
 
 void KwinInternalWindow::setFlipU(bool newFlipU)
 {
-    if (m_flipU == newFlipU) {
+    if (m_flipU == newFlipU)
         return;
-    }
     m_flipU = newFlipU;
     Q_EMIT flipUChanged();
 }
@@ -176,11 +173,8 @@ bool KwinInternalWindow::flipV() const
 
 void KwinInternalWindow::setFlipV(bool newFlipV)
 {
-    if (m_flipV == newFlipV) {
+    if (m_flipV == newFlipV)
         return;
-    }
     m_flipV = newFlipV;
     Q_EMIT flipVChanged();
 }
-
-} // namespace KWin

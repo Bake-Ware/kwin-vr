@@ -46,7 +46,7 @@ KwinWaylandSubSurface3D {
     ZStacker {
         id: rwa
         target: subSurfaceRepeater
-        initialMargins: root.surfaceModelDepth
+        initalMargins.top: root.surfaceDepth
         centerIndex: root.surfaceIndex
         globalOffset: root.zOffsetGlobal
     }

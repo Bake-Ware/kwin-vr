@@ -6,31 +6,25 @@
 
 #include "zstacker.h"
 #include "kwinvr_logging.h"
-#include <QDebug>
 #include <QMetaProperty>
 #include <QQmlProperty>
-
-#include <climits>
-
-namespace KWin
-{
 
 constexpr auto s_childIndexPropName = "index";
 constexpr auto s_childDepthPropName = "itemDepth";
 constexpr auto s_childZOffsetPropName = "zOffset";
 constexpr auto s_childZOffsetGlobalPropName = "zOffsetGlobal";
 
-QDebug operator<<(QDebug debug, const ZMargins &margins)
+QDebug operator<<(QDebug debug, const ZMargins &frame)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace() << margins.toString();
+    debug.nospace() << frame.toString();
     return debug;
 }
 
 ZStacker::ZStacker(QObject *parent)
     : QObject(parent)
-    , m_childIndexPropertyName(s_childIndexPropName)
-    , m_childIndexPropertyNameUtf8(s_childIndexPropName)
+    , m_childIndexProperyName(s_childIndexPropName)
+    , m_childIndexProperyNameUtf8(s_childIndexPropName)
     , m_childDepthPropertyName(s_childDepthPropName)
 {
     m_timer.setSingleShot(true);
@@ -40,26 +34,20 @@ ZStacker::ZStacker(QObject *parent)
     m_scheduleRecomputeMeta = staticMetaObject.method(staticMetaObject.indexOfSlot("scheduleRecompute()"));
 }
 
-QQuick3DObject *ZStacker::target() const
-{
-    return m_target;
-}
-
 void ZStacker::setTarget(QQuick3DObject *newTarget)
 {
-    if (m_target == newTarget) {
+    if (m_target == newTarget)
         return;
-    }
 
     if (m_target) {
         disconnect(m_target, &QQuick3DObject::childrenChanged,
                    this, &ZStacker::onChildrenChanged);
-        unhookChildren(m_target->childItems());
+        unHookChildren(m_target->childItems());
     }
 
     m_target = newTarget;
 
-    m_updateConnections = false;
+    m_update_connections = false;
 
     if (m_target) {
         connect(m_target, &QQuick3DObject::childrenChanged,
@@ -68,7 +56,7 @@ void ZStacker::setTarget(QQuick3DObject *newTarget)
         scheduleRecompute();
     } else {
         m_timer.stop();
-        setDepth(m_initialMargins);
+        setDepth(m_initalMargins);
     }
 
     Q_EMIT targetChanged();
@@ -76,11 +64,10 @@ void ZStacker::setTarget(QQuick3DObject *newTarget)
 
 void ZStacker::onChildrenChanged()
 {
-    if (!m_target) {
+    if (!m_target)
         return;
-    }
 
-    m_updateConnections = true;
+    m_update_connections = true;
     scheduleRecompute();
 }
 
@@ -93,15 +80,14 @@ void ZStacker::onChildParentChanged()
     }
 
     auto parentItem = child->parentItem();
-    if (parentItem && parentItem == m_target) {
+    if (parentItem && parentItem == m_target)
         return;
-    }
 
-    unhookChild(*child);
-    // No need to call scheduleRecompute(), because childrenChanged() signal will be emitted too
+    unHookChild(*child);
+    // No need to call scheduleRecompute(), because childrenChanged() signal will be emiited too
 }
 
-static std::optional<QMetaMethod> notifySignalForProperty(QObject *sender, const char *propertyName)
+static std::optional<QMetaMethod> getMetaMethodFromPropertyNotify(QObject *sender, const char *propertyName)
 {
     const QMetaObject *senderMeta = sender->metaObject();
     int propIndex = senderMeta->indexOfProperty(propertyName);
@@ -125,63 +111,65 @@ static std::optional<QMetaMethod> notifySignalForProperty(QObject *sender, const
 void ZStacker::hookChildren(const QList<QQuick3DObject *> &children)
 {
     for (auto *child : children) {
-        if (!child) {
+        if (!child)
             continue;
-        }
 
         connect(child, &QQuick3DObject::parentChanged, this, &ZStacker::onChildParentChanged, Qt::UniqueConnection);
 
         connect(child, SIGNAL(itemDepthChanged()),
                 this, SLOT(scheduleRecompute()), Qt::UniqueConnection);
 
-        auto indexSignalMeta = notifySignalForProperty(child, m_childIndexPropertyNameUtf8.constData());
+        auto indexSignalMeta = getMetaMethodFromPropertyNotify(child, m_childIndexProperyNameUtf8.constData());
         if (indexSignalMeta.has_value()) {
             connect(child, indexSignalMeta.value(), this, m_scheduleRecomputeMeta, Qt::UniqueConnection);
         }
     }
 }
 
-void ZStacker::unhookChild(QQuick3DObject &child)
+void ZStacker::unHookChild(QQuick3DObject &child)
 {
     disconnect(&child, &QQuick3DObject::parentChanged, this, &ZStacker::onChildParentChanged);
 
     disconnect(&child, SIGNAL(itemDepthChanged()),
                this, SLOT(scheduleRecompute()));
 
-    auto indexSignalMeta = notifySignalForProperty(&child, m_childIndexPropertyNameUtf8.constData());
+    auto indexSignalMeta = getMetaMethodFromPropertyNotify(&child, m_childIndexProperyNameUtf8.constData());
     if (indexSignalMeta) {
         disconnect(&child, indexSignalMeta.value(), this, m_scheduleRecomputeMeta);
     }
 }
 
-void ZStacker::unhookChildren(const QList<QQuick3DObject *> &children)
+void ZStacker::unHookChildren(const QList<QQuick3DObject *> &children)
 {
     for (auto *child : children) {
-        if (!child) {
+        if (!child)
             continue;
-        }
 
-        unhookChild(*child);
+        unHookChild(*child);
     }
 }
 
 void ZStacker::scheduleRecompute()
 {
-    if (!m_timer.isActive()) {
+    startTimerIfNeeded();
+}
+
+void ZStacker::startTimerIfNeeded()
+{
+    if (!m_timer.isActive())
         m_timer.start();
-    }
 }
 
 void ZStacker::recomputeLayout()
 {
     if (!m_target) {
-        setDepth(m_initialMargins);
+        setDepth(m_initalMargins);
         return;
     }
 
     auto children = m_target->childItems();
-    if (m_updateConnections) {
-        m_updateConnections = false;
+    if (m_update_connections) {
+        m_update_connections = false;
         hookChildren(children);
     }
 
@@ -190,18 +178,15 @@ void ZStacker::recomputeLayout()
         QQuick3DObject *obj;
         int index;
     };
-    QList<Item> indexed;
-    indexed.reserve(children.size());
+    QVector<Item> indexed;
 
     for (auto *child : std::as_const(children)) {
-        if (!child) {
+        if (!child)
             continue;
-        }
         int idx = -1;
-        QVariant v = QQmlProperty::read(child, m_childIndexPropertyName);
-        if (v.isValid()) {
+        QVariant v = QQmlProperty::read(child, m_childIndexProperyName);
+        if (v.isValid())
             idx = v.toInt();
-        }
         if (idx >= 0) {
             indexed.push_back({child, idx});
         }
@@ -216,9 +201,9 @@ void ZStacker::recomputeLayout()
 
     float targetZOffset = 0;
 
-    auto prevZMargins = m_initialMargins;
-    for (int i = 0; i != indexed.size(); i++) {
-        const auto &item = indexed[i];
+    auto prevZMargins = m_initalMargins;
+    for (int i = 0; i != indexed.count(); i++) {
+        auto item = indexed[i];
         if (item.index < centerIndex) {
             closestIndexToCenter = i;
             continue;
@@ -244,9 +229,9 @@ void ZStacker::recomputeLayout()
     totalDepth.top = targetZOffset + prevZMargins.top;
 
     targetZOffset = 0;
-    prevZMargins = m_initialMargins;
+    prevZMargins = m_initalMargins;
     for (int i = closestIndexToCenter; i >= 0; i--) {
-        const auto &item = indexed[i];
+        auto item = indexed[i];
 
         QVariant itemZMarginsVar = QQmlProperty::read(item.obj, m_childDepthPropertyName);
         if (!itemZMarginsVar.isValid() || !itemZMarginsVar.canConvert<ZMargins>()) {
@@ -265,6 +250,7 @@ void ZStacker::recomputeLayout()
     }
 
     totalDepth.bottom = -targetZOffset + prevZMargins.bottom;
+    // totalDepth.flexibleBottom = -targetZOffset + prevZMargins.flexibleBottom;
 
     setDepth(totalDepth);
 }
@@ -276,9 +262,8 @@ int ZStacker::centerIndex() const
 
 void ZStacker::setCenterIndex(int newCenterIndex)
 {
-    if (m_centerIndex == newCenterIndex) {
+    if (m_centerIndex == newCenterIndex)
         return;
-    }
     m_centerIndex = newCenterIndex;
     scheduleRecompute();
     Q_EMIT centerIndexChanged();
@@ -298,36 +283,34 @@ void ZStacker::setDepth(const ZMargins &newDepth)
     Q_EMIT depthChanged();
 }
 
-ZMargins ZStacker::initialMargins() const
+ZMargins ZStacker::initalMargins() const
 {
-    return m_initialMargins;
+    return m_initalMargins;
 }
 
-void ZStacker::setInitialMargins(const ZMargins &newInitialMargins)
+void ZStacker::setInitalMargins(const ZMargins &newInitalMargins)
 {
-    if (m_initialMargins == newInitialMargins) {
+    if (m_initalMargins == newInitalMargins)
         return;
-    }
 
-    m_initialMargins = newInitialMargins;
+    m_initalMargins = newInitalMargins;
     scheduleRecompute();
-    Q_EMIT initialMarginsChanged();
+    Q_EMIT initalMarginsChanged();
 }
 
-QString ZStacker::childIndexPropertyName() const
+QString ZStacker::childIndexProperyName() const
 {
-    return m_childIndexPropertyName;
+    return m_childIndexProperyName;
 }
 
-void ZStacker::setChildIndexPropertyName(const QString &newChildIndexPropertyName)
+void ZStacker::setChildIndexProperyName(const QString &newChildIndexProperyName)
 {
-    if (m_childIndexPropertyName == newChildIndexPropertyName) {
+    if (m_childIndexProperyName == newChildIndexProperyName)
         return;
-    }
-    m_childIndexPropertyName = newChildIndexPropertyName;
-    m_childIndexPropertyNameUtf8 = newChildIndexPropertyName.toUtf8();
+    m_childIndexProperyName = newChildIndexProperyName;
+    m_childIndexProperyNameUtf8 = newChildIndexProperyName.toUtf8();
     scheduleRecompute();
-    Q_EMIT childIndexPropertyNameChanged();
+    Q_EMIT childIndexProperyNameChanged();
 }
 
 qreal ZStacker::globalOffset() const
@@ -337,12 +320,9 @@ qreal ZStacker::globalOffset() const
 
 void ZStacker::setGlobalOffset(qreal newGlobalOffset)
 {
-    if (qFuzzyCompare(m_globalOffset, newGlobalOffset)) {
+    if (qFuzzyCompare(m_globalOffset, newGlobalOffset))
         return;
-    }
     m_globalOffset = newGlobalOffset;
     scheduleRecompute();
     Q_EMIT globalOffsetChanged();
 }
-
-} // namespace KWin

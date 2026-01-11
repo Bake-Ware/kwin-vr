@@ -6,11 +6,11 @@
 
 #include "kwinwindowdecoration.h"
 #include "kwinvr_logging.h"
+#include <KDecoration3/DecorationShadow>
+#include <kdecoration3/decoratedwindow.h>
+#include <qtimer.h>
 
-#include <KDecoration3/DecoratedWindow>
-
-namespace KWin
-{
+using namespace KWin;
 
 KwinWindowDecoration::KwinWindowDecoration(QQuickItem *parent)
     : QQuickPaintedItem(parent)
@@ -32,9 +32,8 @@ KDecoration3::DecorationShadow *KwinWindowDecoration::shadow() const
 
 void KwinWindowDecoration::setDecoration(KDecoration3::Decoration *newDecoration)
 {
-    if (m_decoration == newDecoration) {
+    if (m_decoration == newDecoration)
         return;
-    }
 
     if (m_decoration) {
         disconnect(m_decoration, &KDecoration3::Decoration::damaged, this, &KwinWindowDecoration::onDecorationDamaged);
@@ -51,12 +50,13 @@ void KwinWindowDecoration::setDecoration(KDecoration3::Decoration *newDecoration
 
     m_decoration = newDecoration;
 
-    m_decoDamage = {};
+    m_deco_damage = {};
 
     if (m_decoration) {
         connect(m_decoration, &KDecoration3::Decoration::damaged, this, &KwinWindowDecoration::onDecorationDamaged);
         connect(m_decoration, &KDecoration3::Decoration::bordersChanged, this, &KwinWindowDecoration::onDecorationBordersChanged);
         connect(m_decoration, &KDecoration3::Decoration::resizeOnlyBordersChanged, this, &KwinWindowDecoration::onDecorationBordersChanged);
+        connect(m_decoration->window(), &KDecoration3::DecoratedWindow::sizeChanged, this, &KwinWindowDecoration::onDecorationBordersChanged);
         connect(m_decoration, &KDecoration3::Decoration::shadowChanged, this, &KwinWindowDecoration::shadowChanged);
         connect(m_decoration, &KDecoration3::Decoration::destroyed, this, &KwinWindowDecoration::onDecorationDestroyed);
 
@@ -65,11 +65,11 @@ void KwinWindowDecoration::setDecoration(KDecoration3::Decoration *newDecoration
             connect(window, &KDecoration3::DecoratedWindow::sizeChanged, this, &KwinWindowDecoration::onDecorationBordersChanged);
             connect(window, &QObject::destroyed, this, &KwinWindowDecoration::onDecorationDestroyed);
         } else {
-            qCWarning(KWINVR) << "Decoration has no window, how is that possible?";
+            qWarning(KWINVR) << "Decoration has no window, how is that possible?";
         }
 
         auto sz = m_decoration->size();
-        m_decoDamage = QRect(0, 0, sz.width(), sz.height());
+        m_deco_damage = QRect(0, 0, sz.width(), sz.height());
         setImplicitSize(sz.width(), sz.height());
     } else {
         setImplicitSize(1, 1);
@@ -83,24 +83,25 @@ void KwinWindowDecoration::setDecoration(KDecoration3::Decoration *newDecoration
 
 void KwinWindowDecoration::paint(QPainter *painter)
 {
-    if (!m_decoration) {
-        return;
-    }
+    // qWarning() << ">>>>> Want paint!";
 
-    if (m_decoration->size().isEmpty()) {
+    if (!m_decoration)
         return;
-    }
 
-    auto r = m_decoDamage.boundingRect();
-    m_decoDamage = {};
+    if (m_decoration->size().isEmpty())
+        return;
+
+    auto r = m_deco_damage.boundingRect();
+    m_deco_damage = {};
     m_decoration->paint(painter, r);
 }
 
 void KwinWindowDecoration::onDecorationDamaged(const QRegion &region)
 {
+    Q_UNUSED(region);
     auto sz = m_decoration->size();
     setImplicitSize(sz.width(), sz.height());
-    m_decoDamage += region;
+    m_deco_damage += region;
     update();
 }
 
@@ -109,17 +110,15 @@ void KwinWindowDecoration::onDecorationDestroyed()
     m_decoration = nullptr;
     Q_EMIT decorationChanged();
     setImplicitSize(1, 1);
-    m_decoDamage = {};
+    m_deco_damage = {};
     update();
 }
 
-void KwinWindowDecoration::onDecorationBordersChanged()
+void KWin::KwinWindowDecoration::onDecorationBordersChanged()
 {
     auto sz = m_decoration->size();
-    m_decoDamage = QRect(0, 0, sz.width(), sz.height());
+    m_deco_damage = QRect(0, 0, sz.width(), sz.height());
     setImplicitSize(sz.width(), sz.height());
     update();
     Q_EMIT decorationChanged();
 }
-
-} // namespace KWin

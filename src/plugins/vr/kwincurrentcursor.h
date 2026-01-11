@@ -4,6 +4,9 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
+#ifndef KWINCURRENTCURSOR_H
+#define KWINCURRENTCURSOR_H
+
 #pragma once
 
 #include "textureprovideritem.h"
@@ -38,12 +41,12 @@ protected:
 private:
     QSGTexture *makeTexture();
 
-    static std::pair<QImage, QPointF> cursorImage(bool copy = false);
-    void setCursorParams(QImage img, QPointF hotspot);
+    static std::pair<QImage, QPointF> getCursorImage(bool copy = false);
+    void setCursorParams(QImage img, QPointF hostspot);
 
     QPointF m_hotspot;
-    qreal m_pixelRatio = 1.0;
+    qreal m_pixelRatio;
     QSize m_psize;
 };
-
-} // namespace KWin
+}
+#endif // KWINCURRENTCURSOR_H

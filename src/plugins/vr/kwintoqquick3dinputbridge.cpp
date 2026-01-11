@@ -8,7 +8,7 @@
 #include "input.h"
 #include "input_event.h"
 #include "kwinvr_logging.h"
-// To get access to delivery agent
+/*To get access to delivery agent */
 #include <QtQuick/private/qquickitem_p.h>
 
 namespace KWin
@@ -22,14 +22,14 @@ class KWinToQQuick3DFilter : public InputEventFilter
 {
 public:
     explicit KWinToQQuick3DFilter();
-    bool keyboardKey(KeyboardKeyEvent *event) override;
-    bool pointerButton(PointerButtonEvent *event) override;
-    bool pointerAxis(PointerAxisEvent *event) override;
-    bool pointerMotion(PointerMotionEvent *event) override;
+    virtual bool keyboardKey(KeyboardKeyEvent *event) override;
+    virtual bool pointerButton(PointerButtonEvent *event) override;
+    virtual bool pointerAxis(PointerAxisEvent *event) override;
+    virtual bool pointerMotion(PointerMotionEvent *event) override;
     static bool generateMouseEvent(QQuickItem *target, QEvent::Type type, QPointF localCoordinates, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers);
 
-    // We have to keep these here because of setPointerPosition.
-    // Maybe we should pass pointer input events through kwin?
+    /* WE have to keep thsese here because of setPointerPosition
+     * Maybe we should pass pointer input events through kwin ? */
     void clear()
     {
         m_modifiers = Qt::NoModifier;
@@ -44,16 +44,10 @@ public:
 
 bool KWinToQQuick3DFilter::generateMouseEvent(QQuickItem *target, QEvent::Type type, QPointF localCoordinates, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers)
 {
-    if (!target) {
+    if (!target)
         return false;
-    }
 
-    auto deliveryAgent = QQuickItemPrivate::get(target)->deliveryAgent();
-    if (!deliveryAgent) {
-        qCWarning(KWINVR) << "No delivery agent found. Can't send mouse event to target:" << target;
-        return false;
-    }
-
+    auto da = QQuickItemPrivate::get(target)->deliveryAgent();
     QMouseEvent mouseEvent(type,
                            localCoordinates,
                            localCoordinates,
@@ -61,9 +55,14 @@ bool KWinToQQuick3DFilter::generateMouseEvent(QQuickItem *target, QEvent::Type t
                            buttons,
                            modifiers);
 
-    auto ret = deliveryAgent->event(&mouseEvent);
+    if (!da) {
+        qCWarning(KWINVR) << "No delivery agent found. Can't send mouse event to target:" << target;
+        return false;
+    }
 
-    // I took this from Qt sources... and I have no idea what it does
+    auto ret = da->event(&mouseEvent);
+
+    // I Took this from Qt sources,,, and I hove no idea what it does
     if (mouseEvent.isEndEvent()) {
         if (mouseEvent.buttons() == Qt::NoButton) {
             auto &firstPt = mouseEvent.point(0);
@@ -73,7 +72,7 @@ bool KWinToQQuick3DFilter::generateMouseEvent(QQuickItem *target, QEvent::Type t
     }
 
     return ret;
-}
+};
 
 KWinToQQuick3DFilter::KWinToQQuick3DFilter()
     : InputEventFilter(InputFilterOrder::Effects)
@@ -82,9 +81,8 @@ KWinToQQuick3DFilter::KWinToQQuick3DFilter()
 
 bool KWinToQQuick3DFilter::keyboardKey(KeyboardKeyEvent *event)
 {
-    if (!m_target) {
+    if (!m_target)
         return false;
-    }
 
     // Is there a better way to do this?
     QQuickItem *focusedItem = QQuickItemPrivate::get(m_target)->subFocusItem;
@@ -93,7 +91,7 @@ bool KWinToQQuick3DFilter::keyboardKey(KeyboardKeyEvent *event)
             ? m_target->window()->activeFocusItem()
             : nullptr;
         if (!focusedItem) {
-            qCWarning(KWINVR) << "No focusedItem to deliver key events";
+            qWarning() << "No focusedItem to deliver key events:(";
             return false;
         }
 
@@ -120,9 +118,8 @@ bool KWinToQQuick3DFilter::keyboardKey(KeyboardKeyEvent *event)
 
 bool KWinToQQuick3DFilter::pointerButton(PointerButtonEvent *event)
 {
-    if (!m_target) {
+    if (!m_target)
         return false;
-    }
 
     m_buttons = event->buttons;
     m_modifiers = event->modifiers;
@@ -131,18 +128,10 @@ bool KWinToQQuick3DFilter::pointerButton(PointerButtonEvent *event)
 
 bool KWinToQQuick3DFilter::pointerAxis(PointerAxisEvent *event)
 {
-    if (!m_target) {
+    if (!m_target)
         return false;
-    }
 
     m_buttons = event->buttons;
-
-    auto deliveryAgent = QQuickItemPrivate::get(m_target)->deliveryAgent();
-    if (!deliveryAgent) {
-        qCWarning(KWINVR) << "No delivery agent";
-        return false;
-    }
-
     QWheelEvent wheelEvent(m_setPointerPosition,
                            m_setPointerPosition,
                            QPoint(),
@@ -152,14 +141,21 @@ bool KWinToQQuick3DFilter::pointerAxis(PointerAxisEvent *event)
                            Qt::NoScrollPhase,
                            event->inverted);
 
-    return deliveryAgent->event(&wheelEvent);
+    auto da = QQuickItemPrivate::get(m_target)->deliveryAgent();
+    if (!da) {
+        qCWarning(KWINVR) << "No delivery agent";
+        return false;
+    }
+
+    auto ret = da->event(&wheelEvent);
+
+    return ret;
 }
 
 bool KWinToQQuick3DFilter::pointerMotion(PointerMotionEvent *event)
 {
-    if (!m_target) {
+    if (!m_target)
         return false;
-    }
 
     m_modifiers = event->modifiers;
     return true;
@@ -169,6 +165,7 @@ KWinToQQuick3DInputBridge::KWinToQQuick3DInputBridge(QObject *parent)
     : QObject{parent}
     , m_filter(new KWinToQQuick3DFilter)
 {
+    // input()->installInputEventFilter(m_filter);
 }
 
 KWinToQQuick3DInputBridge::~KWinToQQuick3DInputBridge()
@@ -204,9 +201,8 @@ QQuickItem *KWinToQQuick3DInputBridge::target() const
 
 void KWinToQQuick3DInputBridge::setTarget(QQuickItem *newTarget)
 {
-    if (m_filter->m_target == newTarget) {
+    if (m_filter->m_target == newTarget)
         return;
-    }
 
     if (m_filter->m_target) {
         disconnect(m_filter->m_target, nullptr, this, nullptr);
@@ -231,9 +227,8 @@ QPointF KWinToQQuick3DInputBridge::pointerPosition() const
 
 void KWinToQQuick3DInputBridge::setPointerPosition(QPointF newSetPointerPosition)
 {
-    if (m_filter->m_setPointerPosition == newSetPointerPosition) {
+    if (m_filter->m_setPointerPosition == newSetPointerPosition)
         return;
-    }
     m_filter->m_setPointerPosition = newSetPointerPosition;
 
     m_filter->generateMouseEvent(m_filter->m_target,
@@ -245,5 +240,4 @@ void KWinToQQuick3DInputBridge::setPointerPosition(QPointF newSetPointerPosition
 
     Q_EMIT pointerPositionChanged();
 }
-
-} // namespace KWin
+}

@@ -14,17 +14,20 @@ Node {
 
     required property KwinWindowModel windowDataModel
     required property Component nextComponent
-    required property QtObject client
-    required property VrFocusControl focusControl
 
+    // Replaced aliases with properties to support Loader3D
+    required property QtObject client
     property real ppu: 20
     property Node grabHandle
+
     property real normalWindowFlexibleBottom: 0
     property real zOffsetGlobal: 0
 
+    required property VrFocusControl focusControl
     Connections {
         target: root.client
         function onMoveResizedChanged() {
+            console.log(Logger.kwinvr, "Window move/resize changed:", root.client.resize, root.client.move, root.focusControl.currentMovingResizingWindow)
             if(root.client.resize || root.client.move) {
                 root.focusControl.currentMovingResizingWindow = windowLoader.item
             } else if(root.focusControl.currentMovingResizingWindow === windowLoader.item) {
@@ -71,7 +74,7 @@ Node {
                 case 0: return decoratedSurfaceComponent; // DecoratedSurface
                 case 1: return thumbnailComponent; // Thumbnail
                 case 2: return thumbnailXrItemComponent; // ThumbnailXrItem
-                default: return decoratedSurfaceComponent;
+                default: return thumbnailXrItemComponent;
             }
         }
     }
@@ -82,16 +85,16 @@ Node {
         id: menuRepeater
         model: TransientMenusWindowFilter {
             forTransient: root.client
-            windowModel: root.client?.managed ? root.windowDataModel : null
+            windowModel: root?.client?.managed ? root.windowDataModel : null
         }
         delegate: root.nextComponent
     }
-
     ZStacker {
         id: menuStack
         target: menuRepeater
-        initialMargins: windowLoader.item?.itemDepth ?? ({top: 0, bottom: 0})
-        childIndexPropertyName: "stackingOrder"
+        // Use loaded item's itemDepth if available, else default
+        initalMargins: windowLoader.item ? windowLoader.item.itemDepth : ({top: 1, bottom: 0})
+        childIndexProperyName: "stackingOrder"
         globalOffset: root.zOffsetGlobal
     }
 
@@ -100,16 +103,16 @@ Node {
         id: transientNormalsRepeater
         model: TransientNormalWindowFilter {
             forTransient: root.client
-            windowModel: root.client?.managed ? root.windowDataModel : null
+            windowModel: root?.client?.managed ? root.windowDataModel : null
         }
         delegate: root.nextComponent
     }
     ZStacker {
         id: transientNormalsStack
         target: transientNormalsRepeater
-        initialMargins: menuStack.depth
-        childIndexPropertyName: "stackingOrder"
-        globalOffset: root.zOffsetGlobal
+        initalMargins: menuStack.depth
+        childIndexProperyName: "stackingOrder"
+        globalOffset: menuStack.depth.top + (windowLoader.item?.zOffsetGlobal ?? root.zOffsetGlobal)
     }
 
     // 4. Get total depth: If the main window was a normal window then add flexible bottom

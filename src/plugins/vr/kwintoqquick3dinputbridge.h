@@ -4,7 +4,8 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINTOQQUICK3DINPUTBRIDGE_H
+#define KWINTOQQUICK3DINPUTBRIDGE_H
 
 #include <QObject>
 #include <QPointF>
@@ -23,7 +24,7 @@ class KWinToQQuick3DInputBridge : public QObject
     QML_ELEMENT
 public:
     explicit KWinToQQuick3DInputBridge(QObject *parent = nullptr);
-    ~KWinToQQuick3DInputBridge() override;
+    ~KWinToQQuick3DInputBridge();
 
     QQuickItem *target() const;
     void setTarget(QQuickItem *newTarget);
@@ -35,11 +36,13 @@ Q_SIGNALS:
     void targetChanged();
     void pointerPositionChanged();
 
-private:
+private Q_SLOTS:
     void updateInputFilter();
 
+private:
     KWinToQQuick3DFilter *m_filter = nullptr;
     bool m_filterInstalled = false;
 };
+}
 
-} // namespace KWin
+#endif // KWINTOQQUICK3DINPUTBRIDGE_H

@@ -6,13 +6,12 @@
 
 #include "shadowgeometry.h"
 #include "geometrytypes.h"
+#include <QDebug>
 #include <QVector2D>
 #include <QVector3D>
-
 #include <cstring>
 
-namespace KWin
-{
+using namespace KWin;
 
 // 8 Quads: TL, T, TR, L, R, BL, B, BR
 static const QByteArray indices = [] {
@@ -32,14 +31,18 @@ static const QByteArray indices = [] {
 ShadowGeometry::ShadowGeometry(QQuick3DObject *parent)
     : QQuick3DGeometry(parent)
 {
+    // Define attributes once
     addAttribute(Attribute::PositionSemantic, 0, Attribute::ComponentType::F32Type);
     addAttribute(Attribute::NormalSemantic, 3 * sizeof(float), Attribute::ComponentType::F32Type);
     addAttribute(Attribute::TexCoordSemantic, 6 * sizeof(float), Attribute::ComponentType::F32Type);
     addAttribute(Attribute::IndexSemantic, 0, Attribute::ComponentType::U16Type);
 
+    // Set static indices
     setIndexData(indices);
     setPrimitiveType(PrimitiveType::Triangles);
 
+    // Pre-allocate vertex buffer
+    // 8 Quads * sizeof(VertexQuad)
     m_vertexData.resize(8 * sizeof(VertexQuad));
     setStride(sizeof(Vertex));
 }
@@ -51,9 +54,8 @@ KDecoration3::DecorationShadow *ShadowGeometry::shadow() const
 
 void ShadowGeometry::setShadow(KDecoration3::DecorationShadow *shadow)
 {
-    if (m_shadow == shadow) {
+    if (m_shadow == shadow)
         return;
-    }
 
     if (m_shadow) {
         disconnect(m_shadow, nullptr, this, nullptr);
@@ -76,12 +78,11 @@ float ShadowGeometry::width() const
     return m_width;
 }
 
-void ShadowGeometry::setWidth(float newWidth)
+void ShadowGeometry::setWidth(float w)
 {
-    if (qFuzzyCompare(m_width, newWidth)) {
+    if (qFuzzyCompare(m_width, w))
         return;
-    }
-    m_width = newWidth;
+    m_width = w;
     updateGeometry();
     Q_EMIT sizeChanged();
 }
@@ -91,12 +92,11 @@ float ShadowGeometry::height() const
     return m_height;
 }
 
-void ShadowGeometry::setHeight(float newHeight)
+void ShadowGeometry::setHeight(float h)
 {
-    if (qFuzzyCompare(m_height, newHeight)) {
+    if (qFuzzyCompare(m_height, h))
         return;
-    }
-    m_height = newHeight;
+    m_height = h;
     updateGeometry();
     Q_EMIT sizeChanged();
 }
@@ -114,17 +114,16 @@ void ShadowGeometry::updateGeometry()
     const QRectF inner = m_shadow->innerShadowRect();
     const QSize texSize = img.size();
 
-    if (texSize.isEmpty()) {
+    if (texSize.isEmpty())
         return;
-    }
 
-    const float dpr = static_cast<float>(img.devicePixelRatio());
+    float dpr = (float)img.devicePixelRatio();
 
     // Padding values (visible area outside window)
-    const float pl = static_cast<float>(m_shadow->paddingLeft());
-    const float pt = static_cast<float>(m_shadow->paddingTop());
-    const float pr = static_cast<float>(m_shadow->paddingRight());
-    const float pb = static_cast<float>(m_shadow->paddingBottom());
+    float pl = (float)m_shadow->paddingLeft();
+    float pt = (float)m_shadow->paddingTop();
+    float pr = (float)m_shadow->paddingRight();
+    float pb = (float)m_shadow->paddingBottom();
 
     // 1:1 Mapping Logic
     // We map the texture elements 1:1 to geometry pixels.
@@ -132,13 +131,13 @@ void ShadowGeometry::updateGeometry()
     // This fixes the "Gap" (by drawing the overlap) and "Squashed Corners" (by using correct aspect ratio).
 
     // Texture Element Sizes (Physical)
-    const float leftElemW = static_cast<float>(inner.left()) * dpr;
-    const float rightElemW = static_cast<float>(texSize.width() - inner.right()) * dpr;
-    const float topElemH = static_cast<float>(inner.top()) * dpr;
-    const float bottomElemH = static_cast<float>(texSize.height() - inner.bottom()) * dpr;
+    float leftElemW = (float)inner.left() * dpr;
+    float rightElemW = (float)(texSize.width() - inner.right()) * dpr;
+    float topElemH = (float)inner.top() * dpr;
+    float bottomElemH = (float)(texSize.height() - inner.bottom()) * dpr;
 
-    const float w = static_cast<float>(texSize.width());
-    const float h = static_cast<float>(texSize.height());
+    float w = (float)texSize.width();
+    float h = (float)texSize.height();
 
     // UVs
     float u0 = 0.0f;
@@ -202,5 +201,3 @@ void ShadowGeometry::updateGeometry()
     setBounds(QVector3D(x0, y3, -0.01f), QVector3D(x3, y0, 0.01f));
     update();
 }
-
-} // namespace KWin

@@ -5,17 +5,10 @@
 */
 
 #include "kwinvrinputdevice.h"
-#include "keyboard_input.h"
-#include "pointer_input.h"
-#include "xkb.h"
-
-#include <QKeySequence>
-
+#include "input.h"
 #include <linux/input-event-codes.h>
 
-namespace KWin
-{
-
+using namespace KWin;
 KwinVrInputDevice::KwinVrInputDevice(QObject *parent)
     : InputDevice{parent}
 {
@@ -40,9 +33,8 @@ bool KwinVrInputDevice::isEnabled() const
 
 void KwinVrInputDevice::setEnabled(bool enabled)
 {
-    if (m_enabled == enabled) {
+    if (m_enabled == enabled)
         return;
-    }
 
     m_enabled = enabled;
     Q_EMIT enabledChanged();
@@ -100,9 +92,8 @@ bool KwinVrInputDevice::active() const
 
 void KwinVrInputDevice::setActive(bool newActive)
 {
-    if (m_active == newActive) {
+    if (m_active == newActive)
         return;
-    }
     m_active = newActive;
 
     if (newActive) {
@@ -118,16 +109,19 @@ QPointF KwinVrInputDevice::pointerPosition() const
     return m_pointerPosition;
 }
 
+#include "pointer_input.h"
+
 void KwinVrInputDevice::setPointerPosition(QPointF newPointerPosition)
 {
-    if (m_pointerPosition == newPointerPosition) {
+    if (m_pointerPosition == newPointerPosition)
         return;
-    }
 
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
 
     m_pointerPosition = newPointerPosition;
+
+    //    qWarning() << "Moving pointer to " << newPointerPosition << " at " << micros.count() << " microseconds";
 
     Q_EMIT pointerMotionAbsolute(newPointerPosition, micros, this);
     Q_EMIT pointerFrame(this);
@@ -141,9 +135,8 @@ bool KwinVrInputDevice::leftButton() const
 
 void KwinVrInputDevice::setLeftButton(bool newLeftButton)
 {
-    if (m_leftButton == newLeftButton) {
+    if (m_leftButton == newLeftButton)
         return;
-    }
     m_leftButton = newLeftButton;
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
@@ -159,9 +152,8 @@ bool KwinVrInputDevice::middleButton() const
 
 void KwinVrInputDevice::setMiddleButton(bool newMiddleButton)
 {
-    if (m_middleButton == newMiddleButton) {
+    if (m_middleButton == newMiddleButton)
         return;
-    }
     m_middleButton = newMiddleButton;
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
@@ -177,9 +169,8 @@ bool KwinVrInputDevice::rightButton() const
 
 void KwinVrInputDevice::setRightButton(bool newRightButton)
 {
-    if (m_rightButton == newRightButton) {
+    if (m_rightButton == newRightButton)
         return;
-    }
     m_rightButton = newRightButton;
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
@@ -195,9 +186,8 @@ bool KwinVrInputDevice::backButton() const
 
 void KwinVrInputDevice::setBackButton(bool newBackButton)
 {
-    if (m_backButton == newBackButton) {
+    if (m_backButton == newBackButton)
         return;
-    }
     m_backButton = newBackButton;
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
@@ -214,9 +204,8 @@ bool KwinVrInputDevice::forwardButton() const
 
 void KwinVrInputDevice::setForwardButton(bool newForwardButton)
 {
-    if (m_forwardButton == newForwardButton) {
+    if (m_forwardButton == newForwardButton)
         return;
-    }
     m_forwardButton = newForwardButton;
     auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch());
@@ -243,40 +232,96 @@ void KwinVrInputDevice::setAxis(qreal vdelta, qreal hdelta)
     }
 }
 
-int KwinVrInputDevice::resolveKeyCode(const QString &keyName)
-{
-    if (keyName.isEmpty()) {
-        return -1;
-    }
-
-    const auto sequence = QKeySequence::fromString(keyName);
-    if (sequence.isEmpty()) {
-        return -1;
-    }
-
-    const auto syms = Xkb::keysymsFromQtKey(sequence[0]);
-    for (const auto sym : syms) {
-        auto code = input()->keyboard()->xkb()->keycodeFromKeysym(sym);
-        if (code) {
-            return code->keyCode;
-        }
-    }
-    return -1;
-}
-
-void KwinVrInputDevice::sendKeyCode(int code, bool pressed)
-{
-    if (code < 0) {
-        return;
-    }
-    auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now().time_since_epoch());
-    Q_EMIT keyChanged(code, pressed ? KeyboardKeyState::Pressed : KeyboardKeyState::Released, micros, this);
-}
-
 void KwinVrInputDevice::sendKey(const QString &keyName, bool pressed)
 {
-    sendKeyCode(resolveKeyCode(keyName), pressed);
-}
+    uint32_t code = 0;
+    QString name = keyName;
+    if (name.isEmpty())
+        return;
 
-} // namespace KWin
+    if (name.length() == 1) {
+        QChar c = name.at(0).toUpper();
+        if (c >= 'A' && c <= 'Z') {
+            static const uint32_t letter_codes[] = {
+                KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L, KEY_M,
+                KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z};
+            code = letter_codes[c.toLatin1() - 'A'];
+        } else if (c >= '0' && c <= '9') {
+            if (c == '0')
+                code = KEY_0;
+            else
+                code = KEY_1 + (c.toLatin1() - '1');
+        }
+    }
+
+    if (code == 0) {
+        if (name == "Space")
+            code = KEY_SPACE;
+        else if (name == "Enter" || name == "Return")
+            code = KEY_ENTER;
+        else if (name == "Tab")
+            code = KEY_TAB;
+        else if (name == "BackSpace" || name == "Backspace")
+            code = KEY_BACKSPACE;
+        else if (name == "Escape" || name == "Esc")
+            code = KEY_ESC;
+        else if (name == "Shift")
+            code = KEY_LEFTSHIFT;
+        else if (name == "Control" || name == "Ctrl")
+            code = KEY_LEFTCTRL;
+        else if (name == "Alt")
+            code = KEY_LEFTALT;
+        else if (name == "Meta" || name == "Super")
+            code = KEY_LEFTMETA;
+        else if (name == "Left")
+            code = KEY_LEFT;
+        else if (name == "Right")
+            code = KEY_RIGHT;
+        else if (name == "Up")
+            code = KEY_UP;
+        else if (name == "Down")
+            code = KEY_DOWN;
+        else if (name == "Page Up")
+            code = KEY_PAGEUP;
+        else if (name == "Page Down")
+            code = KEY_PAGEDOWN;
+        else if (name == "Home")
+            code = KEY_HOME;
+        else if (name == "End")
+            code = KEY_END;
+        else if (name == "Insert")
+            code = KEY_INSERT;
+        else if (name == "Delete")
+            code = KEY_DELETE;
+        else if (name == "F1")
+            code = KEY_F1;
+        else if (name == "F2")
+            code = KEY_F2;
+        else if (name == "F3")
+            code = KEY_F3;
+        else if (name == "F4")
+            code = KEY_F4;
+        else if (name == "F5")
+            code = KEY_F5;
+        else if (name == "F6")
+            code = KEY_F6;
+        else if (name == "F7")
+            code = KEY_F7;
+        else if (name == "F8")
+            code = KEY_F8;
+        else if (name == "F9")
+            code = KEY_F9;
+        else if (name == "F10")
+            code = KEY_F10;
+        else if (name == "F11")
+            code = KEY_F11;
+        else if (name == "F12")
+            code = KEY_F12;
+    }
+
+    if (code != 0) {
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch());
+        Q_EMIT keyChanged(code, pressed ? KeyboardKeyState::Pressed : KeyboardKeyState::Released, micros, this);
+    }
+}

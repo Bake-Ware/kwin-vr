@@ -5,20 +5,20 @@
 */
 
 #include "kwincurrentcursor.h"
+#include "compositor.h"
 #include "core/graphicsbufferview.h"
-#include "core/output.h"
 #include "cursor.h"
 #include "cursorsource.h"
-#include "kwincompat.h"
 #include "kwinvr_logging.h"
 #include "wayland/surface.h"
 #include "workspace.h"
-
 #include <QQuickWindow>
 #include <QSGImageNode>
+#include <core/output.h>
 
-namespace KWin
-{
+#include "kwincompat.h"
+
+using namespace KWin;
 
 KwinCurrentCursor::KwinCurrentCursor()
 {
@@ -28,12 +28,12 @@ KwinCurrentCursor::KwinCurrentCursor()
 
 QSGTexture *KwinCurrentCursor::makeTexture()
 {
-    auto [img, hotspot] = cursorImage();
+    auto [img, hotspot] = getCursorImage();
     setCursorParams(img, hotspot);
     return !img.isNull() ? window()->createTextureFromImage(img) : nullptr;
 }
 
-std::pair<QImage, QPointF> KwinCurrentCursor::cursorImage(bool copy)
+std::pair<QImage, QPointF> KwinCurrentCursor::getCursorImage(bool copy)
 {
     auto cur = Cursors::self()->currentCursor();
     auto geo = cur->geometry();
@@ -66,9 +66,9 @@ std::pair<QImage, QPointF> KwinCurrentCursor::cursorImage(bool copy)
     return {};
 }
 
-void KwinCurrentCursor::setCursorParams(QImage img, QPointF hotspot)
+void KwinCurrentCursor::setCursorParams(QImage img, QPointF hostspot)
 {
-    m_hotspot = hotspot;
+    m_hotspot = hostspot;
     m_psize = img.size();
     m_pixelRatio = img.devicePixelRatio();
 
@@ -87,10 +87,10 @@ QSGNode *KwinCurrentCursor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
         node->setFiltering(QSGTexture::Linear);
     }
 
-    auto texture = makeTexture();
-    if (texture) {
-        setTexture(texture, 0);
-        node->setTexture(texture);
+    auto tex = makeTexture();
+    if (tex) {
+        setTexture(tex, 0);
+        node->setTexture(tex);
         node->setRect(boundingRect());
     }
 
@@ -111,5 +111,3 @@ QSize KwinCurrentCursor::psize() const
 {
     return m_psize;
 }
-
-} // namespace KWin

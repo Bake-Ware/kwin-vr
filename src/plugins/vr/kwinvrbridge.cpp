@@ -6,18 +6,7 @@
 
 #include "kwinvrbridge.h"
 
-namespace KWin
-{
-
 KwinVrBridge::KwinVrBridge(QObject *parent)
     : QObject(parent)
 {
 }
-
-KwinVrBridge *KwinVrBridge::instance()
-{
-    static KwinVrBridge s_instance;
-    return &s_instance;
-}
-
-} // namespace KWin

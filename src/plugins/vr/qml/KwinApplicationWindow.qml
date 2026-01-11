@@ -7,8 +7,6 @@
 import QtQuick
 import QtQuick3D
 
-import org.kde.kwin.vr
-
 /** The Application Window contains one non transient window and
  * all its transient windows (menus, popups, other normal windows)
  * arranged as a stack of 3D rectangles.
@@ -22,6 +20,6 @@ KwinTransientWindow {
         nextComponent: root.nextComponent
         grabHandle: root.grabHandle
         windowDataModel:  root.windowDataModel
-        normalWindowFlexibleBottom: KWinVRConfig.minTransientNormalSpacing
+        normalWindowFlexibleBottom: 4
     }
 }

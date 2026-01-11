@@ -21,17 +21,21 @@ class DecorationGeometry : public QQuick3DGeometry
 public:
     explicit DecorationGeometry(QQuick3DObject *parent = nullptr);
 
-    KDecoration3::Decoration *decoration() const;
+    KDecoration3::Decoration *decoration() const
+    {
+        return m_decoration;
+    }
     void setDecoration(KDecoration3::Decoration *decoration);
 
 Q_SIGNALS:
     void decorationChanged();
 
-private:
+private Q_SLOTS:
     void updateGeometry();
 
+private:
     KDecoration3::Decoration *m_decoration = nullptr;
     QByteArray m_vertexData;
 };
 
-} // namespace KWin
+}

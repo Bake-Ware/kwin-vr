@@ -8,8 +8,7 @@
 #include "window.h"
 #include "workspace.h"
 
-namespace KWin
-{
+using namespace KWin;
 
 KwinWindowModel::KwinWindowModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -27,20 +26,9 @@ void KwinWindowModel::markRoleChanged(Window *window, int role)
 
 void KwinWindowModel::handleWindowAdded(Window *window)
 {
-    beginInsertRows(QModelIndex(), m_windows.size(), m_windows.size());
+    beginInsertRows(QModelIndex(), m_windows.count(), m_windows.count());
     m_windows.append(window);
     endInsertRows();
-
-    connect(window, &Window::outputChanged, this, &KwinWindowModel::handleWindowChanged);
-    connect(window, &Window::transientChanged, this, &KwinWindowModel::handleWindowChanged);
-}
-
-void KwinWindowModel::handleWindowChanged()
-{
-    auto window = qobject_cast<Window *>(sender());
-    if (window) {
-        markRoleChanged(window, WindowRole);
-    }
 }
 
 void KwinWindowModel::handleWindowRemoved(Window *window)
@@ -63,7 +51,7 @@ QHash<int, QByteArray> KwinWindowModel::roleNames() const
 
 QVariant KwinWindowModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_windows.size()) {
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_windows.count()) {
         return QVariant();
     }
 
@@ -79,7 +67,7 @@ QVariant KwinWindowModel::data(const QModelIndex &index, int role) const
 
 int KwinWindowModel::rowCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : m_windows.size();
+    return parent.isValid() ? 0 : m_windows.count();
 }
 
 PrimaryWindowModelFilter::PrimaryWindowModelFilter(QObject *parent)
@@ -100,7 +88,7 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
 
     const QVariant data = index.data();
     if (!data.isValid()) {
-        return false;
+        return true;
     }
 
     Window *window = qvariant_cast<Window *>(data);
@@ -108,18 +96,19 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
-    if (!window->isClient()) {
+    if (m_output && m_output != window->output())
         return false;
-    }
 
-    if (window->windowType() == WindowType::OnScreenDisplay) {
+    if (!window->isClient())
         return false;
-    }
+
+    if (window->windowType() == WindowType::OnScreenDisplay)
+        return false;
 
     // Qt maintenance window had isTransient() == true, but transientFor() == nullptr
-    if (window->transientFor()) {
+    // if(window->isTransient())
+    if (window->transientFor())
         return false;
-    }
 
     return true;
 }
@@ -129,11 +118,93 @@ KwinWindowModel *PrimaryWindowModelFilter::windowModel() const
     return m_windowModel;
 }
 
-void PrimaryWindowModelFilter::setWindowModel(KwinWindowModel *newWindowModel)
+void PrimaryWindowModelFilter::setWindowModel(KWin::KwinWindowModel *newWindowModel)
 {
-    if (m_windowModel == newWindowModel) {
+    if (m_windowModel == newWindowModel)
         return;
+    m_windowModel = newWindowModel;
+    setSourceModel(m_windowModel);
+    Q_EMIT windowModelChanged();
+}
+
+LogicalOutput *PrimaryWindowModelFilter::output() const
+{
+    return m_output;
+}
+
+void PrimaryWindowModelFilter::setOutput(KWin::LogicalOutput *newOutput)
+{
+    if (m_output == newOutput)
+        return;
+    m_output = newOutput;
+    Q_EMIT outputChanged();
+    invalidateFilter();
+}
+
+TransientWindowModelFilter::TransientWindowModelFilter(QObject *parent)
+    : QSortFilterProxyModel{parent}
+{
+}
+
+KWin::Window *TransientWindowModelFilter::forTransient() const
+{
+    return m_forTransient;
+}
+
+void TransientWindowModelFilter::setForTransient(KWin::Window *newForTransient)
+{
+    if (m_forTransient == newForTransient)
+        return;
+    m_forTransient = newForTransient;
+    Q_EMIT forTransientChanged();
+    invalidateFilter();
+}
+
+bool TransientWindowModelFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
+{
+    if (!m_windowModel || !m_forTransient) {
+        return false;
     }
+
+    const QModelIndex index = m_windowModel->index(source_row, 0, source_parent);
+    if (!index.isValid()) {
+        return false;
+    }
+
+    const QVariant data = index.data();
+    if (!data.isValid()) {
+        return true;
+    }
+
+    Window *window = qvariant_cast<Window *>(data);
+    if (!window) {
+        return false;
+    }
+
+    if (window == m_forTransient)
+        return false;
+
+    if (window->transientFor() == m_forTransient)
+        return true;
+
+    if (!window->isClient()) {
+        if (Window::belongToSameApplication(window, m_forTransient)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+KwinWindowModel *TransientWindowModelFilter::windowModel() const
+{
+    return m_windowModel;
+}
+
+void TransientWindowModelFilter::setWindowModel(KWin::KwinWindowModel *newWindowModel)
+{
+    if (m_windowModel == newWindowModel)
+        return;
     m_windowModel = newWindowModel;
     setSourceModel(m_windowModel);
     Q_EMIT windowModelChanged();
@@ -157,7 +228,7 @@ bool OsdWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source
 
     const QVariant data = index.data();
     if (!data.isValid()) {
-        return false;
+        return true;
     }
 
     Window *window = qvariant_cast<Window *>(data);
@@ -169,11 +240,10 @@ KwinWindowModel *OsdWindowFilter::windowModel() const
     return m_windowModel;
 }
 
-void OsdWindowFilter::setWindowModel(KwinWindowModel *newWindowModel)
+void OsdWindowFilter::setWindowModel(KWin::KwinWindowModel *newWindowModel)
 {
-    if (m_windowModel == newWindowModel) {
+    if (m_windowModel == newWindowModel)
         return;
-    }
     m_windowModel = newWindowModel;
     setSourceModel(m_windowModel);
     Q_EMIT windowModelChanged();
@@ -184,35 +254,21 @@ AbstractTransientWindowModelFilter::AbstractTransientWindowModelFilter(QObject *
 {
 }
 
-Window *AbstractTransientWindowModelFilter::forTransient() const
+KWin::Window *AbstractTransientWindowModelFilter::forTransient() const
 {
     return m_forTransient;
 }
 
-void AbstractTransientWindowModelFilter::setForTransient(Window *newForTransient)
+void AbstractTransientWindowModelFilter::setForTransient(KWin::Window *newForTransient)
 {
-    if (m_forTransient == newForTransient) {
+    if (m_forTransient == newForTransient)
         return;
-    }
-    if (m_forTransient) {
-        disconnect(m_forTransient, &QObject::destroyed, this, &AbstractTransientWindowModelFilter::handleForTransientDestroyed);
-    }
     m_forTransient = newForTransient;
-    if (m_forTransient) {
-        connect(m_forTransient, &QObject::destroyed, this, &AbstractTransientWindowModelFilter::handleForTransientDestroyed);
-    }
     Q_EMIT forTransientChanged();
     invalidateFilter();
 }
 
-void AbstractTransientWindowModelFilter::handleForTransientDestroyed()
-{
-    m_forTransient = nullptr;
-    Q_EMIT forTransientChanged();
-    invalidateFilter();
-}
-
-Window *AbstractTransientWindowModelFilter::filterAcceptsRowCommon(int source_row, const QModelIndex &source_parent) const
+KWin::Window *AbstractTransientWindowModelFilter::filterAcceptsRowCommon(int source_row, const QModelIndex &source_parent) const
 {
     if (!m_windowModel || !m_forTransient) {
         return nullptr;
@@ -225,7 +281,7 @@ Window *AbstractTransientWindowModelFilter::filterAcceptsRowCommon(int source_ro
 
     const QVariant data = index.data();
     if (!data.isValid()) {
-        return nullptr;
+        return nullptr; //?
     }
 
     Window *window = qvariant_cast<Window *>(data);
@@ -233,13 +289,11 @@ Window *AbstractTransientWindowModelFilter::filterAcceptsRowCommon(int source_ro
         return nullptr;
     }
 
-    if (window == m_forTransient) {
+    if (window == m_forTransient)
         return nullptr;
-    }
 
-    if (window->transientFor() == m_forTransient) {
+    if (window->transientFor() == m_forTransient)
         return window;
-    }
 
     if (!window->isClient()) {
         if (Window::belongToSameApplication(window, m_forTransient)) {
@@ -255,11 +309,10 @@ KwinWindowModel *AbstractTransientWindowModelFilter::windowModel() const
     return m_windowModel;
 }
 
-void AbstractTransientWindowModelFilter::setWindowModel(KwinWindowModel *newWindowModel)
+void AbstractTransientWindowModelFilter::setWindowModel(KWin::KwinWindowModel *newWindowModel)
 {
-    if (m_windowModel == newWindowModel) {
+    if (m_windowModel == newWindowModel)
         return;
-    }
     m_windowModel = newWindowModel;
     setSourceModel(m_windowModel);
     Q_EMIT windowModelChanged();
@@ -269,30 +322,24 @@ TransientNormalWindowFilter::TransientNormalWindowFilter(QObject *parent)
     : AbstractTransientWindowModelFilter(parent)
 {
 }
-
 bool TransientNormalWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
 {
-    auto window = filterAcceptsRowCommon(source_row, source_parent);
-    if (!window) {
+    auto win = filterAcceptsRowCommon(source_row, source_parent);
+    if (!win)
         return false;
-    }
 
-    return window->windowType() == WindowType::Normal;
+    return win->windowType() == WindowType::Normal;
 }
 
 TransientMenusWindowFilter::TransientMenusWindowFilter(QObject *parent)
     : AbstractTransientWindowModelFilter(parent)
 {
 }
-
 bool TransientMenusWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
 {
-    auto window = filterAcceptsRowCommon(source_row, source_parent);
-    if (!window) {
+    auto win = filterAcceptsRowCommon(source_row, source_parent);
+    if (!win)
         return false;
-    }
 
-    return window->windowType() != WindowType::Normal;
+    return win->windowType() != WindowType::Normal;
 }
-
-} // namespace KWin

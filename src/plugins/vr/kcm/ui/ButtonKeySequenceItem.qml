@@ -15,8 +15,6 @@ RowLayout {
     id: root
 
     property string binding: "MouseMiddle"
-    property alias checkForConflictsAgainst: keySequenceItem.checkForConflictsAgainst
-    property alias patterns: keySequenceItem.patterns
 
     readonly property bool isMouseBinding: binding.startsWith("Mouse")
 
@@ -53,6 +51,7 @@ RowLayout {
         Layout.fillWidth: true
         keySequence: root.isMouseBinding ? "" : root.binding
         multiKeyShortcutsAllowed: false
+        patterns: KQuickControls.ShortcutPattern.Modifier | KQuickControls.ShortcutPattern.Key | KQuickControls.ShortcutPattern.ModifierAndKey
         onKeySequenceModified: {
             root.binding = keySequence
             root.bindingModified(root.binding)

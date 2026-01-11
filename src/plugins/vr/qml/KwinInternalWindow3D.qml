@@ -26,15 +26,15 @@ Node {
     property size surfaceSize: this.surface ? this.surface.size : Qt.size(0,0)
 
     property zMargins itemDepth: ({
-                                  top: root.visible ? KWinVRConfig.zWindowMarginTop : 0,
-                                  bottom: root.visible ? KWinVRConfig.zWindowMarginBottom : 0
+                                  top: (this.clientSize.width > 1 && this.clientSize.height > 1) && root.visible ? 1 : 0,
+                                  bottom: 0
                               })
     property real zOffset: 0
     property real zOffsetGlobal: 0
 
     /* KWin::Window */
     property QtObject client
-    visible: this.client && !this.client.minimized && (this.clientSize.width > 1 && this.clientSize.height > 1) && (!KwinVrHelpers.screenLocked || client.lockScreen || client.lockScreenOverlay || client.inputMethod)
+    visible: this.client && !this.client.minimized && (!KwinVrHelpers.screenLocked || client.lockScreen || client.lockScreenOverlay || client.inputMethod)
 
     function uvToWindow2DCoordinates(coords: vector2d): point {
         return Qt.point(
@@ -45,7 +45,7 @@ Node {
     Model {
         id: model
         property Node grabHandle: root
-        pickable: root.visible
+        pickable: (root.clientSize.width > 0) && (root.clientSize.height > 0) && root.visible
         depthBias: -root.zOffsetGlobal * KWinVRConfig.depthBiasMultiplier
 
         source: "#Rectangle"
@@ -63,7 +63,7 @@ Node {
 
         scale: Qt.vector3d(root.clientSize.width/100/root.ppu,
                            root.clientSize.height/100/root.ppu,
-                           0.01)
+                           root.itemDepth.top/100)
 
         // position: Qt.vector3d(this.surfaceSize.width/2/root.ppu, -this.surfaceSize.height/2/root.ppu, 0)
     }

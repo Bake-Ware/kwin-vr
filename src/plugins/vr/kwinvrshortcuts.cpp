@@ -11,8 +11,7 @@
 
 #include <QAction>
 
-namespace KWin
-{
+using namespace KWin;
 
 KWinVrShortcuts *KWinVrShortcuts::instance()
 {
@@ -75,5 +74,3 @@ void KWinVrShortcuts::registerShortcut(const QString &name, const QString &text,
     KGlobalAccel::self()->setShortcut(action, {});
     connect(action, &QAction::triggered, this, signal);
 }
-
-} // namespace KWin

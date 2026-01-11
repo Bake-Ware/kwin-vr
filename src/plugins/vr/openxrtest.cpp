@@ -6,12 +6,8 @@
 
 #include "openxrtest.h"
 #include "kwinvr_logging.h"
-
 #include <QCoreApplication>
 #include <QStandardPaths>
-
-namespace KWin
-{
 
 OpenXRTest::OpenXRTest(QObject *parent)
     : QObject(parent)
@@ -25,9 +21,8 @@ OpenXRTest::~OpenXRTest()
 
 void OpenXRTest::start()
 {
-    if (m_process) {
+    if (m_process)
         return;
-    }
 
     m_resultEmitted = false;
     m_process = new QProcess(this);
@@ -56,18 +51,16 @@ void OpenXRTest::start()
 
 void OpenXRTest::emitResult(bool success, const QString &message)
 {
-    if (m_resultEmitted) {
+    if (m_resultEmitted)
         return;
-    }
     m_resultEmitted = true;
     Q_EMIT sessionResult(success, message);
 }
 
 void OpenXRTest::stop()
 {
-    if (!m_process) {
+    if (!m_process)
         return;
-    }
 
     disconnect(m_process, nullptr, this, nullptr);
 
@@ -85,16 +78,14 @@ void OpenXRTest::stop()
 
 void OpenXRTest::onReadyRead()
 {
-    if (!m_process) {
+    if (!m_process)
         return;
-    }
 
     QString output = QString::fromUtf8(m_process->readAllStandardOutput()).trimmed();
     qCDebug(KWINVR) << "XR test output:" << output;
 
-    if (output.isEmpty()) {
+    if (output.isEmpty())
         return;
-    }
 
     bool success = (output == QStringLiteral("OK"));
 
@@ -154,5 +145,3 @@ void OpenXRTest::onProcessError(QProcess::ProcessError error)
 
     emitResult(false, message);
 }
-
-} // namespace KWin

@@ -73,7 +73,7 @@ bool VrInputFilter::pointerButton(PointerButtonEvent *event)
     if (event->state == PointerButtonState::Pressed && accepted) {
         m_pressedButtons.setFlag(event->button, true);
     } else if (event->state == PointerButtonState::Released) {
-        // Always accept released events if pressed events were accepted earlier
+        /* Always accept released events if pressed events were accepted earlier */
         if (m_pressedButtons.testFlag(event->button)) {
             m_pressedButtons.setFlag(event->button, false);
             accepted = true;
@@ -101,7 +101,8 @@ bool VrInputFilter::pointerAxis(PointerAxisEvent *event)
     auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(event->timestamp).count();
     wheelEvent.setTimestamp(ts);
     QCoreApplication::sendEvent(m_eventsTarget, &wheelEvent);
-    return wheelEvent.isAccepted();
+    bool accepted = wheelEvent.isAccepted();
+    return accepted;
 }
 
 bool VrInputFilter::pointerMotion(PointerMotionEvent *event)
@@ -145,9 +146,8 @@ void KwinVrInputFilter::resetEventsTarget()
 void KwinVrInputFilter::setEventsTarget(QObject *newEventsTarget)
 {
     auto filter = static_cast<VrInputFilter *>(m_filter);
-    if (filter->m_eventsTarget == newEventsTarget) {
+    if (filter->m_eventsTarget == newEventsTarget)
         return;
-    }
 
     if (filter->m_eventsTarget) {
         disconnect(filter->m_eventsTarget, &QObject::destroyed, this, &KwinVrInputFilter::resetEventsTarget);
@@ -187,12 +187,11 @@ void KwinVrInputFilter::setPointerInhibitDelay(int newPointerInhibitDelay)
 {
     auto filter = static_cast<VrInputFilter *>(m_filter);
     const auto newDelay = std::chrono::microseconds(static_cast<qint64>(newPointerInhibitDelay) * 1000);
-    if (filter->m_pointerInhibitDelay == newDelay) {
+    if (filter->m_pointerInhibitDelay == newDelay)
         return;
-    }
     filter->m_pointerInhibitDelay = newDelay;
 
     Q_EMIT pointerInhibitDelayChanged();
 }
 
-} // namespace KWin
+}

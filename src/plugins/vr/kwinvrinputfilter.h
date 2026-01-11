@@ -4,12 +4,14 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINVRINPUTFILTER_H
+#define KWINVRINPUTFILTER_H
 
-#include "input.h"
+#pragma once
 
 #include <QObject>
 #include <QQuickItem>
+#include <input.h>
 
 namespace KWin
 {
@@ -23,7 +25,7 @@ class KwinVrInputFilter : public QObject
     QML_ELEMENT
 public:
     explicit KwinVrInputFilter(QObject *parent = nullptr);
-    ~KwinVrInputFilter() override;
+    ~KwinVrInputFilter();
 
     QObject *eventsTarget() const;
     void setEventsTarget(QObject *newEventsTarget);
@@ -44,4 +46,5 @@ private:
     bool m_filterInstalled = false;
 };
 
-} // namespace KWin
+}
+#endif // VRINPUTFILTER_H

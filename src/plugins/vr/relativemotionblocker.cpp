@@ -10,31 +10,33 @@
 #include "input_event.h"
 #include "pointer_input.h"
 
-namespace KWin
-{
+#include <QObject>
+#include <QQuickItem>
+#include <input.h>
+
+using namespace KWin;
 
 class RelativeBlockFilter : public InputEventFilter
 {
 public:
     explicit RelativeBlockFilter(InputFilterOrder::Order weight)
-        : InputEventFilter(weight)
-    {
-    }
-
-    bool pointerMotion(PointerMotionEvent *event) override
+        : InputEventFilter(weight) { };
+    virtual bool pointerMotion(PointerMotionEvent *event) override
     {
         if (input()->pointer()->isConstrained()) {
             return false;
+        } else {
+            return !(event->device == m_allowedDevice);
         }
-        return event->device != m_allowedDevice;
-    }
+    };
 
-    InputDevice *m_allowedDevice = nullptr;
+    KWin::InputDevice *m_allowedDevice = nullptr;
 };
 
 RelativeMotionBlocker::RelativeMotionBlocker(QObject *parent)
     : QObject{parent}
     , m_filter(new RelativeBlockFilter(InputFilterOrder::PlaceholderOutput))
+
 {
 }
 
@@ -46,18 +48,17 @@ RelativeMotionBlocker::~RelativeMotionBlocker()
     delete m_filter;
 }
 
-InputDevice *RelativeMotionBlocker::allowedDevice() const
+KWin::InputDevice *RelativeMotionBlocker::allowedDevice() const
 {
     return static_cast<RelativeBlockFilter *>(m_filter)->m_allowedDevice;
 }
 
-void RelativeMotionBlocker::setAllowedDevice(InputDevice *newAllowedDevice)
+void RelativeMotionBlocker::setAllowedDevice(KWin::InputDevice *newAllowedDevice)
 {
     auto &currentAllowedDevice = static_cast<RelativeBlockFilter *>(m_filter)->m_allowedDevice;
 
-    if (currentAllowedDevice == newAllowedDevice) {
+    if (currentAllowedDevice == newAllowedDevice)
         return;
-    }
 
     if (currentAllowedDevice) {
         disconnect(currentAllowedDevice, &QObject::destroyed, this, &RelativeMotionBlocker::resetAllowedDevice);
@@ -95,5 +96,3 @@ void RelativeMotionBlocker::resetAllowedDevice()
 {
     setAllowedDevice(nullptr);
 }
-
-} // namespace KWin

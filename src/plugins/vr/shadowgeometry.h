@@ -27,18 +27,19 @@ public:
     void setShadow(KDecoration3::DecorationShadow *shadow);
 
     float width() const;
-    void setWidth(float newWidth);
+    void setWidth(float w);
 
     float height() const;
-    void setHeight(float newHeight);
+    void setHeight(float h);
 
 Q_SIGNALS:
     void shadowChanged();
     void sizeChanged();
 
-private:
+private Q_SLOTS:
     void updateGeometry();
 
+private:
     KDecoration3::DecorationShadow *m_shadow = nullptr;
     float m_width = 100.0f;
     float m_height = 100.0f;
@@ -47,4 +48,4 @@ private:
     QByteArray m_vertexData;
 };
 
-} // namespace KWin
+}

@@ -7,14 +7,12 @@
 #include "decorationgeometry.h"
 #include "geometrytypes.h"
 #include "kwinvr_logging.h"
-#include <KDecoration3/DecoratedWindow>
 #include <QVector2D>
 #include <QVector3D>
-
 #include <cstring>
+#include <kdecoration3/decoratedwindow.h>
 
-namespace KWin
-{
+using namespace KWin;
 
 static const QByteArray indices = [] {
     const Quad quads[4] = {
@@ -25,11 +23,6 @@ static const QByteArray indices = [] {
     };
     return QByteArray(reinterpret_cast<const char *>(quads), sizeof(quads));
 }();
-
-KDecoration3::Decoration *DecorationGeometry::decoration() const
-{
-    return m_decoration;
-}
 
 DecorationGeometry::DecorationGeometry(QQuick3DObject *parent)
     : QQuick3DGeometry(parent)
@@ -48,9 +41,8 @@ DecorationGeometry::DecorationGeometry(QQuick3DObject *parent)
 
 void DecorationGeometry::setDecoration(KDecoration3::Decoration *decoration)
 {
-    if (m_decoration == decoration) {
+    if (m_decoration == decoration)
         return;
-    }
 
     if (m_decoration) {
         disconnect(m_decoration, &KDecoration3::Decoration::bordersChanged, this, &DecorationGeometry::updateGeometry);
@@ -74,7 +66,7 @@ void DecorationGeometry::setDecoration(KDecoration3::Decoration *decoration)
                 setDecoration(nullptr);
             });
         } else {
-            qCWarning(KWINVR) << "Decoration has no window, how is that possible?";
+            qWarning(KWINVR) << "Decoration has no window, how is that possible?";
         }
 
         connect(m_decoration, &QObject::destroyed, this, [this]() {
@@ -89,20 +81,23 @@ void DecorationGeometry::updateGeometry()
 {
     const QSizeF texSize = m_decoration ? m_decoration->size() : QSizeF();
     if (texSize.isEmpty()) {
+        // Zero out the vertex data to hide geometry
         m_vertexData.fill(0);
         setVertexData(m_vertexData);
         update();
         return;
     }
 
-    const float bl = static_cast<float>(m_decoration->borderLeft());
-    const float br = static_cast<float>(m_decoration->borderRight());
-    const float bt = static_cast<float>(m_decoration->borderTop());
-    const float bb = static_cast<float>(m_decoration->borderBottom());
+    const float bl = (float)m_decoration->borderLeft();
+    const float br = (float)m_decoration->borderRight();
+    const float bt = (float)m_decoration->borderTop();
+    const float bb = (float)m_decoration->borderBottom();
 
     // Use pure pixel coordinates. Scaling is handled by the Node.
-    const float w = static_cast<float>(texSize.width());
-    const float h = static_cast<float>(texSize.height());
+    const float w = (float)texSize.width();
+    const float h = (float)texSize.height();
+
+    // qCDebug(KWINVR) << "DecorationGeometry::updateGeometry" << texSize << "borders" << bl << br << bt << bb;
 
     // UV normalization factors
     const float iTexW = 1.0f / w;
@@ -133,5 +128,3 @@ void DecorationGeometry::updateGeometry()
     setBounds(QVector3D(-hW, -hH, -0.01f), QVector3D(hW, hH, 0.01f));
     update();
 }
-
-} // namespace KWin

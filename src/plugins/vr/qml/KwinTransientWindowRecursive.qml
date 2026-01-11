@@ -14,7 +14,7 @@ KwinTransientWindow {
 
     client: root.window
     property int stackingOrder: root.client?.stackingOrder ?? 0
-    property real zOffset
+    property int zOffset
 
     property KwinTransientWindow parentWindow: parent.parent
     property QtObject parentClient: parentWindow?.client

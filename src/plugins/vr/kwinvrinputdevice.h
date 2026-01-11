@@ -4,17 +4,17 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINVRINPUTDEVICE_H
+#define KWINVRINPUTDEVICE_H
 
 #include "input.h"
-
 #include <QObject>
 #include <QQmlEngine>
 
 namespace KWin
 {
 
-class KwinVrInputDevice : public InputDevice
+class KwinVrInputDevice : public KWin::InputDevice
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged FINAL)
@@ -30,7 +30,7 @@ class KwinVrInputDevice : public InputDevice
     QML_ELEMENT
 public:
     explicit KwinVrInputDevice(QObject *parent = nullptr);
-    ~KwinVrInputDevice() override;
+    ~KwinVrInputDevice();
 
     QString name() const override;
     bool isEnabled() const override;
@@ -71,8 +71,6 @@ public:
     void setForwardButton(bool newForwardButton);
 
     Q_INVOKABLE void setAxis(qreal vdelta, qreal hdelta);
-    Q_INVOKABLE int resolveKeyCode(const QString &keyName);
-    Q_INVOKABLE void sendKeyCode(int code, bool pressed);
     Q_INVOKABLE void sendKey(const QString &keyName, bool pressed);
 
 Q_SIGNALS:
@@ -96,4 +94,5 @@ private:
     bool m_forwardButton = false;
 };
 
-} // namespace KWin
+}
+#endif // KWINVRINPUTDEVICE_H

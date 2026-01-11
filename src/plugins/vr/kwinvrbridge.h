@@ -4,33 +4,20 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINVRBRIDGE_H
+#define KWINVRBRIDGE_H
 
 #include <QObject>
 #include <QQmlEngine>
 
-namespace KWin
-{
-
 class KwinVrBridge : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_SINGLETON
 public:
-    static KwinVrBridge *instance();
-    static KwinVrBridge *create(QQmlEngine *, QJSEngine *)
-    {
-        auto bridge = instance();
-        QQmlEngine::setObjectOwnership(bridge, QQmlEngine::CppOwnership);
-        return bridge;
-    }
+    explicit KwinVrBridge(QObject *parent = nullptr);
 
 Q_SIGNALS:
     void xrFailed(const QString &errorString);
-
-private:
-    explicit KwinVrBridge(QObject *parent = nullptr);
 };
 
-} // namespace KWin
+#endif // KWINVRBRIDGE_H

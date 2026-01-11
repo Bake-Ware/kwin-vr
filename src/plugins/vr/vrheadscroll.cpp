@@ -6,12 +6,8 @@
 
 #include "vrheadscroll.h"
 #include "kwinvr_logging.h"
-
 #include <algorithm>
 #include <cmath>
-
-namespace KWin
-{
 
 VrHeadScroll::VrHeadScroll(QObject *parent)
     : QObject(parent)
@@ -25,9 +21,8 @@ QQuick3DNode *VrHeadScroll::camera() const
 
 void VrHeadScroll::setCamera(QQuick3DNode *newCamera)
 {
-    if (m_camera == newCamera) {
+    if (m_camera == newCamera)
         return;
-    }
 
     if (m_headScrollActive && m_camera) {
         disconnect(m_camera, &QQuick3DNode::rotationChanged, this, &VrHeadScroll::calcHeadScroll);
@@ -52,9 +47,8 @@ bool VrHeadScroll::headScrollActive() const
 
 void VrHeadScroll::setHeadScrollActive(bool newHeadScrollActive)
 {
-    if (m_headScrollActive == newHeadScrollActive) {
+    if (m_headScrollActive == newHeadScrollActive)
         return;
-    }
 
     m_headScrollActive = newHeadScrollActive;
     qCDebug(KWINVR) << "head scroll active:" << m_headScrollActive;
@@ -82,9 +76,8 @@ float VrHeadScroll::verticalScrollMultiplier() const
 
 void VrHeadScroll::setVerticalScrollMultiplier(float newVerticalScrollMultiplier)
 {
-    if (qFuzzyCompare(m_verticalScrollMultiplier, newVerticalScrollMultiplier)) {
+    if (qFuzzyCompare(m_verticalScrollMultiplier, newVerticalScrollMultiplier))
         return;
-    }
     m_verticalScrollMultiplier = newVerticalScrollMultiplier;
     Q_EMIT verticalScrollMultiplierChanged();
 }
@@ -96,9 +89,8 @@ float VrHeadScroll::horizontalScrollMultiplier() const
 
 void VrHeadScroll::setHorizontalScrollMultiplier(float newHorizontalScrollMultiplier)
 {
-    if (qFuzzyCompare(m_horizontalScrollMultiplier, newHorizontalScrollMultiplier)) {
+    if (qFuzzyCompare(m_horizontalScrollMultiplier, newHorizontalScrollMultiplier))
         return;
-    }
     m_horizontalScrollMultiplier = newHorizontalScrollMultiplier;
     Q_EMIT horizontalScrollMultiplierChanged();
 }
@@ -111,18 +103,16 @@ float VrHeadScroll::threshold() const
 void VrHeadScroll::setThreshold(float newThresholdDegrees)
 {
     const float newThresholdRadians = qDegreesToRadians(newThresholdDegrees);
-    if (qFuzzyCompare(m_threshold, newThresholdRadians)) {
+    if (qFuzzyCompare(m_threshold, newThresholdRadians))
         return;
-    }
     m_threshold = newThresholdRadians;
     Q_EMIT thresholdChanged();
 }
 
 void VrHeadScroll::calcHeadScroll()
 {
-    if (!m_camera) {
+    if (!m_camera)
         return;
-    }
 
     const QQuaternion currentRotation = m_camera->rotation();
     const QQuaternion relativeRotation = m_initialRotation * currentRotation;
@@ -155,5 +145,3 @@ void VrHeadScroll::calcHeadScroll()
         Q_EMIT wheel(QVector2D(vdelta, hdelta));
     }
 }
-
-} // namespace KWin

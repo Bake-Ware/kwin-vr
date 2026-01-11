@@ -4,13 +4,16 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef KWINWAYLANDSURFACEMODEL_H
+#define KWINWAYLANDSURFACEMODEL_H
+
+#include <QAbstractListModel>
+#include <QObject>
+#include <QQmlEngine>
 
 #include "wayland/subcompositor.h"
 #include "wayland/surface.h"
-
-#include <QAbstractListModel>
-#include <QQmlEngine>
+#include "window.h"
 
 namespace KWin
 {
@@ -22,6 +25,7 @@ class KwinWaylandSurfaceModel : public QAbstractListModel
 public:
     enum Roles {
         SurfaceRole = Qt::UserRole + 1,
+        SubSurfaceRole = Qt::UserRole + 2,
     };
 
     explicit KwinWaylandSurfaceModel(QObject *parent = nullptr);
@@ -30,8 +34,8 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
-    SurfaceInterface *surface() const;
-    void setSurface(SurfaceInterface *newClient);
+    KWin::SurfaceInterface *surface() const;
+    void setSurface(KWin::SurfaceInterface *newClient);
 
 Q_SIGNALS:
     void surfaceChanged();
@@ -39,8 +43,10 @@ Q_SIGNALS:
 private:
     void handleSurfacesChanged();
 
-    QVector<SubSurfaceInterface *> m_subSurfaces;
-    SurfaceInterface *m_surface = nullptr;
+    QVector<KWin::SubSurfaceInterface *> m_sub_surfaces;
+    KWin::SurfaceInterface *m_surface = nullptr;
 };
 
-} // namespace KWin
+}
+
+#endif // KWINWAYLANDSURFACEMODEL_H

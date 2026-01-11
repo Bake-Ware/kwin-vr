@@ -7,6 +7,8 @@
 #pragma once
 
 #include <KDecoration3/DecorationShadow>
+#include <QDebug>
+#include <QPainter>
 #include <QQuickPaintedItem>
 
 namespace KWin
@@ -15,11 +17,11 @@ namespace KWin
 class KwinShadowItem : public QQuickPaintedItem
 {
     Q_OBJECT
-    Q_PROPERTY(KDecoration3::DecorationShadow *shadow READ shadow WRITE setShadow NOTIFY shadowChanged FINAL)
+    Q_PROPERTY(KDecoration3::DecorationShadow *shadow READ shadow WRITE setShadow NOTIFY shadowChanged)
     /**
-     * Fills shadow with magenta color to make it visible.
+     * Fills shadow with magneta color to make it visible.
      */
-    Q_PROPERTY(bool debug READ debug WRITE setDebug NOTIFY debugChanged FINAL)
+    Q_PROPERTY(bool debug READ debug WRITE setDebug NOTIFY debugChanged)
     QML_ELEMENT
 public:
     explicit KwinShadowItem(QQuickItem *parent = nullptr);
@@ -28,7 +30,7 @@ public:
     void setShadow(KDecoration3::DecorationShadow *shadow);
 
     bool debug() const;
-    void setDebug(bool newDebug);
+    void setDebug(bool d);
 
     void updateShadow();
 
@@ -43,4 +45,4 @@ private:
     bool m_debug = false;
 };
 
-} // namespace KWin
+}

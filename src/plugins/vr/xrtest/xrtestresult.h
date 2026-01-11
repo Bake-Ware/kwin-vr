@@ -4,14 +4,20 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#pragma once
+#ifndef XRTESTRESULT_H
+#define XRTESTRESULT_H
 
+#include <QGuiApplication>
 #include <QObject>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QTextStream>
+#include <QTimer>
 
 class XrTestResult : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString message READ message WRITE setMessage NOTIFY messageChanged FINAL)
+    Q_PROPERTY(QString message READ message WRITE setMessage NOTIFY messageChanged)
 public:
     using QObject::QObject;
 
@@ -25,3 +31,5 @@ private:
     QString m_message;
     bool m_sent = false;
 };
+
+#endif // XRTESTRESULT_H

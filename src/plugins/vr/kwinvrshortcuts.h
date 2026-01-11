@@ -50,4 +50,4 @@ private:
                           void (KWinVrShortcuts::*signal)());
 };
 
-} // namespace KWin
+}

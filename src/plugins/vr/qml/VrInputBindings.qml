@@ -73,8 +73,7 @@ Item {
         if (prop) {
             return (pressed) => { kwinInput[prop] = pressed; };
         } else {
-            const code = kwinInput.resolveKeyCode(binding);
-            return (pressed) => { kwinInput.sendKeyCode(code, pressed); };
+            return (pressed) => { kwinInput.sendKey(binding, pressed); };
         }
     }
 

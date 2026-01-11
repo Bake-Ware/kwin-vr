@@ -103,7 +103,6 @@ qt6_add_qml_module(vr
         kwinvrinputdevice.h kwinvrinputdevice.cpp
         outputmodel.h outputmodel.cpp
         kwincurrentcursor.h kwincurrentcursor.cpp
-        kwinvrhoveredwindowresolver.h kwinvrhoveredwindowresolver.cpp
         kwinvrhelpers.h kwinvrhelpers.cpp
         kwinvr.h kwinvr.cpp
         kwinvrinputfilter.h kwinvrinputfilter.cpp

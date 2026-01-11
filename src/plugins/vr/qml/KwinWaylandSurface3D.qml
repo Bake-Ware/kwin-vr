@@ -27,10 +27,7 @@ Node {
     property size surfaceSize: this.surface ? this.surface.size : Qt.size(0,0)
 
     /* Thickness of this surface */
-    property zMargins surfaceModelDepth: ({
-                                              top: model.pickable ? KWinVRConfig.zSurfaceMarginTop : 0,
-                                              bottom: model.pickable ? KWinVRConfig.zSurfaceMarginBottom : 0
-                                          })
+    property real surfaceDepth: (surfaceSize.width > 1 && surfaceSize.height > 1) && model.pickable ? 1 : 0
     /* An index in a stack. Will be set by zStacker */
     property real zOffset: 0
     /* Global Z offset including parent offsets. Will be set by ZStacker */
@@ -163,6 +160,6 @@ Node {
 
         scale: Qt.vector3d(root.surfaceSize.width/100/root.ppu,
                            root.surfaceSize.height/100/root.ppu,
-                           0.01)
+                           root.surfaceDepth/100)
     }
 }
