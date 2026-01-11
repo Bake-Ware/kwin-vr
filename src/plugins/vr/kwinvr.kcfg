@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Stanislav Aleksandrov <lightofmysoul@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name="kwinvr"/>
+  <group name="General">
+    <entry name="width" type="Int">
+      <label>Logical width of the virtual display (pixel width = logical width × scale)</label>
+      <default>1440</default>
+    </entry>
+    <entry name="height" type="Int">
+      <label>Logical height of the virtual display (pixel height = logical height × scale)</label>
+      <default>900</default>
+    </entry>
+    <entry name="refreshrate" type="Int">
+      <label>Refresh Rate of the VR output.</label>
+      <default>60</default>
+    </entry>
+    <entry name="scale" type="Int">
+      <label>Scale of the VR output.</label>
+      <default>1</default>
+    </entry>
+    <entry name="ppu" type="Int">
+      <label>Pixels per centimeter (physical size = logical size ÷ ppu)</label>
+      <default>20</default>
+    </entry>
+    <entry name="distance" type="Int">
+      <label>Distance from user to display windows</label>
+      <default>100</default>
+    </entry>
+    <entry name="followEnabled" type="Bool">
+      <label>Enable follow mode by default</label>
+      <default>true</default>
+    </entry>
+    <entry name="followFovH" type="Int">
+      <label>Horizontal field of view threshold for follow mode (degrees)</label>
+      <default>40</default>
+    </entry>
+    <entry name="followFovV" type="Int">
+      <label>Vertical field of view threshold for follow mode (degrees)</label>
+      <default>20</default>
+    </entry>
+    <entry name="followStopFovH" type="Int">
+      <label>Horizontal FOV threshold for stopping follow mode (window centered)</label>
+      <default>4</default>
+    </entry>
+    <entry name="followStopFovV" type="Int">
+      <label>Vertical FOV threshold for stopping follow mode (window centered)</label>
+      <default>4</default>
+    </entry>
+    <entry name="followDelay" type="Double">
+      <label>Delay before follow mode activates (seconds)</label>
+      <default>0.5</default>
+    </entry>
+    <entry name="followSpeed" type="Double">
+      <label>Speed of follow mode rotation interpolation</label>
+      <default>2.0</default>
+    </entry>
+    <entry name="followWorldUpAlignment" type="Bool">
+      <label>Align windows with world up direction (horizon) in follow mode</label>
+      <default>false</default>
+    </entry>
+    <entry name="xrTestEnabled" type="Bool">
+      <label>Run OpenXR test before starting VR mode</label>
+      <default>true</default>
+    </entry>
+    <entry name="openXrRuntimeJson" type="String">
+      <label>Absolute path to OpenXR runtime JSON used to initialize the loader before VR activation</label>
+      <default></default>
+    </entry>
+    <entry name="resetViewDelay" type="Double">
+      <label>Delay before resetting view after startup (seconds)</label>
+      <default>2.0</default>
+      <min>-1.0</min>
+      <max>30.0</max>
+    </entry>
+    <entry name="overlayPlacement" type="Int">
+      <label>XR overlay placement depth</label>
+      <default>20</default>
+    </entry>
+    <entry name="zWindowMarginTop" type="Double">
+      <label>Default top Z margin for windows, acts as minimum window depth (cm)</label>
+      <default>1.0</default>
+      <min>0.01</min>
+      <max>5.0</max>
+    </entry>
+    <entry name="zWindowMarginBottom" type="Double">
+      <label>Default bottom Z margin for windows, acts as minimum window depth (cm)</label>
+      <default>0.0</default>
+      <min>0.0</min>
+      <max>5.0</max>
+    </entry>
+    <entry name="zSurfaceMarginTop" type="Double">
+      <label>Default top Z margin for surfaces within a window (cm)</label>
+      <default>1.0</default>
+      <min>0.01</min>
+      <max>5.0</max>
+    </entry>
+    <entry name="zSurfaceMarginBottom" type="Double">
+      <label>Default bottom Z margin for surfaces within a window (cm)</label>
+      <default>0.0</default>
+      <min>0.0</min>
+      <max>5.0</max>
+    </entry>
+    <entry name="minTransientNormalSpacing" type="Double">
+      <label>Minimum space between transient normal windows (cm)</label>
+      <default>4.0</default>
+      <min>0.0</min>
+    </entry>
+    <entry name="blend" type="Bool">
+      <label>Enable transparent background by default</label>
+      <default>true</default>
+    </entry>
+    <entry name="depthBiasMultiplier" type="Double">
+      <label>Multiplier for depth bias calculation (affects transparency sorting)</label>
+      <default>10.0</default>
+    </entry>
+    <entry name="depthPrePassEnabled" type="Bool">
+      <label>Enable depth pre-pass rendering</label>
+      <default>false</default>
+    </entry>
+    <entry name="depthTestEnabled" type="Bool">
+      <label>Enable depth testing</label>
+      <default>true</default>
+    </entry>
+    <entry name="windowMode" type="Enum">
+      <label>Window rendering mode</label>
+      <choices>
+        <choice name="QtNative3D">
+          <label>Qt Native 3D</label>
+        </choice>
+        <choice name="KwinThumbnail3D">
+          <label>Kwin Thumbnail 3D</label>
+        </choice>
+        <choice name="KwinThumbnail2D">
+          <label>Kwin Thumbnail 2D</label>
+        </choice>
+      </choices>
+      <default>QtNative3D</default>
+    </entry>
+    <entry name="headScrollBindings" type="StringList">
+      <label>Keys or mouse buttons for head scroll activation</label>
+      <default>MouseMiddle</default>
+    </entry>
+    <entry name="verticalHeadScrollSpeed" type="Double">
+      <label>Vertical speed for head scroll</label>
+      <default>40.0</default>
+      <min>10.0</min>
+      <max>100.0</max>
+    </entry>
+    <entry name="horizontalHeadScrollSpeed" type="Double">
+      <label>Horizontal speed for head scroll</label>
+      <default>40.0</default>
+      <min>10.0</min>
+      <max>100.0</max>
+    </entry>
+    <entry name="headScrollThreshold" type="Double">
+      <label>Minimum head movement to trigger scroll (degrees)</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="leftClickBindings" type="StringList">
+      <label>Keys triggering a left mouse click in VR</label>
+      <default></default>
+    </entry>
+    <entry name="middleClickBindings" type="StringList">
+      <label>Keys triggering a middle mouse click in VR</label>
+      <default></default>
+    </entry>
+    <entry name="rightClickBindings" type="StringList">
+      <label>Keys triggering a right mouse click in VR</label>
+      <default></default>
+    </entry>
+    <entry name="headgazePositionX" type="Double">
+      <label>Headgaze ray X offset from head position (centimeters)</label>
+      <default>15.0</default>
+    </entry>
+    <entry name="headgazePositionY" type="Double">
+      <label>Headgaze ray Y offset from head position (centimeters)</label>
+      <default>-10.0</default>
+    </entry>
+    <entry name="headgazePositionZ" type="Double">
+      <label>Headgaze ray Z offset from head position (centimeters)</label>
+      <default>-5.0</default>
+    </entry>
+    <entry name="headgazeRotationHorizontal" type="Double">
+      <label>Headgaze ray horizontal rotation / yaw (degrees)</label>
+      <default>4.0</default>
+    </entry>
+    <entry name="headgazeRotationVertical" type="Double">
+      <label>Headgaze ray vertical rotation / pitch (degrees)</label>
+      <default>6.0</default>
+    </entry>
+    <entry name="headgazeColor" type="Color">
+      <label>Headgaze ray idle color</label>
+      <default>#00000000</default>
+    </entry>
+    <entry name="headgazeGrabColor" type="Color">
+      <label>Headgaze ray grab color</label>
+      <default>#459901</default>
+    </entry>
+    <entry name="pointerInhibitDelay" type="Int">
+      <label>Inhibit pointer movement after mouse button press (ms, -1 to disable)</label>
+      <default>100</default>
+      <min>-1</min>
+      <max>1000</max>
+    </entry>
+    <entry name="blockOtherPointerMotion" type="Bool">
+      <label>Block pointer motion from other input sources</label>
+      <default>true</default>
+    </entry>
+  </group>
+
+  <group name="InputMapping">
+    <entry name="leftButton1Pressed" type="String">
+      <label>Binding for left Button1Pressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftButton1Touched" type="String">
+      <label>Binding for left Button1Touched</label>
+      <default></default>
+    </entry>
+    <entry name="leftButton2Pressed" type="String">
+      <label>Binding for left Button2Pressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftButton2Touched" type="String">
+      <label>Binding for left Button2Touched</label>
+      <default></default>
+    </entry>
+    <entry name="leftButtonMenuPressed" type="String">
+      <label>Binding for left ButtonMenuPressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftButtonMenuTouched" type="String">
+      <label>Binding for left ButtonMenuTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftButtonSystemPressed" type="String">
+      <label>Binding for left ButtonSystemPressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftButtonSystemTouched" type="String">
+      <label>Binding for left ButtonSystemTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftSqueezePressed" type="String">
+      <label>Binding for left SqueezePressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftTriggerPressed" type="String">
+      <label>Binding for left TriggerPressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftTriggerTouched" type="String">
+      <label>Binding for left TriggerTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftThumbstickPressed" type="String">
+      <label>Binding for left ThumbstickPressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftThumbstickTouched" type="String">
+      <label>Binding for left ThumbstickTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftThumbrestTouched" type="String">
+      <label>Binding for left ThumbrestTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftTrackpadTouched" type="String">
+      <label>Binding for left TrackpadTouched</label>
+      <default></default>
+    </entry>
+    <entry name="leftTrackpadPressed" type="String">
+      <label>Binding for left TrackpadPressed</label>
+      <default></default>
+    </entry>
+    <entry name="leftIndexFingerPinch" type="String">
+      <label>Binding for left IndexFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="leftMiddleFingerPinch" type="String">
+      <label>Binding for left MiddleFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="leftRingFingerPinch" type="String">
+      <label>Binding for left RingFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="leftLittleFingerPinch" type="String">
+      <label>Binding for left LittleFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="leftHandTrackingMenuPress" type="String">
+      <label>Binding for left HandTrackingMenuPress</label>
+      <default></default>
+    </entry>
+    <entry name="leftSqueezeValue" type="Double">
+      <label>Threshold/Value for left SqueezeValue</label>
+      <default>0.5</default>
+    </entry>
+    <entry name="leftTriggerValue" type="Double">
+      <label>Threshold/Value for left TriggerValue</label>
+      <default>0.5</default>
+    </entry>
+    <entry name="rightButton1Pressed" type="String">
+      <label>Binding for right Button1Pressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightButton1Touched" type="String">
+      <label>Binding for right Button1Touched</label>
+      <default></default>
+    </entry>
+    <entry name="rightButton2Pressed" type="String">
+      <label>Binding for right Button2Pressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightButton2Touched" type="String">
+      <label>Binding for right Button2Touched</label>
+      <default></default>
+    </entry>
+    <entry name="rightButtonMenuPressed" type="String">
+      <label>Binding for right ButtonMenuPressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightButtonMenuTouched" type="String">
+      <label>Binding for right ButtonMenuTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightButtonSystemPressed" type="String">
+      <label>Binding for right ButtonSystemPressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightButtonSystemTouched" type="String">
+      <label>Binding for right ButtonSystemTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightSqueezePressed" type="String">
+      <label>Binding for right SqueezePressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightTriggerPressed" type="String">
+      <label>Binding for right TriggerPressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightTriggerTouched" type="String">
+      <label>Binding for right TriggerTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightThumbstickPressed" type="String">
+      <label>Binding for right ThumbstickPressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightThumbstickTouched" type="String">
+      <label>Binding for right ThumbstickTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightThumbrestTouched" type="String">
+      <label>Binding for right ThumbrestTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightTrackpadTouched" type="String">
+      <label>Binding for right TrackpadTouched</label>
+      <default></default>
+    </entry>
+    <entry name="rightTrackpadPressed" type="String">
+      <label>Binding for right TrackpadPressed</label>
+      <default></default>
+    </entry>
+    <entry name="rightIndexFingerPinch" type="String">
+      <label>Binding for right IndexFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="rightMiddleFingerPinch" type="String">
+      <label>Binding for right MiddleFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="rightRingFingerPinch" type="String">
+      <label>Binding for right RingFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="rightLittleFingerPinch" type="String">
+      <label>Binding for right LittleFingerPinch</label>
+      <default></default>
+    </entry>
+    <entry name="rightHandTrackingMenuPress" type="String">
+      <label>Binding for right HandTrackingMenuPress</label>
+      <default></default>
+    </entry>
+    <entry name="rightSqueezeValue" type="Double">
+      <label>Threshold/Value for right SqueezeValue</label>
+      <default>0.5</default>
+    </entry>
+    <entry name="rightTriggerValue" type="Double">
+      <label>Threshold/Value for right TriggerValue</label>
+      <default>0.5</default>
+    </entry>
+    <entry name="leftThumbstickX" type="Double">
+      <label>Scale for left ThumbstickX (0.0 means disabled)</label>
+      <default>0.0</default>
+    </entry>
+    <entry name="leftThumbstickY" type="Double">
+      <label>Scale for left ThumbstickY (0.0 means disabled)</label>
+      <default>0.0</default>
+    </entry>
+    <entry name="rightThumbstickX" type="Double">
+      <label>Scale for right ThumbstickX (0.0 means disabled)</label>
+      <default>0.0</default>
+    </entry>
+    <entry name="rightThumbstickY" type="Double">
+      <label>Scale for right ThumbstickY (0.0 means disabled)</label>
+      <default>0.0</default>
+    </entry>
+  </group>
+</kcfg>

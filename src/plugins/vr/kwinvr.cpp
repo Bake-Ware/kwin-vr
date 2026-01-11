@@ -1,0 +1,316 @@
+/*
+    SPDX-FileCopyrightText: 2026 Stanislav Aleksandrov <lightofmysoul@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
+
+#include "kwinvr.h"
+
+#include "input.h"
+#include "kwinvr_logging.h"
+#include "kwinvrbridge.h"
+#include "kwinvrconfigwrapper.h"
+#include "kwinvrhelpers.h"
+#include "kwinvrshortcuts.h"
+#include "pointer_input.h"
+#include "window.h"
+#include "workspace.h"
+
+#include <KGlobalAccel>
+#include <KLocalizedString>
+
+#include <QAction>
+#include <QCoreApplication>
+#include <QDBusConnection>
+#include <QFileInfo>
+#include <QLibrary>
+#include <QQmlApplicationEngine>
+
+#include <openxr/openxr.h>
+
+namespace KWin
+{
+
+KwinVr::KwinVr()
+{
+    auto config = KWinVRConfigWrapper::instance();
+    m_watcher = KConfigWatcher::create(config->sharedConfig());
+    connect(m_watcher.data(), &KConfigWatcher::configChanged, config, &KWinVRConfigWrapper::load);
+
+    // Register shortcuts at plugin load (before VR activation)
+    KWinVrShortcuts::instance();
+
+    registerDBusService();
+
+    auto cycleAction = new QAction(this);
+    connect(cycleAction, &QAction::triggered, this, &KwinVr::onActivateVr);
+    cycleAction->setObjectName(QStringLiteral("Activate VR Mode"));
+    cycleAction->setText(i18nc("@action Activate VR Mode", "Activate VR Mode"));
+    KGlobalAccel::self()->setDefaultShortcut(cycleAction, {{Qt::CTRL | Qt::META | Qt::Key_J}});
+    KGlobalAccel::self()->setShortcut(cycleAction, {});
+
+    connect(KwinVrBridge::instance(), &KwinVrBridge::xrFailed, this, [this](const QString &errorString) {
+        qCWarning(KWINVR) << "XR failed signal received:" << errorString;
+        showNotification(i18n("Failed to Activate VR mode"),
+                         i18n("error: %1", errorString),
+                         KNotification::CloseOnTimeout);
+        stop();
+    }, Qt::QueuedConnection);
+
+    connect(&m_xrTest, &OpenXRTest::sessionResult, this, [this](bool success, const QString &message) {
+        qCWarning(KWINVR) << "OpenXR test result:" << success << "message:" << message;
+        if (success) {
+            start();
+        } else {
+            showNotification(i18n("Failed to Activate VR mode"),
+                             i18n("Test Failed: %1", message),
+                             KNotification::CloseOnTimeout);
+            stop();
+        }
+    }, Qt::QueuedConnection);
+}
+
+KwinVr::~KwinVr()
+{
+    stop();
+    closeNotification();
+}
+
+bool KwinVr::vrActive() const
+{
+    return m_active;
+}
+
+bool KwinVr::initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString *errorMessage) const
+{
+    const QFileInfo runtimeJsonInfo(runtimeJsonPath);
+    if (!runtimeJsonInfo.isAbsolute()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("OpenXR runtime JSON path must be absolute");
+        }
+        return false;
+    }
+
+    if (!runtimeJsonInfo.exists()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("OpenXR runtime JSON does not exist: %1").arg(runtimeJsonPath);
+        }
+        return false;
+    }
+
+    QLibrary openXRLoader(QStringLiteral("openxr_loader"));
+    if (!openXRLoader.load()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to load OpenXR loader library: %1").arg(openXRLoader.errorString());
+        }
+        return false;
+    }
+
+    const auto pfnXrGetInstanceProcAddr = reinterpret_cast<PFN_xrGetInstanceProcAddr>(openXRLoader.resolve("xrGetInstanceProcAddr"));
+    if (!pfnXrGetInstanceProcAddr) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("xrGetInstanceProcAddr not available in OpenXR loader");
+        }
+        return false;
+    }
+
+    PFN_xrInitializeLoaderKHR pfnInitializeLoaderKHR = nullptr;
+    XrResult xr = pfnXrGetInstanceProcAddr(
+        XR_NULL_HANDLE,
+        "xrInitializeLoaderKHR",
+        reinterpret_cast<PFN_xrVoidFunction *>(&pfnInitializeLoaderKHR));
+
+    if (XR_FAILED(xr) || pfnInitializeLoaderKHR == nullptr) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("xrInitializeLoaderKHR not available (result=%1)").arg(xr);
+        }
+        return false;
+    }
+
+    const QByteArray runtimeJsonAbsPath = runtimeJsonInfo.absoluteFilePath().toUtf8();
+    const XrLoaderInitPropertyValueEXT properties[] = {
+        {"XR_RUNTIME_JSON", runtimeJsonAbsPath.constData()},
+    };
+
+    const XrLoaderInitInfoPropertiesEXT initProps{
+        XR_TYPE_LOADER_INIT_INFO_PROPERTIES_EXT,
+        nullptr,
+        1,
+        properties,
+    };
+
+    xr = pfnInitializeLoaderKHR(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR *>(&initProps));
+    if (XR_FAILED(xr)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("xrInitializeLoaderKHR failed with result=%1").arg(xr);
+        }
+        return false;
+    }
+
+    return true;
+}
+
+void KwinVr::setVrActive(bool active)
+{
+    if (active == m_active) {
+        return;
+    }
+
+    if (active) {
+        const QString runtimeJsonPath = KWinVRConfigWrapper::instance()->openXrRuntimeJson().trimmed();
+
+        if (!runtimeJsonPath.isEmpty() && (!m_openXRLoaderInitialized || m_openXRLoaderRuntimePath != runtimeJsonPath)) {
+            QString initError;
+            if (!initOpenXRLoaderWithRuntime(runtimeJsonPath, &initError)) {
+                qCWarning(KWINVR) << "OpenXR loader init failed:" << initError;
+                showNotification(i18n("Failed to Activate VR mode"),
+                                 i18n("OpenXR loader init failed: %1", initError),
+                                 KNotification::CloseOnTimeout);
+                return;
+            }
+
+            m_openXRLoaderInitialized = true;
+            m_openXRLoaderRuntimePath = runtimeJsonPath;
+            qCDebug(KWINVR) << "OpenXR loader initialized with runtime JSON:" << runtimeJsonPath;
+        }
+
+        showNotification(i18n("Starting VR mode"),
+                         i18n("Standby"),
+                         KNotification::Persistent);
+
+        m_engine = new QQmlApplicationEngine(this);
+        connect(m_engine, &QObject::destroyed, this, [this] {
+            // Clean everything inside KWin.
+            // Doing it here to make sure nothing would change these flags
+            // and we can safely return to 2D mode.
+            workspace()->setVrMode(false);
+            KwinVrHelpers::setDmabufFormatFilterForQt(false);
+            const auto windows = workspace()->windows();
+            for (auto window : windows) {
+                window->setVr(false);
+            }
+
+            KwinVrHelpers::setDmabufFormatFilterForQt(false);
+            input()->pointer()->setPositionLimiter(nullptr);
+            workspace()->setPopupBoundsResolver(nullptr);
+
+            m_active = false;
+            Q_EMIT vrActiveChanged();
+        });
+        // m_active will be set to false only when engine is deleted
+        m_active = true;
+        Q_EMIT vrActiveChanged();
+
+        if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
+            m_xrTest.start();
+        } else {
+            start();
+        }
+    } else {
+        stop();
+        closeNotification();
+    }
+}
+
+void KwinVr::onActivateVr(bool)
+{
+    qCDebug(KWINVR) << "VR mode activation triggered";
+    setVrActive(!m_active);
+}
+
+void KwinVr::start()
+{
+    if (!m_engine) {
+        return;
+    }
+
+    auto onObjectCreated = [this](QObject *obj, const QUrl &) {
+        if (!obj) {
+            showNotification(i18n("Failed to Activate VR mode"),
+                             i18n("Failed to load QML Engine"),
+                             KNotification::CloseOnTimeout);
+            stop();
+        } else {
+            // We need to stop the test here to not let monado
+            // to shutdown if IPC_EXIT_WHEN_IDLE=ON
+            m_xrTest.stop();
+            closeNotification();
+        }
+    };
+    QObject::connect(m_engine, &QQmlApplicationEngine::objectCreated,
+                     this, onObjectCreated, Qt::QueuedConnection);
+
+    qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
+
+    input()->pointer()->setPositionLimiter([](const QPointF &pos, const QPointF &, std::chrono::microseconds) {
+        return pos;
+    });
+
+    workspace()->setPopupBoundsResolver([](Window *parent) {
+        auto bounds = parent->clientGeometry();
+        Window *root = parent;
+        while (Window *next = root->transientFor()) {
+            root = next;
+            bounds = bounds.united(root->clientGeometry());
+        }
+        if (!root->isVr()) {
+            bounds = bounds.united(workspace()->clientArea(parent->isFullScreen() ? FullScreenArea : PlacementArea, parent));
+        }
+        return bounds;
+    });
+
+    workspace()->setVrMode(true);
+    KwinVrHelpers::setDmabufFormatFilterForQt(true);
+
+    m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"), QStringLiteral("Main"));
+}
+
+void KwinVr::stop()
+{
+    m_xrTest.stop();
+
+    if (m_engine) {
+        m_engine->deleteLater();
+        m_engine = nullptr;
+    }
+}
+
+void KwinVr::showNotification(const QString &title, const QString &text,
+                              KNotification::NotificationFlags flags)
+{
+    closeNotification();
+    // TODO: using graphicsreset eventId here because we do not control kwin.notifyrc
+    m_notification = new KNotification("graphicsreset", flags, this);
+    m_notification->setAutoDelete(false);
+    m_notification->setTitle(title);
+    m_notification->setText(text);
+    m_notification->sendEvent();
+}
+
+void KwinVr::closeNotification()
+{
+    if (m_notification) {
+        m_notification->close();
+        m_notification->deleteLater();
+        m_notification = nullptr;
+    }
+}
+
+void KwinVr::registerDBusService()
+{
+    // We can still activate the plugin by hotkey,
+    // so DBus registration failure is not fatal.
+
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(QStringLiteral("org.kde.kwinvr"))) {
+        qCWarning(KWINVR) << "Failed to register org.kde.kwinvr dbus service";
+        return;
+    }
+
+    if (!bus.registerObject(QStringLiteral("/KwinVr"), this,
+                            QDBusConnection::ExportAllProperties | QDBusConnection::ExportAllSignals)) {
+        qCWarning(KWINVR) << "Failed to register /KwinVr object at session bus";
+    }
+}
+
+} // namespace KWin

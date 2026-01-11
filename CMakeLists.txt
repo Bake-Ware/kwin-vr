@@ -408,6 +408,10 @@ cmake_dependent_option(KWIN_BUILD_ACTIVITIES "Enable building of KWin with kacti
 cmake_dependent_option(KWIN_BUILD_EIS "Enable building KWin with libeis support" ON "Libeis-1.0_FOUND" OFF)
 cmake_dependent_option(KWIN_BUILD_QACCESSIBILITYCLIENT "Enable building KWin with libqaccessibilitysupport" ON "QAccessibilityClient6_FOUND" OFF)
 
+set(QT_USE_BUNDLED_BundledOpenXR OFF CACHE BOOL "Use system OpenXR")
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG QUIET COMPONENTS Quick3DXr)
+cmake_dependent_option(KWIN_BUILD_VR "Enable building of KWin with VR support" ON "Qt6Quick3DXr_FOUND" OFF)
+
 include_directories(BEFORE
     ${CMAKE_CURRENT_BINARY_DIR}/src/wayland
     ${CMAKE_CURRENT_BINARY_DIR}/src

@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Description": "Configure VR Mode",
+        "FormFactors": [
+            "desktop",
+            "handset",
+            "tablet",
+            "mediacenter"
+        ],
+        "Icon": "video-display",
+        "Name": "VR Mode"
+    },
+    "X-KDE-System-Settings-Parent-Category": "workspace"
+}
