@@ -1770,9 +1770,13 @@ protected:
      */
     virtual void doInteractiveResizeSync(const RectF &rect);
     qreal titlebarThickness() const;
-    RectF nextInteractiveMoveGeometry(const QPointF &global) const;
-    RectF nextInteractiveResizeGeometry(const QPointF &global) const;
+    RectF nextInteractiveMoveGeometry(const QPointF &global, bool constrained = true) const;
+    RectF nextInteractiveResizeGeometry(const QPointF &global, bool constrained = true) const;
     void dontInteractiveMoveResize();
+
+    void updateInteractiveMoveResizeStandard(const QPointF &global, Qt::KeyboardModifiers modifiers);
+    void updateInteractiveMoveResizeVr(const QPointF &global, Qt::KeyboardModifiers modifiers);
+    void handleInteractiveMoveResizeFinished(bool cancel);
 
     virtual QSizeF resizeIncrements() const;
 
