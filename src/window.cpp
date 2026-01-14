@@ -1049,7 +1049,7 @@ bool Window::startInteractiveMoveResize()
     Q_ASSERT(!isInteractiveMoveResize());
     stopDelayedInteractiveMoveResize();
 
-    if (isRequestedFullScreen() && (workspace()->outputs().count() < 2 || !isMovableAcrossScreens())) {
+    if (isRequestedFullScreen() && ((workspace()->outputs().count() < 2 && !workspace()->vrMode()) || !isMovableAcrossScreens())) {
         return false;
     }
     if ((interactiveMoveResizeGravity() == Gravity::None && !isMovableAcrossScreens())
@@ -1084,6 +1084,17 @@ bool Window::startInteractiveMoveResize()
 
 void Window::finishInteractiveMoveResize(bool cancel)
 {
+    handleInteractiveMoveResizeFinished(cancel);
+
+    setElectricBorderMode(std::nullopt);
+    setElectricBorderMaximizing(false);
+    workspace()->outline()->hide();
+    m_interactiveMoveResize.counter++;
+    Q_EMIT interactiveMoveResizeFinished();
+}
+
+void Window::handleInteractiveMoveResizeFinished(bool cancel)
+{
     const bool wasMove = isInteractiveMove();
     leaveInteractiveMoveResize();
 
@@ -1097,7 +1108,14 @@ void Window::finishInteractiveMoveResize(bool cancel)
             setQuickTileMode(m_interactiveMoveResize.initialQuickTileMode, m_interactiveMoveResize.initialGeometry.center());
             setGeometryRestore(m_interactiveMoveResize.initialGeometryRestore);
         }
-    } else if (moveResizeOutput()->uuid() != m_interactiveMoveResize.initialOutputId) {
+        return;
+    }
+
+    if (isVr()) {
+        return;
+    }
+
+    if (moveResizeOutput()->uuid() != m_interactiveMoveResize.initialOutputId) {
         sendToOutput(moveResizeOutput()); // checks rule validity
         const RectF oldScreenArea = m_interactiveMoveResize.initialScreenArea;
         const RectF screenArea = workspace()->clientArea(MaximizeArea, this, moveResizeOutput());
@@ -1113,15 +1131,9 @@ void Window::finishInteractiveMoveResize(bool cancel)
         } else if (auto maximizeMode = std::get_if<MaximizeMode>(&m_electricMode.value())) {
             maximize(*maximizeMode, m_electricGeometryRestore);
         }
-        setElectricBorderMaximizing(false);
     } else if (wasMove && (m_interactiveMoveResize.modifiers & Qt::ShiftModifier)) {
         setQuickTileMode(QuickTileFlag::Custom, m_interactiveMoveResize.anchor);
     }
-    setElectricBorderMode(std::nullopt);
-    workspace()->outline()->hide();
-
-    m_interactiveMoveResize.counter++;
-    Q_EMIT interactiveMoveResizeFinished();
 }
 
 // This function checks if it actually makes sense to perform a restricted move/resize.
@@ -1194,6 +1206,15 @@ void Window::updateInteractiveMoveResize(const QPointF &global, Qt::KeyboardModi
     setInteractiveMoveResizeAnchor(global);
     setInteractiveMoveResizeModifiers(modifiers);
 
+    if (isVr()) {
+        updateInteractiveMoveResizeVr(global, modifiers);
+    } else {
+        updateInteractiveMoveResizeStandard(global, modifiers);
+    }
+}
+
+void Window::updateInteractiveMoveResizeStandard(const QPointF &global, Qt::KeyboardModifiers modifiers)
+{
     const Gravity gravity = interactiveMoveResizeGravity();
     const RectF currentMoveResizeGeom = moveResizeGeometry();
     RectF nextMoveResizeGeom = currentMoveResizeGeom;
@@ -1308,6 +1329,30 @@ void Window::updateInteractiveMoveResize(const QPointF &global, Qt::KeyboardModi
                     workspace()->outline()->hide();
                 }
             }
+        }
+    }
+}
+
+void Window::updateInteractiveMoveResizeVr(const QPointF &global, Qt::KeyboardModifiers modifiers)
+{
+    const RectF currentMoveResizeGeom = moveResizeGeometry();
+    RectF nextMoveResizeGeom = currentMoveResizeGeom;
+
+    if (isInteractiveResize()) {
+        if (isWaitingForInteractiveResizeSync()) {
+            return; // we're still waiting for the client or the timeout
+        }
+
+        nextMoveResizeGeom = nextInteractiveResizeGeometry(global, false);
+        if (nextMoveResizeGeom != currentMoveResizeGeom) {
+            doInteractiveResizeSync(nextMoveResizeGeom);
+            Q_EMIT interactiveMoveResizeStepped(nextMoveResizeGeom);
+        }
+    } else if (isInteractiveMove() && isTransient()) {
+        nextMoveResizeGeom = nextInteractiveMoveGeometry(global, false);
+        if (nextMoveResizeGeom != currentMoveResizeGeom) {
+            move(nextMoveResizeGeom.topLeft());
+            Q_EMIT interactiveMoveResizeStepped(nextMoveResizeGeom);
         }
     }
 }
@@ -1563,7 +1608,7 @@ static std::optional<QPointF> confineInteractiveResize(const RectF &geometry, Gr
     return candidate;
 }
 
-RectF Window::nextInteractiveResizeGeometry(const QPointF &global) const
+RectF Window::nextInteractiveResizeGeometry(const QPointF &global, bool constrained) const
 {
     const RectF currentMoveResizeGeom = moveResizeGeometry();
     RectF nextMoveResizeGeom = moveResizeGeometry();
@@ -1621,9 +1666,11 @@ RectF Window::nextInteractiveResizeGeometry(const QPointF &global) const
     // first resize (without checking constrains), then snap, then check bounds, then check constrains
     calculateMoveResizeGeom();
     // adjust new size to snap to other windows/borders
-    nextMoveResizeGeom = workspace()->adjustWindowSize(this, nextMoveResizeGeom, gravity);
+    if (constrained) {
+        nextMoveResizeGeom = workspace()->adjustWindowSize(this, nextMoveResizeGeom, gravity);
+    }
 
-    if (!isUnrestrictedInteractiveMoveResize()) {
+    if (!isUnrestrictedInteractiveMoveResize() && constrained) {
         if (const auto anchor = confineInteractiveResize(nextMoveResizeGeom, gravity, 100, titlebarThickness())) {
             switch (gravity) {
             case Gravity::TopLeft:
@@ -1675,7 +1722,7 @@ RectF Window::nextInteractiveResizeGeometry(const QPointF &global) const
     return nextMoveResizeGeom;
 }
 
-RectF Window::nextInteractiveMoveGeometry(const QPointF &global) const
+RectF Window::nextInteractiveMoveGeometry(const QPointF &global, bool constrained) const
 {
     const RectF currentMoveResizeGeom = frameGeometry();
     if (!isMovable()) {
@@ -1685,11 +1732,13 @@ RectF Window::nextInteractiveMoveGeometry(const QPointF &global) const
     RectF nextMoveResizeGeom = currentMoveResizeGeom;
     nextMoveResizeGeom.moveTopLeft(QPointF(global.x() - interactiveMoveOffset().x() * currentMoveResizeGeom.width(),
                                            global.y() - interactiveMoveOffset().y() * currentMoveResizeGeom.height()));
-    nextMoveResizeGeom.moveTopLeft(workspace()->adjustWindowPosition(this, nextMoveResizeGeom.topLeft(), isUnrestrictedInteractiveMoveResize()));
+    if (constrained) {
+        nextMoveResizeGeom.moveTopLeft(workspace()->adjustWindowPosition(this, nextMoveResizeGeom.topLeft(), isUnrestrictedInteractiveMoveResize()));
 
-    if (!isUnrestrictedInteractiveMoveResize()) {
-        if (const auto anchor = confineInteractiveMove(nextMoveResizeGeom, 100, titlebarThickness())) {
-            nextMoveResizeGeom.moveTopLeft(anchor.value());
+        if (!isUnrestrictedInteractiveMoveResize()) {
+            if (const auto anchor = confineInteractiveMove(nextMoveResizeGeom, 100, titlebarThickness())) {
+                nextMoveResizeGeom.moveTopLeft(anchor.value());
+            }
         }
     }
 
@@ -4710,6 +4759,10 @@ void Window::setVr(bool set)
 {
     if (m_vr != set) {
         m_vr = set;
+        if (m_vr && isInteractiveMoveResize()) {
+            setElectricBorderMode(std::nullopt);
+            setElectricBorderMaximizing(false);
+        }
         Q_EMIT vrChanged();
     }
 }
