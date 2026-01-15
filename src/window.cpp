@@ -3448,10 +3448,22 @@ RectF Window::moveResizeGeometry() const
     return m_moveResizeGeometry;
 }
 
+bool Window::isOutputChangesBlocked() const
+{
+    // In VR mode, windows should stay on their original output during interactive
+    // move/resize to prevent them from "teleporting" to another virtual screen.
+    // Note: This only affects automatic output changes in setMoveResizeGeometry()
+    // and updateGeometry(). Direct calls to setOutput()/setMoveResizeOutput()
+    // (e.g., from Workspace::desktopResized() when outputs are removed) still work.
+    return workspace()->vrMode() && isInteractiveMoveResize();
+}
+
 void Window::setMoveResizeGeometry(const RectF &geo)
 {
     m_moveResizeGeometry = geo;
-    setMoveResizeOutput(workspace()->outputAt(geo.center()));
+    if (!isOutputChangesBlocked()) {
+        setMoveResizeOutput(workspace()->outputAt(geo.center()));
+    }
 }
 
 LogicalOutput *Window::moveResizeOutput() const
@@ -3969,7 +3981,7 @@ RectF Window::ensureSpecialStateGeometry(const RectF &geometry)
     }
 }
 
-void Window::sendToOutput(LogicalOutput *newOutput)
+void Window::sendToOutput(LogicalOutput *newOutput, bool force)
 {
     newOutput = rules()->checkOutput(newOutput);
     if (isActive()) {
@@ -4003,13 +4015,20 @@ void Window::sendToOutput(LogicalOutput *newOutput)
     newGeom = ensureSpecialStateGeometry(newGeom);
     moveResize(newGeom);
 
+    // When force is true, explicitly set output after moveResize, as automatic
+    // output assignment may be blocked (e.g., during interactive move/resize in VR mode)
+    if (force) {
+        setMoveResizeOutput(newOutput);
+        setOutput(newOutput);
+    }
+
     // move geometry restores to the new output as well
     setFullscreenGeometryRestore(moveToArea(m_fullscreenGeometryRestore, oldScreenArea, screenArea));
     setGeometryRestore(moveToArea(m_maximizeGeometryRestore, oldScreenArea, screenArea));
 
     auto tso = workspace()->ensureStackingOrder(transients());
     for (auto it = tso.constBegin(), end = tso.constEnd(); it != end; ++it) {
-        (*it)->sendToOutput(newOutput);
+        (*it)->sendToOutput(newOutput, force);
     }
 }
 
