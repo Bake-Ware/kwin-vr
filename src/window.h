@@ -1040,7 +1040,7 @@ public:
      * false for Normal, Dialog, Utility and Menu (and Toolbar??? - not yet) TODO
      */
     bool isSpecialWindow() const;
-    void sendToOutput(Output *output);
+    void sendToOutput(Output *output, bool force = false);
     const QKeySequence &shortcut() const
     {
         return _shortcut;
@@ -1636,6 +1636,12 @@ protected:
     {
         return m_interactiveMoveResize.enabled;
     }
+    /**
+     * @returns whether automatic output changes should be blocked.
+     * In VR mode, windows should stay on their original output during interactive
+     * move/resize to prevent them from "teleporting" to another virtual screen.
+     */
+    bool isOutputChangesBlocked() const;
     /**
      * Sets whether the Window is in move resize mode to @p enabled.
      */
