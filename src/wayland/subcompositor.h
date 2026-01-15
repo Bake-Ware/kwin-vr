@@ -54,7 +54,7 @@ private:
 class KWIN_EXPORT SubSurfaceInterface : public QObject
 {
     Q_OBJECT
-
+    Q_PROPERTY(QPoint position READ position NOTIFY positionChanged)
 public:
     ~SubSurfaceInterface() override;
 
