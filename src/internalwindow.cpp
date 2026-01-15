@@ -462,7 +462,9 @@ void InternalWindow::commitGeometry(const QRectF &rect)
         return;
     }
 
-    m_output = workspace()->outputAt(rect.center());
+    if (!isOutputChangesBlocked()) {
+        m_output = workspace()->outputAt(rect.center());
+    }
 
     if (oldClientGeometry != m_clientGeometry) {
         Q_EMIT bufferGeometryChanged(oldClientGeometry);

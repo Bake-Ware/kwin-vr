@@ -244,7 +244,11 @@ void WaylandWindow::updateGeometry(const QRectF &rect)
         return;
     }
 
-    m_output = workspace()->outputAt(rect.center());
+    // While this blocks output change when we move/resize,
+    // it will not prevent output change if the widndow itself resizes.
+    if (!isOutputChangesBlocked()) {
+        m_output = workspace()->outputAt(rect.center());
+    }
     updateWindowRules(Rules::Position | Rules::Size);
 
     if (changedGeometries & WaylandGeometryBuffer) {
