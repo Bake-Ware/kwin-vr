@@ -3605,7 +3605,9 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     m_clientGeometry = clientGeometry;
     m_bufferGeometry = bufferGeometry;
     m_bufferScale = bufferScale;
-    m_output = workspace()->outputAt(frameGeometry.center());
+    if (!isOutputChangesBlocked()) {
+        m_output = workspace()->outputAt(frameGeometry.center());
+    }
 
     if (!areGeometryUpdatesBlocked()) {
         configure(Xcb::toXNative(m_bufferGeometry));
