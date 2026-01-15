@@ -86,7 +86,8 @@ private:
 class KWIN_EXPORT SurfaceInterface : public QObject
 {
     Q_OBJECT
-
+    Q_PROPERTY(QSizeF size READ size NOTIFY sizeChanged)
+    Q_PROPERTY(SubSurfaceInterface *subSurface READ subSurface CONSTANT)
 public:
     explicit SurfaceInterface(CompositorInterface *compositor, wl_resource *resource);
     ~SurfaceInterface() override;

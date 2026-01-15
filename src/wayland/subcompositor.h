@@ -33,7 +33,6 @@ class SubSurfaceInterfacePrivate;
 class KWIN_EXPORT SubCompositorInterface : public QObject
 {
     Q_OBJECT
-
 public:
     explicit SubCompositorInterface(Display *display, QObject *parent = nullptr);
     ~SubCompositorInterface() override;
@@ -54,7 +53,7 @@ private:
 class KWIN_EXPORT SubSurfaceInterface : public QObject
 {
     Q_OBJECT
-
+    Q_PROPERTY(QPoint position READ position NOTIFY positionChanged)
 public:
     ~SubSurfaceInterface() override;
 
