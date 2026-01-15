@@ -593,7 +593,17 @@ class KWIN_EXPORT Window : public QObject
      * Returns whether this window is an input method window.
      * This is only used for Wayland.
      */
-    Q_PROPERTY(bool inputMethod READ isInputMethod)
+    Q_PROPERTY(bool inputMethod READ isInputMethod CONSTANT)
+
+    /**
+     * Returns whether this window is a lock screen window.
+     */
+    Q_PROPERTY(bool lockScreen READ isLockScreen CONSTANT)
+
+    /**
+     * Returns whether this window is a lock screen overlay window.
+     */
+    Q_PROPERTY(bool lockScreenOverlay READ isLockScreenOverlay NOTIFY lockScreenOverlayChanged)
 
     /**
      * A client-provided tag of the window.
@@ -618,6 +628,15 @@ class KWIN_EXPORT Window : public QObject
      */
     Q_PROPERTY(bool vr READ isVr WRITE setVr NOTIFY vrChanged)
 
+    /**
+     * Returns the decoration of this window.
+     */
+    Q_PROPERTY(KDecoration3::Decoration *decoration READ decoration NOTIFY decorationChanged)
+
+    /**
+     * Returns the surface of this window.
+     */
+    Q_PROPERTY(KWin::SurfaceInterface *surface READ surface NOTIFY surfaceChanged)
 public:
     ~Window() override;
 
