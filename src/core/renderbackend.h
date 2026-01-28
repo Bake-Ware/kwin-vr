@@ -12,6 +12,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <memory>
 
 namespace KWin
@@ -130,6 +131,15 @@ public:
 
     virtual bool testImportBuffer(GraphicsBuffer *buffer);
     virtual QHash<uint32_t, QList<uint64_t>> supportedFormats() const;
+
+    QSet<uint32_t> dmabufFeedbackFormatFilter() const;
+    void setDmabufFeedbackFormatFilter(const QList<uint32_t> &formats);
+
+Q_SIGNALS:
+    void dmabufFeedbackFormatFilterChanged();
+
+private:
+    QSet<uint32_t> m_dmabufFeedbackFormatFilter;
 };
 
 } // namespace KWin
