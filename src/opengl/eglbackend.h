@@ -90,6 +90,7 @@ protected:
     void setEglDisplay(EglDisplay *display);
     void initClientExtensions();
     void initWayland();
+    void updateDmabufFormats();
     bool hasClientExtension(const QByteArray &ext) const;
     bool isOpenGLES() const;
     bool createContext(EGLConfig config);

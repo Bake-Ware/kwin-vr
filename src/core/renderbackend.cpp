@@ -188,6 +188,24 @@ QHash<uint32_t, QList<uint64_t>> RenderBackend::supportedFormats() const
     return QHash<uint32_t, QList<uint64_t>>{{DRM_FORMAT_XRGB8888, QList<uint64_t>{DRM_FORMAT_MOD_LINEAR}}};
 }
 
+QSet<uint32_t> RenderBackend::dmabufFeedbackFormatFilter() const
+{
+    return m_dmabufFeedbackFormatFilter;
+}
+
+void RenderBackend::setDmabufFeedbackFormatFilter(const QList<uint32_t> &formats)
+{
+    QSet<uint32_t> formatSet;
+    for (uint32_t format : formats) {
+        formatSet.insert(format);
+    }
+    if (m_dmabufFeedbackFormatFilter == formatSet) {
+        return;
+    }
+    m_dmabufFeedbackFormatFilter = std::move(formatSet);
+    Q_EMIT dmabufFeedbackFormatFilterChanged();
+}
+
 } // namespace KWin
 
 #include "moc_renderbackend.cpp"
