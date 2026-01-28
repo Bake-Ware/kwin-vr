@@ -162,77 +162,98 @@ void EglBackend::initWayland()
             qCWarning(KWIN_OPENGL) << "No render node have been found, not initializing wl-drm";
         }
 
-        const auto formats = m_display->allSupportedDrmFormats();
-        auto filterFormats = [this, &formats](std::optional<uint32_t> bpc, bool withExternalOnlyYUV) {
-            QHash<uint32_t, QList<uint64_t>> set;
-            for (auto it = formats.constBegin(); it != formats.constEnd(); it++) {
-                const auto info = FormatInfo::get(it.key());
-                if (bpc && (!info || bpc != info->bitsPerColor)) {
-                    continue;
-                }
-
-                const bool externalOnlySupported = withExternalOnlyYUV && info && info->yuvConversion();
-                QList<uint64_t> modifiers = externalOnlySupported ? it->allModifiers : it->nonExternalOnlyModifiers;
-
-                if (externalOnlySupported && !modifiers.isEmpty()) {
-                    if (auto yuv = info->yuvConversion()) {
-                        for (auto plane : std::as_const(yuv->plane)) {
-                            const auto planeModifiers = formats.value(plane.format).allModifiers;
-                            modifiers.erase(std::remove_if(modifiers.begin(), modifiers.end(), [&planeModifiers](uint64_t mod) {
-                                return !planeModifiers.contains(mod);
-                            }),
-                                            modifiers.end());
-                        }
-                    }
-                }
-                for (const auto &tranche : std::as_const(m_tranches)) {
-                    if (modifiers.isEmpty()) {
-                        break;
-                    }
-                    const auto trancheModifiers = tranche.formatTable.value(it.key());
-                    for (auto trancheModifier : trancheModifiers) {
-                        modifiers.removeAll(trancheModifier);
-                    }
-                }
-                if (modifiers.isEmpty()) {
-                    continue;
-                }
-                set.insert(it.key(), modifiers);
-            }
-            return set;
-        };
-
-        auto includeShaderConversions = [](QHash<uint32_t, QList<uint64_t>> &&formats) -> QHash<uint32_t, QList<uint64_t>> {
-            for (auto format : s_drmConversions.keys()) {
-                auto &modifiers = formats[format];
-                if (modifiers.isEmpty()) {
-                    modifiers = {DRM_FORMAT_MOD_LINEAR};
-                }
-            }
-            return formats;
-        };
-
-        m_tranches.append({
-            .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
-            .flags = {},
-            .formatTable = filterFormats(10, false),
-        });
-        m_tranches.append({
-            .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
-            .flags = {},
-            .formatTable = filterFormats(8, false),
-        });
-        m_tranches.append({
-            .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
-            .flags = {},
-            .formatTable = includeShaderConversions(filterFormats({}, true)),
-        });
-
-        LinuxDmaBufV1ClientBufferIntegration *dmabuf = waylandServer()->linuxDmabuf();
-        dmabuf->setRenderBackend(this);
-        dmabuf->setSupportedFormatsWithModifiers(m_tranches);
+        updateDmabufFormats();
+        connect(this, &RenderBackend::dmabufFeedbackFormatFilterChanged, this, &EglBackend::updateDmabufFormats);
     }
     waylandServer()->setRenderBackend(this);
+}
+
+void EglBackend::updateDmabufFormats()
+{
+    DrmDevice *scanoutDevice = drmDevice();
+    if (!scanoutDevice) {
+        return;
+    }
+
+    const auto formats = m_display->allSupportedDrmFormats();
+    const auto formatFilter = dmabufFeedbackFormatFilter();
+
+    auto filterFormats = [this, &formats, &formatFilter](std::optional<uint32_t> bpc, bool withExternalOnlyYUV) {
+        QHash<uint32_t, QList<uint64_t>> set;
+        for (auto it = formats.constBegin(); it != formats.constEnd(); it++) {
+            if (!formatFilter.isEmpty() && !formatFilter.contains(it.key())) {
+                continue;
+            }
+
+            const auto info = FormatInfo::get(it.key());
+            if (bpc && (!info || bpc != info->bitsPerColor)) {
+                continue;
+            }
+
+            const bool externalOnlySupported = withExternalOnlyYUV && info && info->yuvConversion();
+            QList<uint64_t> modifiers = externalOnlySupported ? it->allModifiers : it->nonExternalOnlyModifiers;
+
+            if (externalOnlySupported && !modifiers.isEmpty()) {
+                if (auto yuv = info->yuvConversion()) {
+                    for (auto plane : std::as_const(yuv->plane)) {
+                        const auto planeModifiers = formats.value(plane.format).allModifiers;
+                        modifiers.erase(std::remove_if(modifiers.begin(), modifiers.end(), [&planeModifiers](uint64_t mod) {
+                            return !planeModifiers.contains(mod);
+                        }),
+                                        modifiers.end());
+                    }
+                }
+            }
+            for (const auto &tranche : std::as_const(m_tranches)) {
+                if (modifiers.isEmpty()) {
+                    break;
+                }
+                const auto trancheModifiers = tranche.formatTable.value(it.key());
+                for (auto trancheModifier : trancheModifiers) {
+                    modifiers.removeAll(trancheModifier);
+                }
+            }
+            if (modifiers.isEmpty()) {
+                continue;
+            }
+            set.insert(it.key(), modifiers);
+        }
+        return set;
+    };
+
+    auto includeShaderConversions = [&formatFilter](QHash<uint32_t, QList<uint64_t>> &&formats) -> QHash<uint32_t, QList<uint64_t>> {
+        for (auto format : s_drmConversions.keys()) {
+            if (!formatFilter.isEmpty() && !formatFilter.contains(format)) {
+                continue;
+            }
+            auto &modifiers = formats[format];
+            if (modifiers.isEmpty()) {
+                modifiers = {DRM_FORMAT_MOD_LINEAR};
+            }
+        }
+        return formats;
+    };
+
+    m_tranches.clear();
+    m_tranches.append({
+        .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
+        .flags = {},
+        .formatTable = filterFormats(10, false),
+    });
+    m_tranches.append({
+        .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
+        .flags = {},
+        .formatTable = filterFormats(8, false),
+    });
+    m_tranches.append({
+        .device = m_display->renderDevNode().value_or(scanoutDevice->deviceId()),
+        .flags = {},
+        .formatTable = includeShaderConversions(filterFormats({}, true)),
+    });
+
+    LinuxDmaBufV1ClientBufferIntegration *dmabuf = waylandServer()->linuxDmabuf();
+    dmabuf->setRenderBackend(this);
+    dmabuf->setSupportedFormatsWithModifiers(m_tranches);
 }
 
 void EglBackend::initClientExtensions()
