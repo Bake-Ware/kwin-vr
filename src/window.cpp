@@ -4612,9 +4612,30 @@ bool Window::isOffscreenRendering() const
 
 void Window::maybeSendFrameCallback()
 {
-    if (m_windowItem && !m_windowItem->isVisible()) {
+    if (!m_windowItem) {
+        return;
+    }
+
+    bool onAnyOutput = false;
+    const auto geo = frameGeometry();
+    const auto outputs = workspace()->outputs();
+    for (const auto *output : outputs) {
+        // If the window is completely outside all outputs, it won't be rendered,
+        // so we still need to drive frame callbacks to avoid stalling clients.
+        if (output->geometryF().intersects(geo)) {
+            onAnyOutput = true;
+            break;
+        }
+    }
+
+    if (!m_windowItem->isVisible() || !onAnyOutput) {
+        // When not visible or completely outside all outputs, we still need to send
+        // frame callbacks (e.g. VR/offscreen uses), otherwise clients stop committing.
+        // Use the output at the window center instead of window->output(), as output changes
+        // can be blocked in VR mode while geometry moves (output/geometry can temporarily diverge).
+        auto *centerOutput = workspace()->outputAt(frameGeometry().center());
         const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
-        m_windowItem->framePainted(nullptr, output(), nullptr, timestamp);
+        m_windowItem->framePainted(nullptr, centerOutput, nullptr, timestamp);
         // update refresh rate, it might have changed
         m_offscreenFramecallbackTimer.start(1'000'000 / output()->refreshRate());
     }
