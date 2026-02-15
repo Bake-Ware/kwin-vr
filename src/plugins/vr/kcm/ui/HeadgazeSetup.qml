@@ -53,6 +53,22 @@ ColumnLayout {
         KCMUtils.SettingStateBinding {
             configObject: kcm.settings
             settingName: "blockOtherPointerMotion"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "mouseOffsetSensitivity"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "mouseOffsetMaxDegrees"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "gazeReclaimEnabled"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "gazeReclaimThreshold"
         }
     ]
 
@@ -305,13 +321,108 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Controls.CheckBox {
+                id: tBlockOtherPointerMotion
                 text: i18nc("@option:check", "Block pointer motion from other input sources")
                 checked: kcm.settings.blockOtherPointerMotion
                 onToggled: kcm.settings.blockOtherPointerMotion = checked
             }
 
             Kirigami.ContextualHelpButton {
-                toolTipText: xi18nc("@info:tooltip", "When the pointer is grabbed by an application, events will be processed as usual even if this option is enabled. Example: a game can grab the pointer and use relative mouse movement to move the camera.")
+                toolTipText: xi18nc("@info:tooltip", "When enabled, external mouse input is completely ignored. When disabled, external mouse movement offsets the head ray within the viewport. Pointer lock for games works regardless of this setting.")
+            }
+        }
+
+        // Mouse offset settings (visible when blocking is off)
+        ColumnLayout {
+            Layout.alignment: Qt.AlignHCenter
+            visible: !tBlockOtherPointerMotion.checked
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: i18nc("@title:group", "Mouse Cursor Offset")
+                font.italic: true
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: i18nc("@label:slider", "Sensitivity:")
+                }
+
+                Controls.Slider {
+                    id: tMouseSensitivity
+                    from: 0.01
+                    to: 1.0
+                    stepSize: 0.01
+                    value: kcm.settings.mouseOffsetSensitivity
+                    onMoved: kcm.settings.mouseOffsetSensitivity = value
+                    implicitWidth: 150
+                }
+
+                Controls.Label {
+                    text: tMouseSensitivity.value.toFixed(2) + i18nc("@item:valuesuffix", " deg/px")
+                    Layout.minimumWidth: 70
+                }
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: i18nc("@label:slider", "Max Offset:")
+                }
+
+                Controls.Slider {
+                    id: tMouseMaxOffset
+                    from: 1.0
+                    to: 60.0
+                    stepSize: 1.0
+                    value: kcm.settings.mouseOffsetMaxDegrees
+                    onMoved: kcm.settings.mouseOffsetMaxDegrees = value
+                    implicitWidth: 150
+                }
+
+                Controls.Label {
+                    text: Math.round(tMouseMaxOffset.value) + i18nc("@item:valuesuffix", " deg")
+                    Layout.minimumWidth: 50
+                }
+            }
+
+            // Gaze reclaim
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.CheckBox {
+                    id: tGazeReclaim
+                    text: i18nc("@option:check", "Gaze reclaim cursor")
+                    checked: kcm.settings.gazeReclaimEnabled
+                    onToggled: kcm.settings.gazeReclaimEnabled = checked
+                }
+
+                Controls.Slider {
+                    id: tGazeReclaimThreshold
+                    enabled: tGazeReclaim.checked
+                    from: 0.1
+                    to: 1.0
+                    stepSize: 0.05
+                    value: kcm.settings.gazeReclaimThreshold
+                    onMoved: kcm.settings.gazeReclaimThreshold = value
+                    implicitWidth: 120
+                }
+
+                Controls.Label {
+                    text: Math.round(tGazeReclaimThreshold.value * 100) + "%"
+                    Layout.minimumWidth: 40
+                }
+
+                Kirigami.ContextualHelpButton {
+                    toolTipText: xi18nc("@info:tooltip", "When head moves past this percentage of the max offset, the mouse cursor offset snaps back to center.")
+                }
             }
         }
 

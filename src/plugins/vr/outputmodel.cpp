@@ -15,7 +15,14 @@ OutputModel::OutputModel(QObject *parent)
     connect(workspace(), &Workspace::outputAdded, this, &OutputModel::handleOutputAdded);
     connect(workspace(), &Workspace::outputRemoved, this, &OutputModel::handleOutputRemoved);
 
-    m_outputs = workspace()->outputs();
+    // Auto-exclude outputs forced as desktop (they are headset outputs, not content screens)
+    const QString forceDesktop = qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS");
+    if (!forceDesktop.isEmpty()) {
+        m_excludeOutputs = forceDesktop.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    }
+
+    m_allOutputs = workspace()->outputs();
+    rebuildFilteredList();
 }
 
 QHash<int, QByteArray> OutputModel::roleNames() const
@@ -47,19 +54,43 @@ int OutputModel::rowCount(const QModelIndex &parent) const
     return parent.isValid() ? 0 : m_outputs.count();
 }
 
+bool OutputModel::shouldExclude(LogicalOutput *output) const
+{
+    if (m_excludeOutputs.isEmpty())
+        return false;
+    auto *bo = kwinGetBackendOutput(output);
+    return m_excludeOutputs.contains(bo->name());
+}
+
+void OutputModel::rebuildFilteredList()
+{
+    beginResetModel();
+    m_outputs.clear();
+    for (auto *output : m_allOutputs) {
+        if (!shouldExclude(output)) {
+            m_outputs.append(output);
+        }
+    }
+    endResetModel();
+}
+
 void OutputModel::handleOutputAdded(LogicalOutput *output)
 {
-    beginInsertRows(QModelIndex(), m_outputs.count(), m_outputs.count());
-    m_outputs.append(output);
-    endInsertRows();
+    m_allOutputs.append(output);
+    if (!shouldExclude(output)) {
+        beginInsertRows(QModelIndex(), m_outputs.count(), m_outputs.count());
+        m_outputs.append(output);
+        endInsertRows();
+    }
 }
 
 void OutputModel::handleOutputRemoved(LogicalOutput *output)
 {
+    m_allOutputs.removeOne(output);
     const int index = m_outputs.indexOf(output);
-    Q_ASSERT(index != -1);
-
-    beginRemoveRows(QModelIndex(), index, index);
-    m_outputs.removeAt(index);
-    endRemoveRows();
+    if (index != -1) {
+        beginRemoveRows(QModelIndex(), index, index);
+        m_outputs.removeAt(index);
+        endRemoveRows();
+    }
 }

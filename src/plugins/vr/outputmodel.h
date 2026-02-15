@@ -34,8 +34,12 @@ public:
 private:
     void handleOutputAdded(LogicalOutput *output);
     void handleOutputRemoved(LogicalOutput *output);
+    bool shouldExclude(LogicalOutput *output) const;
+    void rebuildFilteredList();
 
     QList<KWin::LogicalOutput *> m_outputs;
+    QList<KWin::LogicalOutput *> m_allOutputs;
+    QStringList m_excludeOutputs;
 };
 
 }

@@ -36,6 +36,21 @@ Item {
         settingName: "windowMode"
     }
 
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "defaultCurvature"
+    }
+
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "vignetteEnabled"
+    }
+
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "vignetteFadeWidth"
+    }
+
     // Centered content wrapper
     ColumnLayout {
         id: innerLayout
@@ -137,6 +152,86 @@ Item {
                 toolTipText: wqt3d + "<br><br>" + wkw3d + "<br><br>" + wkw2d
             }
         }
+
+        // Default Curvature
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.Label {
+                text: i18nc("@label:slider", "Default Curvature:")
+            }
+
+            Controls.Slider {
+                id: tDefaultCurvature
+                from: 0.0
+                to: 6.0
+                stepSize: 0.1
+                value: kcm.settings.defaultCurvature
+                implicitWidth: 200
+            }
+
+            Controls.Label {
+                text: tDefaultCurvature.value.toFixed(1)
+                Layout.minimumWidth: 30
+            }
+
+            Kirigami.ContextualHelpButton {
+                toolTipText: xi18nc("@info:tooltip", "Curvature applied to windows when they enter VR mode. 0 = flat, higher values = more curved.")
+            }
+        }
+
+        // Edge Vignette
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.CheckBox {
+                id: tVignetteEnabled
+                text: i18nc("@option:check", "Edge Vignette")
+                checked: kcm.settings.vignetteEnabled
+                onToggled: kcm.settings.vignetteEnabled = checked
+            }
+
+            Controls.Slider {
+                id: tVignetteFadeWidth
+                enabled: tVignetteEnabled.checked
+                from: 0.02
+                to: 0.5
+                stepSize: 0.01
+                value: kcm.settings.vignetteFadeWidth
+                onMoved: kcm.settings.vignetteFadeWidth = value
+                implicitWidth: 150
+            }
+
+            Controls.Label {
+                text: Math.round(tVignetteFadeWidth.value * 100) + "%"
+                Layout.minimumWidth: 40
+            }
+
+            Kirigami.ContextualHelpButton {
+                toolTipText: xi18nc("@info:tooltip", "Fades edges of the viewport to black to mask parallax clipping artifacts when objects are partially outside the field of view.")
+            }
+        }
+
+        // Shortcuts info
+        Controls.Label {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            text: i18nc("@title:group", "Keyboard Shortcuts")
+            font.bold: true
+            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1
+        }
+
+        Controls.Label {
+            Layout.alignment: Qt.AlignHCenter
+            textFormat: Text.RichText
+            text: i18nc("@info", "VR shortcuts can be configured in <b>Settings → Keyboard → Shortcuts → System Services → VR Interface</b>.<br>" +
+                  "Available shortcuts: Realign Window, Grab Window, Grab All Windows,<br>" +
+                  "Toggle HUD, Toggle Ray, Reset View, Toggle PIP, Open Radial Menu")
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
     }
 
     Binding {
@@ -155,5 +250,11 @@ Item {
         target: kcm.settings
         property: "blend"
         value: tBlend.checked
+    }
+
+    Binding {
+        target: kcm.settings
+        property: "defaultCurvature"
+        value: tDefaultCurvature.value
     }
 }

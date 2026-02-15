@@ -54,11 +54,27 @@ Item {
                             }
 
                             if(xrView.grabbed) {
-                                if(event.key === Qt.Key_Up) {
+                                if(event.modifiers & Qt.ShiftModifier) {
+                                    if(event.key === Qt.Key_Right) {
+                                        xrView.resizeRight = true; event.accepted = true
+                                    } else if(event.key === Qt.Key_Left) {
+                                        xrView.resizeLeft = true; event.accepted = true
+                                    } else if(event.key === Qt.Key_Up) {
+                                        xrView.resizeUp = true; event.accepted = true
+                                    } else if(event.key === Qt.Key_Down) {
+                                        xrView.resizeDown = true; event.accepted = true
+                                    }
+                                } else if(event.key === Qt.Key_Up) {
                                     xrView.pushGrabbed = true
                                     event.accepted = true
                                 } else if(event.key === Qt.Key_Down) {
                                     xrView.pullGrabbed = true
+                                    event.accepted = true
+                                } else if(event.key === Qt.Key_Right) {
+                                    xrView.curveBigger = true
+                                    event.accepted = true
+                                } else if(event.key === Qt.Key_Left) {
+                                    xrView.curveSmaller = true
                                     event.accepted = true
                                 }
                             }
@@ -76,10 +92,20 @@ Item {
                              }
 
                              if(xrView.grabbed) {
-                                 if(event.key === Qt.Key_Up) {
+                                 if(event.key === Qt.Key_Right) {
+                                     xrView.resizeRight = false
+                                     xrView.curveBigger = false
+                                     event.accepted = true
+                                 } else if(event.key === Qt.Key_Left) {
+                                     xrView.resizeLeft = false
+                                     xrView.curveSmaller = false
+                                     event.accepted = true
+                                 } else if(event.key === Qt.Key_Up) {
+                                     xrView.resizeUp = false
                                      xrView.pushGrabbed = false
                                      event.accepted = true
                                  } else if(event.key === Qt.Key_Down) {
+                                     xrView.resizeDown = false
                                      xrView.pullGrabbed = false
                                      event.accepted = true
                                  }
@@ -155,5 +181,9 @@ Item {
         function onTestAction2Triggered() { xrView.die() }
         function onToggleRayTriggered() { xrView.rayEnabled = !xrView.rayEnabled }
         function onResetViewTriggered() { xrView.resetView() }
+        function onTogglePipTriggered() { xrView.togglePip() }
+        function onOpenRadialMenuTriggered() {
+            xrView.toggleRadialMenu()
+        }
     }
 }

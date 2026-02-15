@@ -41,6 +41,8 @@ Q_SIGNALS:
     void testAction2Triggered();
     void toggleRayTriggered();
     void resetViewTriggered();
+    void togglePipTriggered();
+    void openRadialMenuTriggered();
 
 private:
     explicit KWinVrShortcuts(QObject *parent = nullptr);

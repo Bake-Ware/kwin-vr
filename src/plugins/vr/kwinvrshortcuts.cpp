@@ -61,6 +61,16 @@ KWinVrShortcuts::KWinVrShortcuts(QObject *parent)
                      i18nc("@action Reset View", "Reset View"),
                      {Qt::CTRL | Qt::META | Qt::Key_T},
                      &KWinVrShortcuts::resetViewTriggered);
+
+    registerShortcut(QStringLiteral("Toggle PIP Window"),
+                     i18nc("@action Toggle PIP Window", "Toggle PIP Window"),
+                     {Qt::CTRL | Qt::META | Qt::Key_P},
+                     &KWinVrShortcuts::togglePipTriggered);
+
+    registerShortcut(QStringLiteral("Open Radial Menu"),
+                     i18nc("@action Open Radial Menu", "Open Radial Menu"),
+                     {Qt::CTRL | Qt::META | Qt::Key_R},
+                     &KWinVrShortcuts::openRadialMenuTriggered);
 }
 
 void KWinVrShortcuts::registerShortcut(const QString &name, const QString &text,
@@ -70,7 +80,9 @@ void KWinVrShortcuts::registerShortcut(const QString &name, const QString &text,
     auto action = new QAction(this);
     action->setObjectName(name);
     action->setText(text);
+    action->setProperty("componentName", QStringLiteral("kwinvr"));
+    action->setProperty("componentDisplayName", i18nc("@title shortcut component", "VR Interface"));
     KGlobalAccel::self()->setDefaultShortcut(action, {defaultSequence});
-    KGlobalAccel::self()->setShortcut(action, {});
+    KGlobalAccel::self()->setShortcut(action, {defaultSequence});
     connect(action, &QAction::triggered, this, signal);
 }

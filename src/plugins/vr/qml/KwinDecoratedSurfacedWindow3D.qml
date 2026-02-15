@@ -23,6 +23,7 @@ Node {
     visible: root.client && !root.client.minimized
 
     property real ppu: 20
+    property real curvature: 0
     property Node grabHandle: root
     property zMargins itemDepth
     property real zOffsetGlobal: 0
@@ -49,6 +50,7 @@ Node {
         id: surfacedWindow
         KwinSurfacedWindow3D {
             ppu: root.ppu
+            curvature: root.curvature
             grabHandle: root.grabHandle
             client: root.client
             position: root.innerWindowPosition

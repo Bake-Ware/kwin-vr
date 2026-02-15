@@ -41,6 +41,33 @@ XrView {
     property alias currentMovingResizingWindow: focusTracking.currentMovingResizingWindow
     property alias pullGrabbed: pickRay.pullGrabbed
     property alias pushGrabbed: pickRay.pushGrabbed
+    property alias curveBigger: pickRay.curveBigger
+    property alias curveSmaller: pickRay.curveSmaller
+    property alias resizeRight: pickRay.resizeRight
+    property alias resizeLeft: pickRay.resizeLeft
+    property alias resizeUp: pickRay.resizeUp
+    property alias resizeDown: pickRay.resizeDown
+
+    // PIP state — pipTarget is the KwinApplicationWindow delegate node
+    property Node pipTarget: null
+    property vector3d pipPosition: Qt.vector3d(15, -10, -30)
+
+    function togglePip(): void {
+        if (pipTarget) {
+            // Unpin
+            pipTarget = null
+        } else {
+            const target = focusTracking.hoveredGrabHandle
+            if (!target) return
+            // Place PIP in bottom-right of camera view (camera-local coords)
+            // Use the pick ray's forward to pick a sensible corner
+            const rayFwd = pickRay.forward
+            const xSign = rayFwd.x >= 0 ? 1 : -1
+            const ySign = rayFwd.y >= 0 ? 1 : -1
+            pipPosition = Qt.vector3d(xSign * 15, ySign * -10, -30)
+            pipTarget = target
+        }
+    }
 
     property bool test1: false
     onTest1Changed: {
@@ -64,7 +91,50 @@ XrView {
     property KwinVrInputFilter kwinInputFilter
 
     RelativeMotionBlocker {
-        allowedDevice: KWinVRConfig.blockOtherPointerMotion ? kwinInput : null
+        allowedDevice: kwinInput
+    }
+
+    VrPointerOffset {
+        id: pointerOffset
+        enabled: !KWinVRConfig.blockOtherPointerMotion
+        vrDevice: kwinInput
+        sensitivity: KWinVRConfig.mouseOffsetSensitivity
+        maxOffset: KWinVRConfig.mouseOffsetMaxDegrees
+    }
+
+    // Gaze reclaim: snap pointer offset back to center when head moves past threshold
+    QtObject {
+        id: gazeReclaim
+        property quaternion referenceRotation
+        property bool hasReference: false
+    }
+    Connections {
+        target: cam
+        enabled: KWinVRConfig.gazeReclaimEnabled && pointerOffset.enabled
+                 && (pointerOffset.offsetX !== 0 || pointerOffset.offsetY !== 0)
+        function onSceneRotationChanged() {
+            if (!gazeReclaim.hasReference) {
+                gazeReclaim.referenceRotation = cam.sceneRotation
+                gazeReclaim.hasReference = true
+                return
+            }
+            const delta = KwinVrHelpers.getRotationDelta(gazeReclaim.referenceRotation, cam.sceneRotation)
+            const euler = delta.toEulerAngles()
+            const headMoveDeg = Math.sqrt(euler.x * euler.x + euler.y * euler.y)
+            const threshold = KWinVRConfig.gazeReclaimThreshold * KWinVRConfig.mouseOffsetMaxDegrees
+            if (headMoveDeg > threshold) {
+                pointerOffset.reset()
+            }
+        }
+    }
+    Connections {
+        target: pointerOffset
+        function onOffsetChanged() {
+            if (pointerOffset.offsetX === 0 && pointerOffset.offsetY === 0) {
+                gazeReclaim.referenceRotation = cam.sceneRotation
+                gazeReclaim.hasReference = true
+            }
+        }
     }
 
     function radialMenuActivate(pressed: bool): bool {
@@ -79,6 +149,14 @@ XrView {
         } else {
             radialMenuLoader.close()
             return false;
+        }
+    }
+
+    function toggleRadialMenu(): void {
+        if (radialMenuLoader.active) {
+            radialMenuLoader.close()
+        } else {
+            radialMenuLoader.active = true
         }
     }
 
@@ -170,6 +248,11 @@ XrView {
 
             DirectionalLight {}
 
+            VrVignette {
+                visible: KWinVRConfig.vignetteEnabled
+                fadeWidth: KWinVRConfig.vignetteFadeWidth
+            }
+
             /* Draw OSD windows in front of user */
             VrOsdWindows {
                 windowModel: applicationWindowsRepeater.windowDataModel
@@ -180,6 +263,8 @@ XrView {
             Xray {
                 id: pickRay
                 camera: cam
+                pointerOffsetX: pointerOffset.offsetX
+                pointerOffsetY: pointerOffset.offsetY
                 vrRay: VrRay {
                     depthBias: -10000 // should be always visible
                 }
@@ -394,11 +479,44 @@ XrView {
                     }
 
                     function registerForSpaceAllocator() {
-                        spaceAllocator.registerObject(kwinAppWindow)
+                        if (spaceAllocator)
+                            spaceAllocator.registerObject(kwinAppWindow)
                     }
-                    Component.onCompleted: Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                    Component.onCompleted: {
+                        if (KwinVrHelpers.hasVrPose(client)) {
+                            client.vr = true
+                            Qt.callLater(function() {
+                                if (!kwinAppWindow) return
+                                kwinAppWindow.position = KwinVrHelpers.vrPosePosition(client)
+                                kwinAppWindow.rotation = KwinVrHelpers.vrPoseRotation(client)
+                                kwinAppWindow.curvature = KwinVrHelpers.vrPoseCurvature(client)
+                            })
+                        } else {
+                            Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        }
+                    }
+                    Component.onDestruction: {
+                        if (client.vr)
+                            KwinVrHelpers.saveVrPose(client, position, rotation, curvature)
+                    }
 
                     states: [
+                        State {
+                            name: "pip"
+                            when: kwinAppWindow === xrView.pipTarget
+                            PropertyChanges {
+                                kwinAppWindow {
+                                    parent: cam
+                                    grabHandle: kwinAppWindow
+                                    zOffsetGlobal: 0
+                                    // Position in camera-local space: +X=right, +Y=up, -Z=forward
+                                    position: xrView.pipPosition
+                                    // Identity rotation — #Rectangle faces +Z (toward camera origin)
+                                    eulerRotation: Qt.vector3d(0, 0, 0)
+                                    scale: Qt.vector3d(0.25, 0.25, 0.25)
+                                }
+                            }
+                        },
                         State {
                             name: "vr"
                             when: kwinAppWindow.client.vr
@@ -410,7 +528,11 @@ XrView {
                                 }
                             }
                             StateChangeScript {
-                                script: followMode.registerObject(kwinAppWindow)
+                                script: {
+                                    followMode.registerObject(kwinAppWindow)
+                                    if (!KwinVrHelpers.hasVrPose(kwinAppWindow.client))
+                                        kwinAppWindow.curvature = KWinVRConfig.defaultCurvature
+                                }
                             }
                         },
                         State {

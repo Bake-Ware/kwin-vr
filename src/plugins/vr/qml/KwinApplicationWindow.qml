@@ -13,6 +13,7 @@ import QtQuick3D
  */
 KwinTransientWindow {
     id: root
+    property real curvature: 0
     grabHandle: root
     nextComponent: KwinTransientWindowRecursive {
         ppu: root.ppu

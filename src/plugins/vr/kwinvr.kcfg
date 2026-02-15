@@ -66,6 +66,10 @@
       <label>Align windows with world up direction (horizon) in follow mode</label>
       <default>false</default>
     </entry>
+    <entry name="autoStart" type="Bool">
+      <label>Automatically start VR mode on plugin load</label>
+      <default>false</default>
+    </entry>
     <entry name="xrTestEnabled" type="Bool">
       <label>Run OpenXR test before starting VR mode</label>
       <default>true</default>
@@ -182,6 +186,44 @@
     <entry name="blockOtherPointerMotion" type="Bool">
       <label>Block pointer motion from other input sources</label>
       <default>true</default>
+    </entry>
+    <entry name="defaultCurvature" type="Double">
+      <label>Default curvature for VR windows</label>
+      <default>0.0</default>
+      <min>0.0</min>
+      <max>6.0</max>
+    </entry>
+    <entry name="mouseOffsetSensitivity" type="Double">
+      <label>Mouse offset sensitivity (degrees per pixel)</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="mouseOffsetMaxDegrees" type="Double">
+      <label>Maximum mouse offset from center (degrees)</label>
+      <default>20.0</default>
+      <min>1.0</min>
+      <max>60.0</max>
+    </entry>
+    <entry name="gazeReclaimEnabled" type="Bool">
+      <label>Snap cursor back when gaze moves away</label>
+      <default>true</default>
+    </entry>
+    <entry name="gazeReclaimThreshold" type="Double">
+      <label>Gaze reclaim threshold (fraction of max offset)</label>
+      <default>0.8</default>
+      <min>0.1</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="vignetteEnabled" type="Bool">
+      <label>Enable edge vignette to mask frustum clipping</label>
+      <default>true</default>
+    </entry>
+    <entry name="vignetteFadeWidth" type="Double">
+      <label>Vignette fade width (fraction of viewport from each edge)</label>
+      <default>0.15</default>
+      <min>0.02</min>
+      <max>0.5</max>
     </entry>
   </group>
 
