@@ -14,6 +14,7 @@
 #include <QDBusConnection>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QTimer>
 
 #include "input.h"
 #include "pointer_input.h"
@@ -64,6 +65,20 @@ KwinVr::KwinVr()
             stop();
         }
     }, Qt::QueuedConnection);
+
+    auto *cfg = KWinVRConfigWrapper::instance();
+    cfg->load();
+    qWarning() << "KwinVr: autoStart =" << cfg->autoStart()
+               << "width =" << cfg->width()
+               << "height =" << cfg->height();
+    if (cfg->autoStart()) {
+        QTimer::singleShot(15000, this, [this] {
+            if (!m_active) {
+                qWarning() << "KwinVr: Auto-starting VR mode now";
+                setVrActive(true);
+            }
+        });
+    }
 }
 
 KwinVr::~KwinVr()
@@ -108,11 +123,8 @@ void KwinVr::setVrActive(bool active)
         m_active = true;
         Q_EMIT vrActiveChanged();
 
-        if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
-            m_xrTest.start();
-        } else {
-            start();
-        }
+        // XR test disabled - go straight to start
+        start();
     } else {
         stop();
         closeNotification();

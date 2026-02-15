@@ -20,6 +20,7 @@ Node {
     /* KWin::SurfaceInterface */
     required property QtObject surface
 
+    property real curvature: 0
     property real ppu: 20
     property alias grabHandle: model.grabHandle
     property alias pickable: model.pickable
@@ -126,6 +127,11 @@ Node {
         sourceComponent: kws.uvTexture ? yuvMaterial : rgbMaterial
     }
 
+    CurvedWindowGeometry {
+        id: curvedGeom
+        curvature: root.curvature
+    }
+
     Model {
         id: model
         property Node grabHandle: root
@@ -154,12 +160,12 @@ Node {
 
         readonly property var onPick: useGeometryPick ? onPickReal : onPickAlways
 
-        source: "#Rectangle"
-        // materials: kws.uvTexture ? yuvMaterial : rgbMaterial
+        source: root.curvature > 0 ? "" : "#Rectangle"
+        geometry: root.curvature > 0 ? curvedGeom : null
         materials: materialLoader.item
 
         scale: Qt.vector3d(root.surfaceSize.width/100/root.ppu,
                            root.surfaceSize.height/100/root.ppu,
-                           root.surfaceDepth/100)
+                           root.curvature > 0 ? root.surfaceSize.width/100/root.ppu : root.surfaceDepth/100)
     }
 }

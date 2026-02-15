@@ -49,6 +49,7 @@ public:
     QPlatformAccessibility *accessibility() const override;
     QPlatformNativeInterface *nativeInterface() const override;
     QPlatformInputContext *inputContext() const override;
+    QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 
     QPlatformServices *services() const override;
     QPlatformClipboard *clipboard() const override;

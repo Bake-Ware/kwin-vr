@@ -348,6 +348,13 @@ bool DrmConnector::isCrtcSupported(DrmCrtc *crtc) const
 
 bool DrmConnector::isNonDesktop() const
 {
+    // Override: treat VR headsets as desktop outputs so KWin can composite to them
+    if (const auto env = qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS"); !env.isEmpty()) {
+        const auto names = env.split(',');
+        if (names.contains(connectorName())) {
+            return false;
+        }
+    }
     return nonDesktop.isValid() && nonDesktop.value() == 1;
 }
 

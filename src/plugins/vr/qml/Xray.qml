@@ -17,8 +17,10 @@ Model {
     x: KWinVRConfig.headgazePositionX
     y: KWinVRConfig.headgazePositionY
     z: KWinVRConfig.headgazePositionZ
-    eulerRotation.x: KWinVRConfig.headgazeRotationVertical
-    eulerRotation.y: KWinVRConfig.headgazeRotationHorizontal
+    property real pointerOffsetX: 0
+    property real pointerOffsetY: 0
+    eulerRotation.x: KWinVRConfig.headgazeRotationVertical + pointerOffsetY
+    eulerRotation.y: KWinVRConfig.headgazeRotationHorizontal - pointerOffsetX
     property real defaultLength: 300
 
     property color idleColor: KWinVRConfig.headgazeColor
@@ -33,12 +35,24 @@ Model {
     property relativePose grabbedObjectPose
     property bool pullGrabbed: false
     property bool pushGrabbed: false
+    property bool curveBigger: false
+    property bool curveSmaller: false
+    property bool resizeRight: false
+    property bool resizeLeft: false
+    property bool resizeUp: false
+    property bool resizeDown: false
 
     property bool enabled: true
 
     onGrabbedObjectChanged: {
         pullGrabbed = false
         pushGrabbed = false
+        curveBigger = false
+        curveSmaller = false
+        resizeRight = false
+        resizeLeft = false
+        resizeUp = false
+        resizeDown = false
     }
 
     FrameAnimation {
@@ -48,6 +62,30 @@ Model {
     FrameAnimation {
         running: root.pushGrabbed
         onTriggered: root.grabMove(frameTime * 90 * -1)
+    }
+    FrameAnimation {
+        running: root.curveBigger && root.grabbedObject
+        onTriggered: root.grabCurve(frameTime * 2.0)
+    }
+    FrameAnimation {
+        running: root.curveSmaller && root.grabbedObject
+        onTriggered: root.grabCurve(frameTime * -2.0)
+    }
+    FrameAnimation {
+        running: root.resizeRight && root.grabbedObject
+        onTriggered: root.grabResize(frameTime * 500, 0)
+    }
+    FrameAnimation {
+        running: root.resizeLeft && root.grabbedObject
+        onTriggered: root.grabResize(frameTime * -500, 0)
+    }
+    FrameAnimation {
+        running: root.resizeUp && root.grabbedObject
+        onTriggered: root.grabResize(0, frameTime * 500)
+    }
+    FrameAnimation {
+        running: root.resizeDown && root.grabbedObject
+        onTriggered: root.grabResize(0, frameTime * -500)
     }
 
     /* Set parent to us for proper projection */
@@ -72,11 +110,29 @@ Model {
     }
 
     function release(): void {
+        if (grabbedObject?.client?.vr)
+            KwinVrHelpers.saveVrPose(grabbedObject.client,
+                grabbedObject.position, grabbedObject.rotation,
+                grabbedObject.curvature ?? 0)
         grabbedObject = null
     }
 
     function grabMove(value: real): void {
         root.grabbedObjectPose.position = root.grabbedObjectPose.position.plus(Qt.vector3d(0,0, value))
+    }
+
+    function grabCurve(value: real): void {
+        if (root.grabbedObject && root.grabbedObject.curvature !== undefined)
+            root.grabbedObject.curvature = Math.max(0, Math.min(6, root.grabbedObject.curvature + value))
+    }
+
+    function grabResize(dw: real, dh: real): void {
+        if (!root.grabbedObject?.client) return
+        const geo = root.grabbedObject.client.frameGeometry
+        root.grabbedObject.client.frameGeometry = Qt.rect(
+            geo.x, geo.y,
+            Math.max(100, geo.width + dw),
+            Math.max(100, geo.height + dh))
     }
 
     function grabbedObjectDistance(): real {

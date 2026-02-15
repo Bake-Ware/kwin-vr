@@ -81,6 +81,7 @@ qt6_add_qml_module(vr
         qml/WindowTextureMaterial.qml
 
         qml/KwinShadowModel.qml
+        qml/VrVignette.qml
 
     SOURCES
         main.cpp
@@ -94,6 +95,7 @@ qt6_add_qml_module(vr
         kwinwindowdecoration.h kwinwindowdecoration.cpp
         kwinshadowitem.h kwinshadowitem.cpp
         shadowgeometry.h shadowgeometry.cpp
+        curvedwindowgeometry.h curvedwindowgeometry.cpp
         decorationgeometry.h decorationgeometry.cpp
         geometrytypes.h
         zstacker.h zstacker.cpp
@@ -110,6 +112,7 @@ qt6_add_qml_module(vr
 
         kwininternalwindow.h kwininternalwindow.cpp
         relativemotionblocker.h relativemotionblocker.cpp
+        vrpointeroffset.h vrpointeroffset.cpp
         vrfollowmode.h vrfollowmode.cpp
         kwintoqquick3dinputbridge.h kwintoqquick3dinputbridge.cpp
         textureprovideritem.h textureprovideritem.cpp
@@ -121,6 +124,8 @@ qt6_add_qml_module(vr
         shaders/yuv.frag
         shaders/window_texture.vert
         shaders/window_texture.frag
+        shaders/vignette.vert
+        shaders/vignette.frag
     )
 
 kconfig_add_kcfg_files(vr GENERATE_MOC kwinvrconfig.kcfgc)

@@ -88,18 +88,43 @@ void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale)
 {
     OutputConfiguration config;
     config.changeSet(o)->enabled = true;
-    auto cnt = Workspace::self()->outputs().count();
-
     config.changeSet(o)->scale = scale;
+    config.changeSet(o)->pos = QPoint(0, 0);
 
-    if (cnt == 1 && kwinGetBackendOutput(Workspace::self()->outputs()[0]) == o) {
-        qWarning() << "VR output is the last active output, setting 0,0";
-        config.changeSet(o)->pos = QPoint(0, 0);
-    } else {
-        qWarning() << "Setting VR output pos to 2000,0";
-        config.changeSet(o)->pos = QPoint(3000, 3000);
+    // Move headset outputs (from KWIN_FORCE_DESKTOP_OUTPUTS) far off-screen
+    // so window tiling/snapping doesn't use them as targets
+    const QString forceDesktop = qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS");
+    QStringList headsetOutputNames;
+    if (!forceDesktop.isEmpty()) {
+        headsetOutputNames = forceDesktop.split(QLatin1Char(','), Qt::SkipEmptyParts);
     }
-    Workspace::self()->applyOutputConfiguration(config);
+
+    // Build output order with VR virtual screen first (primary)
+    QList<Output *> newOrder;
+    const auto outputs = Workspace::self()->outputs();
+
+    for (auto *output : outputs) {
+        auto *bo = kwinGetBackendOutput(output);
+        if (bo == o) {
+            // This is the VR virtual screen — already configured above, make it first
+            newOrder.prepend(output);
+        } else if (headsetOutputNames.contains(bo->name())) {
+            // This is a headset output — move it far off-screen
+            config.changeSet(bo)->pos = QPoint(32000, 32000);
+            newOrder.append(output);
+            qWarning() << "VR: moved headset output" << bo->name() << "off-screen";
+        } else {
+            newOrder.append(output);
+        }
+    }
+
+    qWarning() << "VR: activating virtual output at (0,0) as primary";
+    Workspace::self()->applyOutputConfiguration(config, newOrder);
+
+    // Set virtual output as active so new windows open on it, not the headset
+    if (!newOrder.isEmpty()) {
+        Workspace::self()->setActiveOutput(newOrder.first());
+    }
 }
 
 SurfaceInterface *KwinVrHelpers::winGetSurf(Window *window)
@@ -634,4 +659,51 @@ QQuaternion KwinVrHelpers::relativeRotationToRelativeRotation(const QQuick3DNode
 
     const QQuaternion currentSceneRotation = currentNode->sceneRotation();
     return getRotationDelta(newNode->sceneRotation(), currentSceneRotation * rotation);
+}
+
+void KwinVrHelpers::saveVrPose(QObject *window, const QVector3D &position,
+                                const QQuaternion &rotation, float curvature)
+{
+    if (!window)
+        return;
+    window->setProperty("_vrPosX", position.x());
+    window->setProperty("_vrPosY", position.y());
+    window->setProperty("_vrPosZ", position.z());
+    window->setProperty("_vrRotW", rotation.scalar());
+    window->setProperty("_vrRotX", rotation.x());
+    window->setProperty("_vrRotY", rotation.y());
+    window->setProperty("_vrRotZ", rotation.z());
+    window->setProperty("_vrCurvature", curvature);
+    window->setProperty("_vrHasPose", true);
+}
+
+bool KwinVrHelpers::hasVrPose(QObject *window)
+{
+    return window && window->property("_vrHasPose").toBool();
+}
+
+QVector3D KwinVrHelpers::vrPosePosition(QObject *window)
+{
+    if (!window)
+        return {};
+    return QVector3D(window->property("_vrPosX").toFloat(),
+                     window->property("_vrPosY").toFloat(),
+                     window->property("_vrPosZ").toFloat());
+}
+
+QQuaternion KwinVrHelpers::vrPoseRotation(QObject *window)
+{
+    if (!window)
+        return {};
+    return QQuaternion(window->property("_vrRotW").toFloat(),
+                       window->property("_vrRotX").toFloat(),
+                       window->property("_vrRotY").toFloat(),
+                       window->property("_vrRotZ").toFloat());
+}
+
+float KwinVrHelpers::vrPoseCurvature(QObject *window)
+{
+    if (!window)
+        return 0.0f;
+    return window->property("_vrCurvature").toFloat();
 }

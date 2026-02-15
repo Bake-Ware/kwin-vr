@@ -105,6 +105,10 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
     if (window->windowType() == WindowType::OnScreenDisplay)
         return false;
 
+    // Exclude the VR compositor window to prevent recursive rendering
+    if (window->resourceClass() == QLatin1String("openxr"))
+        return false;
+
     // Qt maintenance window had isTransient() == true, but transientFor() == nullptr
     // if(window->isTransient())
     if (window->transientFor())

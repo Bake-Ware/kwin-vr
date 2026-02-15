@@ -379,6 +379,14 @@ public:
                                                                       const QQuick3DNode *newNode,
                                                                       const QQuaternion &rotation);
 
+    /* VR pose persistence */
+    Q_INVOKABLE static void saveVrPose(QObject *window, const QVector3D &position,
+                                        const QQuaternion &rotation, float curvature);
+    Q_INVOKABLE static bool hasVrPose(QObject *window);
+    Q_INVOKABLE static QVector3D vrPosePosition(QObject *window);
+    Q_INVOKABLE static QQuaternion vrPoseRotation(QObject *window);
+    Q_INVOKABLE static float vrPoseCurvature(QObject *window);
+
 Q_SIGNALS:
     void screenLockedChanged();
     void forcedFocusWindowChanged();

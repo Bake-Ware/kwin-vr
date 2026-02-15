@@ -10,6 +10,7 @@ target_sources(KWinQpaPlugin PRIVATE
     platformcursor.cpp
     screen.cpp
     swapchain.cpp
+    vulkaninstance.cpp
     window.cpp
 )
 

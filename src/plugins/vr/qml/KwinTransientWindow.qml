@@ -20,6 +20,7 @@ Node {
     property real ppu: 20
     property Node grabHandle
 
+    property real curvature: 0
     property real normalWindowFlexibleBottom: 0
     property real zOffsetGlobal: 0
 
@@ -41,6 +42,7 @@ Node {
         KwinDecoratedSurfacedWindow3D {
             client: root.client
             ppu: root.ppu
+            curvature: root.curvature
             grabHandle: root.grabHandle
             zOffsetGlobal: root.zOffsetGlobal
         }

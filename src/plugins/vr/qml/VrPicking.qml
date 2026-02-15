@@ -32,6 +32,8 @@ QtObject {
     readonly property Node hoveredGrabHandle: hoveredObject?.grabHandle ?? null
 
     function updateAllPicks(): void {
+        if (!root.xrView || !root.xrView.environment)
+            return
         root.lastAllPicks = root.xrView.rayPickAll(root.xray.scenePosition, root.xray.forward)
         processAllPicks()
     }
@@ -64,9 +66,23 @@ QtObject {
         root.hoveredObject = null
     }
 
+    property bool rendererReady: false
+
+    readonly property Timer rendererCheck: Timer {
+        interval: 500
+        running: true
+        repeat: true
+        onTriggered: {
+            if (root.xrView && root.xrView.environment) {
+                root.rendererReady = true
+                stop()
+            }
+        }
+    }
+
     readonly property Connections pickingConnections: Connections {
         target: root.xray
-        enabled: root.xray.enabled
+        enabled: root.xray.enabled && root.rendererReady
         function onSceneTransformChanged(): void {
             root.updateAllPicks()
         }

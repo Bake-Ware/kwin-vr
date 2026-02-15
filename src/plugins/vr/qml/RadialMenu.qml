@@ -141,6 +141,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: root.buttonLabels[index]
                         color: "white"
+                        font.family: "sans-serif"
                         font.pixelSize: 14
                         font.bold: true
                         rotation: -buttonContainer.rotation

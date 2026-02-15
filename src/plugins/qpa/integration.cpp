@@ -12,6 +12,7 @@
 #include "backingstore.h"
 #include "clipboard.h"
 #include "eglplatformcontext.h"
+#include "vulkaninstance.h"
 #include "inputmethod.h"
 #include "internalinputmethodcontext.h"
 #include "logging.h"
@@ -251,6 +252,11 @@ QPlatformServices *Integration::services() const
 QPlatformClipboard *Integration::clipboard() const
 {
     return m_clipboard.get();
+}
+
+QPlatformVulkanInstance *Integration::createPlatformVulkanInstance(QVulkanInstance *instance) const
+{
+    return new VulkanInstance(instance);
 }
 
 }
