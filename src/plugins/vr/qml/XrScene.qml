@@ -48,23 +48,58 @@ XrView {
     property alias resizeUp: pickRay.resizeUp
     property alias resizeDown: pickRay.resizeDown
 
-    // PIP state — pipTarget is the KwinApplicationWindow delegate node
+    // PIP state — HUD-style: parented to camera at comfortable distance,
+    // always renders on top via zOffsetGlobal depth bias
     property Node pipTarget: null
-    property vector3d pipPosition: Qt.vector3d(15, -10, -30)
+    property vector3d pipPosition: Qt.vector3d(12, -8, -30)
+    property bool pipHasPosition: false
+    readonly property real pipDistance: xrView.distance * 0.7
+    readonly property real pipScale: 0.25
+    property bool pipGrabActive: false
+    readonly property bool pipGrabbed: pipGrabActive && pipTarget !== null
+    property real pipSavedCurvature: 0
+    property real pipCurvature: 0
+
+    // PIP arrow-key movement (camera-local)
+    property bool pipMoveRight: false
+    property bool pipMoveLeft: false
+    property bool pipMoveUp: false
+    property bool pipMoveDown: false
+
+    FrameAnimation {
+        running: xrView.pipMoveRight
+        onTriggered: { var p = xrView.pipPosition; p.x += frameTime * 30; xrView.pipPosition = p }
+    }
+    FrameAnimation {
+        running: xrView.pipMoveLeft
+        onTriggered: { var p = xrView.pipPosition; p.x -= frameTime * 30; xrView.pipPosition = p }
+    }
+    FrameAnimation {
+        running: xrView.pipMoveUp
+        onTriggered: { var p = xrView.pipPosition; p.y += frameTime * 30; xrView.pipPosition = p }
+    }
+    FrameAnimation {
+        running: xrView.pipMoveDown
+        onTriggered: { var p = xrView.pipPosition; p.y -= frameTime * 30; xrView.pipPosition = p }
+    }
 
     function togglePip(): void {
         if (pipTarget) {
-            // Unpin
+            // Save PIP position/curvature for next PIP session
+            pipPosition = pipTarget.position
+            pipCurvature = pipTarget.curvature ?? 0
+            // Restore original window curvature
+            pipTarget.curvature = pipSavedCurvature
+            pipGrabActive = false
             pipTarget = null
         } else {
             const target = focusTracking.hoveredGrabHandle
             if (!target) return
-            // Place PIP in bottom-right of camera view (camera-local coords)
-            // Use the pick ray's forward to pick a sensible corner
-            const rayFwd = pickRay.forward
-            const xSign = rayFwd.x >= 0 ? 1 : -1
-            const ySign = rayFwd.y >= 0 ? 1 : -1
-            pipPosition = Qt.vector3d(xSign * 15, ySign * -10, -30)
+            pipSavedCurvature = target.curvature ?? 0
+            if (!pipHasPosition) {
+                pipPosition = Qt.vector3d(12, -8, -pipDistance)
+                pipHasPosition = true
+            }
             pipTarget = target
         }
     }
@@ -176,6 +211,10 @@ XrView {
     }
 
     function release(): bool {
+        if (pipGrabActive) {
+            pipGrabActive = false
+            return true
+        }
         if(pickRay.grabbedObject) {
             pickRay.release()
             return true;
@@ -185,10 +224,19 @@ XrView {
     }
 
     function grab(grabAll: bool): void {
-        if(pickRay.grabbedObject)
+        if (pipGrabActive) {
+            pipGrabActive = false
+            return
+        }
+        if(pickRay.grabbedObject) {
             pickRay.release()
-        else
-            pickRay.grab(grabAll ? allWindowsGrabHandle : focusTracking.hoveredGrabHandle)
+        } else {
+            const target = grabAll ? allWindowsGrabHandle : focusTracking.hoveredGrabHandle
+            if (target)
+                pickRay.grab(target)
+            else if (pipTarget)
+                pipGrabActive = true
+        }
     }
 
     property alias desktopOrDockHovered: focusTracking.desktopOrDockHovered
@@ -500,6 +548,35 @@ XrView {
                             KwinVrHelpers.saveVrPose(client, position, rotation, curvature)
                     }
 
+                    VrWindowControls {
+                        id: windowControls
+                        visible: kwinAppWindow.client.vr
+                                 && kwinAppWindow !== xrView.pipTarget
+                                 && focusTracking.hoveredGrabHandle === kwinAppWindow
+                        ppu: kwinAppWindow.ppu
+                        client: kwinAppWindow.client
+                        windowNode: kwinAppWindow
+                        curvature: kwinAppWindow.curvature
+                        onGrabRequested: pickRay.grab(kwinAppWindow)
+                        onCurveChanged: (delta) => {
+                            kwinAppWindow.curvature = Math.max(0, Math.min(6, kwinAppWindow.curvature + delta))
+                        }
+                        onPipRequested: {
+                            // Save current PIP state if switching windows
+                            if (xrView.pipTarget) {
+                                xrView.pipPosition = xrView.pipTarget.position
+                                xrView.pipCurvature = xrView.pipTarget.curvature ?? 0
+                                xrView.pipTarget.curvature = xrView.pipSavedCurvature
+                            }
+                            xrView.pipSavedCurvature = kwinAppWindow.curvature ?? 0
+                            if (!xrView.pipHasPosition) {
+                                xrView.pipPosition = Qt.vector3d(12, -8, -xrView.pipDistance)
+                                xrView.pipHasPosition = true
+                            }
+                            xrView.pipTarget = kwinAppWindow
+                        }
+                    }
+
                     states: [
                         State {
                             name: "pip"
@@ -508,12 +585,11 @@ XrView {
                                 kwinAppWindow {
                                     parent: cam
                                     grabHandle: kwinAppWindow
-                                    zOffsetGlobal: 0
-                                    // Position in camera-local space: +X=right, +Y=up, -Z=forward
+                                    zOffsetGlobal: 100
                                     position: xrView.pipPosition
-                                    // Identity rotation — #Rectangle faces +Z (toward camera origin)
                                     eulerRotation: Qt.vector3d(0, 0, 0)
-                                    scale: Qt.vector3d(0.25, 0.25, 0.25)
+                                    scale: Qt.vector3d(xrView.pipScale, xrView.pipScale, xrView.pipScale)
+                                    curvature: xrView.pipCurvature
                                 }
                             }
                         },

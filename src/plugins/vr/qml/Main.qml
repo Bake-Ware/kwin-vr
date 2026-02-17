@@ -53,7 +53,18 @@ Item {
                                 return
                             }
 
-                            if(xrView.grabbed) {
+                            if(xrView.pipGrabbed) {
+                                // PIP grabbed: arrows move in camera-local space
+                                if(event.key === Qt.Key_Right) {
+                                    xrView.pipMoveRight = true; event.accepted = true
+                                } else if(event.key === Qt.Key_Left) {
+                                    xrView.pipMoveLeft = true; event.accepted = true
+                                } else if(event.key === Qt.Key_Up) {
+                                    xrView.pipMoveUp = true; event.accepted = true
+                                } else if(event.key === Qt.Key_Down) {
+                                    xrView.pipMoveDown = true; event.accepted = true
+                                }
+                            } else if(xrView.grabbed) {
                                 if(event.modifiers & Qt.ShiftModifier) {
                                     if(event.key === Qt.Key_Right) {
                                         xrView.resizeRight = true; event.accepted = true
@@ -91,7 +102,17 @@ Item {
                                  return
                              }
 
-                             if(xrView.grabbed) {
+                             if(xrView.pipGrabbed) {
+                                 if(event.key === Qt.Key_Right) {
+                                     xrView.pipMoveRight = false; event.accepted = true
+                                 } else if(event.key === Qt.Key_Left) {
+                                     xrView.pipMoveLeft = false; event.accepted = true
+                                 } else if(event.key === Qt.Key_Up) {
+                                     xrView.pipMoveUp = false; event.accepted = true
+                                 } else if(event.key === Qt.Key_Down) {
+                                     xrView.pipMoveDown = false; event.accepted = true
+                                 }
+                             } else if(xrView.grabbed) {
                                  if(event.key === Qt.Key_Right) {
                                      xrView.resizeRight = false
                                      xrView.curveBigger = false
