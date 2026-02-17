@@ -73,6 +73,7 @@ qt6_add_qml_module(vr
         qml/VrRayController.qml
         qml/VrPointerConstraint.qml
         qml/VrBarrierConstraint.qml
+        qml/VrWindowControls.qml
         qml/KwinPseudoOutputMirror.qml
         qml/Logger.qml
         qml/HeadScrollBindings.qml

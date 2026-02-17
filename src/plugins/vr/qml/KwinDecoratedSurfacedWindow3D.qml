@@ -28,12 +28,21 @@ Node {
     property zMargins itemDepth
     property real zOffsetGlobal: 0
 
+    // Push decoration in front of curved surface so the titlebar stays visible.
+    // Edge protrusion = width * tan(curvature/4) / (2*ppu).
+    readonly property real curveProtrusion: {
+        if (root.curvature < 0.001) return 0
+        const w = root.client?.bufferGeometry.width ?? 0
+        return w * Math.tan(root.curvature / 4) / (2 * root.ppu)
+    }
+
     KwinDecorations3D {
         id: deco3d
         client: root.client
         grabHandle: root.grabHandle
         ppu: root.ppu
         zOffsetGlobal: root.zOffsetGlobal
+        z: root.curveProtrusion + 0.05
     }
 
     property vector3d innerWindowPosition: {
