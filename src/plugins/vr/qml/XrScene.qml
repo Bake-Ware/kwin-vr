@@ -592,6 +592,9 @@ XrView {
                                     curvature: xrView.pipCurvature
                                 }
                             }
+                            StateChangeScript {
+                                script: followMode.unregisterObject(kwinAppWindow)
+                            }
                         },
                         State {
                             name: "vr"
