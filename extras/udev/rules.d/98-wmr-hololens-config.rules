@@ -1,0 +1,1 @@
+ACTION=="add", ATTR{idVendor}=="045e", ATTR{idProduct}=="0659", ATTR{bConfigurationValue}\!="1", ATTR{bConfigurationValue}="1"
