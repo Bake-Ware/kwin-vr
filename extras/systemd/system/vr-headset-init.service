@@ -1,0 +1,12 @@
+[Unit]
+Description=VR Headset Hardware Init
+After=systemd-udevd.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/vr-headset-init/boot-init.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,3 @@
+# Xreal Air Gen 1 - allow user access to HID and USB devices
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", MODE="0666"

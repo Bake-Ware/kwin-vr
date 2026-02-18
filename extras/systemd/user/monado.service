@@ -1,0 +1,19 @@
+[Unit]
+Description=Monado OpenXR Runtime Service
+After=graphical-session.target
+
+[Service]
+Type=simple
+StandardInput=null
+Environment=XRT_NO_STDIN=1
+Environment=XRT_COMPOSITOR_FORCE_WAYLAND=1
+Environment=WAYLAND_DISPLAY=wayland-0
+#Environment=XRT_COMPOSITOR_NULL=1
+ExecStart=/usr/bin/monado-service
+Restart=on-failure
+RestartSec=3
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WMR_SLAM=false
+
+[Install]
+WantedBy=graphical-session.target
