@@ -3642,6 +3642,7 @@ InputDeviceHandler::~InputDeviceHandler() = default;
 
 void InputDeviceHandler::init()
 {
+    m_hoveredWindowFinder = defaultHoveredWindowFinder();
     connect(workspace(), &Workspace::stackingOrderChanged, this, &InputDeviceHandler::update);
     connect(workspace(), &Workspace::windowMinimizedChanged, this, &InputDeviceHandler::update);
     connect(VirtualDesktopManager::self(), &VirtualDesktopManager::currentChanged, this, &InputDeviceHandler::update);
@@ -3689,6 +3690,21 @@ void InputDeviceHandler::setDecoration(Decoration::DecoratedWindowImpl *decorati
     }
 }
 
+void InputDeviceHandler::setHoveredWindowFinder(HoveredWindowFinder finder)
+{
+    m_hoveredWindowFinder = finder ? std::move(finder) : defaultHoveredWindowFinder();
+}
+
+InputDeviceHandler::HoveredWindowFinder InputDeviceHandler::defaultHoveredWindowFinder()
+{
+    return [this]() {
+        if (positionValid()) {
+            return input()->findToplevel(position());
+        }
+        return static_cast<Window *>(nullptr);
+    };
+}
+
 void InputDeviceHandler::updateFocus()
 {
     Window *focus = m_hover.window;
@@ -3728,12 +3744,8 @@ void InputDeviceHandler::update()
         return;
     }
 
-    Window *window = nullptr;
-    if (positionValid()) {
-        window = input()->findToplevel(position());
-    }
     // Always set the window at the position of the input device.
-    setHover(window);
+    setHover(m_hoveredWindowFinder());
 
     if (focusUpdatesBlocked()) {
         workspace()->updateFocusMousePosition(position());
