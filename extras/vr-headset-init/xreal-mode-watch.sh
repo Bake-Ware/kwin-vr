@@ -18,8 +18,22 @@ fi
 source "$DETECTED"
 
 CONNECTOR="${VR_DISPLAY_CONNECTOR:-DP-1}"
-MODES_FILE="/sys/class/drm/card0-${CONNECTOR}/modes"
-STATUS_FILE="/sys/class/drm/card0-${CONNECTOR}/status"
+
+# Find the correct DRM card for this connector (not always card0 — hybrid GPU systems)
+DRM_CARD=""
+for card_conn in /sys/class/drm/card*-"${CONNECTOR}"; do
+    [ -d "$card_conn" ] || continue
+    DRM_CARD="$card_conn"
+    break
+done
+if [ -z "$DRM_CARD" ]; then
+    echo "[xreal-mode-watch] No DRM card found for connector ${CONNECTOR}, exiting"
+    exit 1
+fi
+
+MODES_FILE="${DRM_CARD}/modes"
+STATUS_FILE="${DRM_CARD}/status"
+IPC_SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/monado_comp_ipc"
 SBS_MODE="3840x1080"
 DESKTOP_MODE="1920x1080"
 POLL_INTERVAL=2
@@ -33,7 +47,8 @@ get_first_mode() {
 }
 
 wait_for_kwin_vr() {
-    for i in $(seq 1 30); do
+    local timeout="${1:-30}"
+    for i in $(seq 1 "$timeout"); do
         if dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
             org.freedesktop.DBus.Properties.Get \
             string:org.kde.kwinvr string:vrActive &>/dev/null; then
@@ -41,6 +56,21 @@ wait_for_kwin_vr() {
         fi
         sleep 1
     done
+    return 1
+}
+
+# Wait for Monado IPC socket to appear (service fully initialised)
+wait_for_monado() {
+    local timeout="${1:-15}"
+    log "Waiting for Monado IPC socket..."
+    for i in $(seq 1 "$timeout"); do
+        if [ -S "$IPC_SOCKET" ]; then
+            log "Monado ready after ${i}s"
+            return 0
+        fi
+        sleep 1
+    done
+    log "Monado IPC socket did not appear within ${timeout}s"
     return 1
 }
 
@@ -58,6 +88,49 @@ wait_for_connected() {
     done
     log "Connector did not reconnect within ${timeout}s"
     return 1
+}
+
+# Stop Monado fast via direct PID kill (systemctl stop can block 10-20s on cleanup)
+stop_monado() {
+    local pid
+    pid=$(systemctl --user show -p MainPID --value monado.service 2>/dev/null)
+    if [ -n "$pid" ] && [ "$pid" != "0" ] && kill -0 "$pid" 2>/dev/null; then
+        log "Stopping Monado (PID $pid)..."
+        kill -TERM "$pid" 2>/dev/null
+        # Wait up to 2s for graceful shutdown
+        local i
+        for i in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || { log "Monado stopped gracefully"; break; }
+            sleep 0.1
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            log "Monado didn't stop in 2s, sending SIGKILL"
+            kill -9 "$pid" 2>/dev/null
+            sleep 0.5
+        fi
+        systemctl --user reset-failed monado.service 2>/dev/null
+    elif systemctl --user is-active --quiet monado.service 2>/dev/null; then
+        # Fallback: systemd says active but no PID (transitioning state)
+        log "Stopping Monado via systemd..."
+        timeout 3 systemctl --user stop monado.service 2>/dev/null || {
+            systemctl --user kill -s SIGKILL monado.service 2>/dev/null
+            sleep 0.5
+        }
+        systemctl --user reset-failed monado.service 2>/dev/null
+    fi
+    # Remove stale IPC socket so wait_for_monado waits for the NEW instance
+    rm -f "$IPC_SOCKET"
+    log "Monado stopped"
+}
+
+# Check if connector is still in SBS mode
+check_sbs_active() {
+    local s m
+    s=$(cat "$STATUS_FILE" 2>/dev/null)
+    [ "$s" = "connected" ] || return 1
+    m=$(get_first_mode)
+    [ "$m" = "$SBS_MODE" ] || return 1
+    return 0
 }
 
 # Force a specific mode on the connector via kscreen-doctor.
@@ -91,16 +164,14 @@ apply_mode() {
 stop_vr() {
     log "Stopping VR services"
 
-    # Deactivate VR via D-Bus
+    # Deactivate VR via D-Bus first (lets KWin tear down XR session cleanly)
     dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
         org.freedesktop.DBus.Properties.Set \
         string:org.kde.kwinvr string:vrActive variant:boolean:false 2>/dev/null
+    sleep 1
     log "VR deactivated"
 
-    # Stop Monado
-    systemctl --user stop monado.service
-    sleep 1
-    log "Monado stopped"
+    stop_monado
 
     # Set autoStart=false (merge, don't overwrite user settings)
     kwriteconfig6 --file kwinvr --group General --key autoStart false
@@ -115,47 +186,90 @@ stop_vr() {
 activate_vr() {
     log "SBS mode detected (${SBS_MODE}) - activating VR"
 
-    # 1. Apply SBS mode (triggers modeset + DP link retrain at higher bandwidth)
+    # 1. Kill old Monado FIRST (fast, before the slow apply_mode)
+    stop_monado
+
+    # 2. Apply SBS mode (triggers modeset + DP link retrain at higher bandwidth)
     apply_mode 3840 1080 60
 
-    # 2. Update kwinvr config for Xreal Air (merge, don't overwrite user settings)
+    # Re-check: glasses may have cycled during apply_mode (~5s)
+    if ! check_sbs_active; then
+        log "Lost SBS mode during apply_mode, aborting activation"
+        LAST_MODE=$(get_first_mode)
+        return
+    fi
+
+    # 3. Update kwinvr config for Xreal Air (merge, don't overwrite user settings)
     kwriteconfig6 --file kwinvr --group General --key autoStart true
     kwriteconfig6 --file kwinvr --group General --key width "${VR_WIDTH}"
     kwriteconfig6 --file kwinvr --group General --key height "${VR_HEIGHT}"
     kwriteconfig6 --file kwinvr --group General --key scale "${VR_SCALE}"
     kwriteconfig6 --file kwinvr --group General --key refreshrate "${VR_REFRESH}"
 
-    # 3. Restart Monado to pick up SBS mode
-    systemctl --user restart monado.service
-    sleep 3
+    # 4. Start Monado and wait for IPC socket
+    systemctl --user start monado.service
+    if ! wait_for_monado 15; then
+        log "Monado failed to start, aborting VR activation"
+        return
+    fi
+    # Give Monado time to fully initialize after socket creation
+    sleep 2
 
-    # 4. Activate VR via D-Bus
-    if wait_for_kwin_vr; then
-        dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
-            org.freedesktop.DBus.Properties.Set \
-            string:org.kde.kwinvr string:vrActive variant:boolean:true
-        log "VR activated"
-    else
-        log "KWin VR D-Bus not available"
+    # Re-check: glasses may have cycled during Monado startup
+    if ! check_sbs_active; then
+        log "Lost SBS mode during Monado start, aborting activation"
+        stop_monado
+        LAST_MODE=$(get_first_mode)
+        return
     fi
 
+    # 5. Activate VR via D-Bus (with retry — KWin may fail on first attempt)
+    if ! wait_for_kwin_vr 10; then
+        log "KWin VR D-Bus not available"
+        VR_ACTIVE=true
+        LAST_MODE="$SBS_MODE"
+        return
+    fi
+
+    local attempt
+    for attempt in 1 2 3; do
+        dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
+            org.freedesktop.DBus.Properties.Set \
+            string:org.kde.kwinvr string:vrActive variant:boolean:true 2>/dev/null
+        sleep 2
+        # Verify it stuck
+        local vr_state
+        vr_state=$(dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
+            org.freedesktop.DBus.Properties.Get \
+            string:org.kde.kwinvr string:vrActive 2>/dev/null | grep -o "true\|false")
+        if [ "$vr_state" = "true" ]; then
+            log "VR activated (attempt $attempt)"
+            break
+        fi
+        log "VR activation attempt $attempt failed (vrActive=$vr_state), retrying..."
+        sleep 2
+    done
+
     VR_ACTIVE=true
-    LAST_MODE=$(get_first_mode)
+    LAST_MODE="$SBS_MODE"
 }
 
 # Wait for connector to be available
-log "Watching ${VR_NAME} on ${CONNECTOR}..."
+log "Watching ${VR_NAME} on ${CONNECTOR} (card: ${DRM_CARD})"
 while [ ! -f "$STATUS_FILE" ]; do sleep 1; done
 
 # Wait for KWin to be up
 log "Waiting for KWin VR interface..."
-wait_for_kwin_vr || log "Warning: KWin VR not found, continuing anyway"
+wait_for_kwin_vr 30 || log "Warning: KWin VR not found, continuing anyway"
 
-LAST_MODE=$(get_first_mode)
-log "Current mode: ${LAST_MODE:-none}"
+log "Current mode: $(get_first_mode)"
 
-# Force 60Hz on startup (Xreal Air Gen 1 EDID advertises 120Hz but can't handle it)
+# Force 60Hz on startup (Xreal Air Gen 1 EDID advertises 120Hz but can't
+# sustain it over USB-C DP-alt on some platforms)
 apply_mode 1920 1080 60
+
+# Set LAST_MODE to desktop so the main loop detects if EDID shows SBS
+LAST_MODE="$DESKTOP_MODE"
 
 while true; do
     status=$(cat "$STATUS_FILE" 2>/dev/null)
@@ -176,14 +290,18 @@ while true; do
                     if $VR_ACTIVE; then
                         stop_vr
                     fi
-                    # Apply 60Hz (glasses default to 120Hz which doesn't work)
+                    # Apply 60Hz (glasses may default to 120Hz after mode switch)
                     apply_mode 1920 1080 60
                     ;;
                 *)
                     log "Unknown mode: $mode"
                     ;;
             esac
-            LAST_MODE=$(get_first_mode)
+            # Set LAST_MODE to the mode we just processed, NOT a fresh DRM read.
+            # A fresh read can race with HPD events during apply_mode (5s) —
+            # the EDID may have already changed to the next mode, causing
+            # the watcher to think it already handled it (stuck forever).
+            LAST_MODE="$mode"
         fi
     elif [ "$status" = "disconnected" ]; then
         if $VR_ACTIVE; then

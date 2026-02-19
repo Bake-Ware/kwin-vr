@@ -1,0 +1,14 @@
+[Unit]
+Description=WiVRn Headset Watch (auto-activate VR on Quest connect)
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/lib/vr-headset-init/wivrn-watch.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

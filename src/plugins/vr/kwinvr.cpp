@@ -14,6 +14,7 @@
 #include <QDBusConnection>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickWindow>
 #include <QTimer>
 
 #include "input.h"
@@ -169,9 +170,22 @@ void KwinVr::start()
     workspace()->setVrMode(true);
     KwinVrHelpers::setDmabufFormatFilterForQt(true);
 
+    // Force Vulkan rendering for the XR subsystem. Qt6Quick3DXr selects
+    // its graphics binding based on QQuickWindow::graphicsApi(). KWin uses
+    // OpenGL for compositing, but the OpenGL Wayland binding
+    // (XrGraphicsBindingOpenGLWaylandKHR) is not supported by Monado.
+    // Vulkan bindings work universally. The XR code creates its own
+    // isolated QQuickRenderControl, so this doesn't affect KWin's compositor.
+    const auto savedApi = QQuickWindow::graphicsApi();
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+
     m_engine->rootContext()->setContextProperty("kwinVrBridge", &m_vrbridge);
     m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"), QStringLiteral("Main"));
     // m_engine->load(url);
+
+    // Restore the original API so other QQuickWindows (effects, etc.) are
+    // not affected.
+    QQuickWindow::setGraphicsApi(savedApi);
 }
 
 void KwinVr::stop()
