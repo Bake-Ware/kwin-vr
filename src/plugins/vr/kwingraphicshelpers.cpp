@@ -472,6 +472,205 @@ GraphicsBufferTextures importDmaBufToQSGTextures(QQuickWindow *quickWin, Graphic
     }
 }
 
+/*
+ * EGL readback helper: a lightweight GL context on the compositor's EGL
+ * display used to import dmabufs via EGL images and read pixels back to CPU.
+ * This works for tiled/non-linear dmabufs that GraphicsBufferView::map()
+ * cannot handle, at the cost of a GPU→CPU→GPU round-trip.
+ */
+struct EglReadbackHelper
+{
+    EGLDisplay display = EGL_NO_DISPLAY;
+    EGLContext context = EGL_NO_CONTEXT;
+    EGLSurface surface = EGL_NO_SURFACE;
+    bool initialized = false;
+    bool failed = false;
+
+    bool init(EGLDisplay dpy)
+    {
+        if (initialized)
+            return display == dpy;
+        if (failed)
+            return false;
+        display = dpy;
+
+        // Try desktop GL first, then GLES 3. Use surfaceless context
+        // (EGL_KHR_surfaceless_context) so we don't need pbuffer surfaces,
+        // which GBM-backed EGL displays may not support.
+        struct
+        {
+            EGLenum api;
+            EGLint renderableType;
+            const char *name;
+        } tries[] = {
+            {EGL_OPENGL_API, EGL_OPENGL_BIT, "GL"},
+            {EGL_OPENGL_ES_API, EGL_OPENGL_ES3_BIT, "GLES3"},
+        };
+
+        for (auto &t : tries) {
+            if (!eglBindAPI(t.api))
+                continue;
+
+            // Accept any config for this API; we only render to FBOs
+            EGLint configAttribs[] = {
+                EGL_RENDERABLE_TYPE,
+                t.renderableType,
+                EGL_NONE,
+            };
+            EGLConfig config;
+            EGLint numConfigs;
+            if (!eglChooseConfig(display, configAttribs, &config, 1, &numConfigs) || numConfigs == 0)
+                continue;
+
+            EGLint ctxAttribs[] = {
+                EGL_CONTEXT_MAJOR_VERSION,
+                3,
+                EGL_CONTEXT_MINOR_VERSION,
+                0,
+                EGL_NONE,
+            };
+            context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctxAttribs);
+            if (context == EGL_NO_CONTEXT)
+                continue;
+
+            // Use surfaceless — we only need FBO rendering
+            surface = EGL_NO_SURFACE;
+            initialized = true;
+            qCDebug(KWINVR) << "EGL readback: created" << t.name << "context (surfaceless)";
+            return true;
+        }
+
+        qCWarning(KWINVR) << "EGL readback: no suitable GL/GLES context";
+        failed = true;
+        return false;
+    }
+
+    bool activate()
+    {
+        return eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+    }
+
+    void deactivate()
+    {
+        eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    }
+};
+
+static thread_local EglReadbackHelper s_readbackHelper;
+
+static GraphicsBufferTextures importDmaBufViaEglReadback(QQuickWindow *win, GraphicsBuffer *buf)
+{
+    auto *eglDpy = eglDisplayFromCompositor();
+    if (!eglDpy) {
+        qCWarning(KWINVR) << "EGL readback: no compositor EGL display";
+        return {};
+    }
+
+    EGLDisplay dpy = eglDpy->handle();
+    if (!s_readbackHelper.init(dpy)) {
+        return {};
+    }
+
+    const DmaBufAttributes *dmabuf = buf->dmabufAttributes();
+    if (!dmabuf) {
+        return {};
+    }
+
+    if (eglDpy->isExternalOnly(dmabuf->format, dmabuf->modifier)) {
+        qCWarning(KWINVR) << "EGL readback: external-only format, cannot FBO-readback";
+        return {};
+    }
+
+    // Import dmabuf as EGL image (no GL context required)
+    EGLImageKHR image = eglDpy->importDmaBufAsImage(*dmabuf);
+    if (image == EGL_NO_IMAGE) {
+        qCWarning(KWINVR) << "EGL readback: importDmaBufAsImage failed"
+                          << "format:" << dmabuf->format
+                          << "modifier:" << dmabuf->modifier;
+        return {};
+    }
+
+    // Save current EGL state (Vulkan render thread may or may not have one)
+    EGLContext prevCtx = eglGetCurrentContext();
+    EGLSurface prevDraw = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface prevRead = eglGetCurrentSurface(EGL_READ);
+    EGLDisplay prevDpy = eglGetCurrentDisplay();
+
+    if (!s_readbackHelper.activate()) {
+        qCWarning(KWINVR) << "EGL readback: failed to make context current";
+        eglDpy->destroyImage(image);
+        return {};
+    }
+
+    // Bind EGL image to GL texture
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    eglDpy->destroyImage(image);
+
+    if (!texture) {
+        if (prevCtx != EGL_NO_CONTEXT)
+            eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+        else
+            s_readbackHelper.deactivate();
+        return {};
+    }
+
+    // FBO readback
+    const int w = dmabuf->width;
+    const int h = dmabuf->height;
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+
+    GraphicsBufferTextures result;
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
+        const auto imgFmt = buf->hasAlphaChannel() ? QImage::Format_RGBA8888
+                                                   : QImage::Format_RGBX8888;
+        QImage qimg(w, h, imgFmt);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, qimg.bits());
+
+        // Cleanup GL resources before calling into Qt
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &texture);
+
+        // Restore EGL state
+        if (prevCtx != EGL_NO_CONTEXT)
+            eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+        else
+            s_readbackHelper.deactivate();
+
+        auto *qsgTex = win->createTextureFromImage(
+            qimg,
+            buf->hasAlphaChannel() ? QQuickWindow::TextureHasAlphaChannel
+                                   : QQuickWindow::CreateTextureOptions{});
+        if (qsgTex) {
+            result.planeTextures[0] = {0, qsgTex};
+            result.planeCount = 1;
+        } else {
+            qCWarning(KWINVR) << "EGL readback: createTextureFromImage failed";
+        }
+    } else {
+        qCWarning(KWINVR) << "EGL readback: framebuffer incomplete:" << glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &texture);
+
+        if (prevCtx != EGL_NO_CONTEXT)
+            eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+        else
+            s_readbackHelper.deactivate();
+    }
+
+    return result;
+}
+
 GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQuickWindow *win)
 {
     if (buf->shmAttributes() || buf->singlePixelAttributes()) {
@@ -499,6 +698,15 @@ GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQui
             .planeTextures = {{0, tex}},
             .planeCount = 1};
     } else {
+        // When the RHI backend is Vulkan (e.g. for OpenXR), the direct
+        // EGL→GL→QRhiTexture import path cannot work because QRhiGles2
+        // native handles are unavailable. Instead, import the dmabuf via
+        // the compositor's EGL display, readback through a helper GL
+        // context, and upload to the Vulkan RHI via createTextureFromImage.
+        QRhi *rhi = win ? win->rhi() : nullptr;
+        if (rhi && rhi->backend() != QRhi::OpenGLES2) {
+            return importDmaBufViaEglReadback(win, buf);
+        }
         return importDmaBufToQSGTextures(win, buf);
     }
 };
@@ -507,7 +715,9 @@ void GraphicsBufferTextures::release()
 {
     for (auto texPair : std::span<QtTexturePair>(planeTextures, planeCount)) {
         delete texPair.qtTexture;
-        glDeleteTextures(1, &texPair.glTexture);
+        if (texPair.glTexture) {
+            glDeleteTextures(1, &texPair.glTexture);
+        }
     }
     planeCount = 0;
 }
