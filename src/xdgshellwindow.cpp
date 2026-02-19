@@ -1902,10 +1902,17 @@ void XdgPopupWindow::handleRepositionRequested(quint32 token)
     }
 }
 
+std::function<RectF(Window *parent)> XdgPopupWindow::defaultPopupBoundsResolver()
+{
+    return [](Window *parent) {
+        return workspace()->clientArea(parent->isFullScreen() ? FullScreenArea : PlacementArea, parent);
+    };
+}
+
 void XdgPopupWindow::updateRelativePlacement()
 {
     const QPointF parentPosition = transientFor()->nextFramePosToClientPos(transientFor()->pos());
-    const RectF bounds = workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor()).translated(-parentPosition);
+    const RectF bounds = workspace()->popupBoundsResolver()(transientFor()).translated(-parentPosition);
     const XdgPositioner positioner = m_shellSurface->positioner();
 
     if (m_plasmaShellSurface && m_plasmaShellSurface->isPositionSet()) {
