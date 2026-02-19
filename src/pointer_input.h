@@ -19,6 +19,8 @@
 #include <QPointF>
 #include <QPointer>
 
+#include <functional>
+
 class QWindow;
 
 namespace KWin
@@ -72,6 +74,8 @@ public:
     void updatePointerConstraints();
 
     void setEnableConstraints(bool set);
+    using PositionLimiter = std::function<QPointF(const QPointF &pos, const QPointF &relativeMotion, std::chrono::microseconds time)>;
+    void setPositionLimiter(PositionLimiter limiter);
 
     bool isConstrained() const
     {
@@ -168,7 +172,7 @@ private:
 
     void updateOnStartMoveResize();
     void updateToReset();
-    void updatePosition(const QPointF &pos, std::chrono::microseconds time);
+    void updatePosition(const QPointF &pos, const QPointF &relativeMotion, std::chrono::microseconds time);
     void updateButton(uint32_t button, PointerButtonState state);
     QPointF applyEdgeBarrier(const QPointF &pos, const Output *currentOutput, std::chrono::microseconds time);
     EdgeBarrierType edgeBarrierType(const QPointF &pos, const QRectF &lastOutputGeometry) const;
@@ -196,6 +200,8 @@ private:
     bool m_lastOutputWasPlaceholder = true;
     QPointF m_movementInEdgeBarrier;
     std::chrono::microseconds m_lastMoveTime = std::chrono::microseconds::zero();
+    PositionLimiter defaultPositionLimiter();
+    PositionLimiter m_positionLimiter;
     friend class PositionUpdateBlocker;
     EdgeBarrierType m_lastEdgeBarrierType = EdgeBarrierType::NormalBarrier;
 };

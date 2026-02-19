@@ -91,6 +91,7 @@ void PointerInputRedirection::init()
             waylandServer()->seat(), &SeatInterface::setHasPointer);
 
     m_cursor = new CursorImage(this);
+    m_positionLimiter = defaultPositionLimiter();
     setInited(true);
     InputDeviceHandler::init();
 
@@ -264,7 +265,7 @@ void PointerInputRedirection::processMotionInternal(const QPointF &pos, const QP
     }
 
     PositionUpdateBlocker blocker(this);
-    updatePosition(pos, time);
+    updatePosition(pos, delta, time);
 
     PointerMotionEvent event{
         .device = device,
@@ -698,6 +699,11 @@ void PointerInputRedirection::setEnableConstraints(bool set)
     updatePointerConstraints();
 }
 
+void PointerInputRedirection::setPositionLimiter(PositionLimiter limiter)
+{
+    m_positionLimiter = limiter ? std::move(limiter) : defaultPositionLimiter();
+}
+
 void PointerInputRedirection::updatePointerConstraints()
 {
     if (!focus()) {
@@ -911,24 +917,32 @@ QPointF PointerInputRedirection::applyEdgeBarrier(const QPointF &pos, const Outp
     return newPos;
 }
 
-void PointerInputRedirection::updatePosition(const QPointF &pos, std::chrono::microseconds time)
+PointerInputRedirection::PositionLimiter PointerInputRedirection::defaultPositionLimiter()
+{
+    return [this](const QPointF &pos, const QPointF &, std::chrono::microseconds time) {
+        // verify that at least one screen contains the pointer position
+        const Output *currentOutput = workspace()->outputAt(pos);
+        QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
+        p = applyEdgeBarrier(p, currentOutput, time);
+        p = applyPointerConfinement(p);
+        // verify screen confinement
+        if (!screenContainsPos(p)) {
+            return m_pos;
+        }
+        return p;
+    };
+}
+
+void PointerInputRedirection::updatePosition(const QPointF &pos, const QPointF &relativeMotion, std::chrono::microseconds time)
 {
     m_lastMoveTime = time;
     if (m_locked) {
         // locked pointer should not move
         return;
     }
-    // verify that at least one screen contains the pointer position
-    const Output *currentOutput = workspace()->outputAt(pos);
-    QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
-    p = applyEdgeBarrier(p, currentOutput, time);
-    p = applyPointerConfinement(p);
+
+    QPointF p = m_positionLimiter(pos, relativeMotion, time);
     if (p == m_pos) {
-        // didn't change due to confinement
-        return;
-    }
-    // verify screen confinement
-    if (!screenContainsPos(p)) {
         return;
     }
 
