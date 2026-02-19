@@ -62,6 +62,7 @@
 #include "wayland/externalbrightness_v1.h"
 #include "wayland/surface.h"
 #include "wayland_server.h"
+#include "xdgshellwindow.h"
 #if KWIN_BUILD_X11
 #include "atoms.h"
 #include "core/brightnessdevice.h"
@@ -173,6 +174,8 @@ Workspace::Workspace()
 
 void Workspace::init()
 {
+    m_popupBoundsResolver = XdgPopupWindow::defaultPopupBoundsResolver();
+
     KSharedConfigPtr config = kwinApp()->config();
     m_screenEdges->setConfig(config);
     m_screenEdges->init();
@@ -2369,6 +2372,16 @@ QRectF Workspace::clientArea(clientAreaOption opt, const Window *window, const O
 QRectF Workspace::clientArea(clientAreaOption opt, const Window *window, const QPointF &pos) const
 {
     return clientArea(opt, window, outputAt(pos));
+}
+
+void Workspace::setPopupBoundsResolver(PopupBoundsResolver resolver)
+{
+    m_popupBoundsResolver = resolver ? std::move(resolver) : XdgPopupWindow::defaultPopupBoundsResolver();
+}
+
+const Workspace::PopupBoundsResolver &Workspace::popupBoundsResolver() const
+{
+    return m_popupBoundsResolver;
 }
 
 QRect Workspace::geometry() const

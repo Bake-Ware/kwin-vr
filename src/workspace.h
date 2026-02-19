@@ -140,6 +140,10 @@ public:
     QRectF clientArea(clientAreaOption, const Window *window, const Output *output) const;
     QRectF clientArea(clientAreaOption, const Window *window, const QPointF &pos) const;
 
+    using PopupBoundsResolver = std::function<QRectF(Window *parent)>;
+    void setPopupBoundsResolver(PopupBoundsResolver resolver);
+    const PopupBoundsResolver &popupBoundsResolver() const;
+
     /**
      * Returns the geometry of this Workspace, i.e. the bounding rectangle of all outputs.
      */
@@ -750,6 +754,8 @@ private:
     QString m_activationToken;
     QString m_activationTokenAppId;
     uint32_t m_activationTokenSerial = 0;
+
+    PopupBoundsResolver m_popupBoundsResolver;
 
 private:
     friend bool performTransiencyCheck();

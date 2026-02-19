@@ -17,6 +17,7 @@
 #include <QQueue>
 #include <QTimer>
 
+#include <functional>
 #include <optional>
 
 namespace KDecoration3
@@ -282,6 +283,7 @@ public:
     void closeWindow() override;
     bool wantsInput() const override;
     bool takeFocus() override;
+    static std::function<QRectF(Window *parent)> defaultPopupBoundsResolver();
 
 protected:
     bool acceptsFocus() const override;
