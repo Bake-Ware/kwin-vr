@@ -91,6 +91,7 @@ void PointerInputRedirection::init()
             waylandServer()->seat(), &SeatInterface::setHasPointer);
 
     m_cursor = new CursorImage(this);
+    m_positionLimiter = defaultPositionLimiter();
     setInited(true);
     InputDeviceHandler::init();
 
@@ -698,6 +699,11 @@ void PointerInputRedirection::setEnableConstraints(bool set)
     updatePointerConstraints();
 }
 
+void PointerInputRedirection::setPositionLimiter(PositionLimiter limiter)
+{
+    m_positionLimiter = limiter ? std::move(limiter) : defaultPositionLimiter();
+}
+
 void PointerInputRedirection::updatePointerConstraints()
 {
     if (!focus()) {
@@ -916,6 +922,22 @@ QPointF PointerInputRedirection::applyEdgeBarrier(const QPointF &pos, const QPoi
     return newPos;
 }
 
+PointerInputRedirection::PositionLimiter PointerInputRedirection::defaultPositionLimiter()
+{
+    return [this](const QPointF &pos, const QPointF &relativeMotion, std::chrono::microseconds time) {
+        // verify that at least one screen contains the pointer position
+        const LogicalOutput *currentOutput = workspace()->outputAt(pos);
+        QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
+        p = applyEdgeBarrier(p, relativeMotion, currentOutput, time);
+        p = applyPointerConfinement(p);
+        // verify screen confinement
+        if (!screenContainsPos(p)) {
+            return m_pos;
+        }
+        return p;
+    };
+}
+
 void PointerInputRedirection::updatePosition(const QPointF &pos, const QPointF &relativeMotion, std::chrono::microseconds time)
 {
     m_lastMoveTime = time;
@@ -923,17 +945,9 @@ void PointerInputRedirection::updatePosition(const QPointF &pos, const QPointF &
         // locked pointer should not move
         return;
     }
-    // verify that at least one screen contains the pointer position
-    const LogicalOutput *currentOutput = workspace()->outputAt(pos);
-    QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
-    p = applyEdgeBarrier(p, relativeMotion, currentOutput, time);
-    p = applyPointerConfinement(p);
+
+    QPointF p = m_positionLimiter(pos, relativeMotion, time);
     if (p == m_pos) {
-        // didn't change due to confinement
-        return;
-    }
-    // verify screen confinement
-    if (!screenContainsPos(p)) {
         return;
     }
 
