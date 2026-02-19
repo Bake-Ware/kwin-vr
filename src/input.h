@@ -476,8 +476,10 @@ public:
 
     virtual QPointF position() const = 0;
 
+    using HoveredWindowFinder = std::function<Window *()>;
     void setFocus(Window *window);
     void setDecoration(Decoration::DecoratedWindowImpl *decoration);
+    void setHoveredWindowFinder(HoveredWindowFinder finder);
 
 Q_SIGNALS:
     void decorationChanged();
@@ -529,7 +531,9 @@ private:
         QPointer<Decoration::DecoratedWindowImpl> decoration;
     } m_focus;
 
+    HoveredWindowFinder defaultHoveredWindowFinder();
     bool m_inited = false;
+    HoveredWindowFinder m_hoveredWindowFinder;
 };
 
 inline InputRedirection *input()
