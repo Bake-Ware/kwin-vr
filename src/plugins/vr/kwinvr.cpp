@@ -17,6 +17,7 @@
 #include <QQuickWindow>
 #include <QTimer>
 
+#include "core/output.h"
 #include "input.h"
 #include "pointer_input.h"
 #include "window.h"
@@ -26,6 +27,7 @@
 #include "kwinvrconfigwrapper.h"
 #include "kwinvrhelpers.h"
 #include "kwinvrshortcuts.h"
+#include "vrprofile.h"
 
 using namespace KWin;
 
@@ -67,19 +69,8 @@ KwinVr::KwinVr()
         }
     }, Qt::QueuedConnection);
 
-    auto *cfg = KWinVRConfigWrapper::instance();
-    cfg->load();
-    qWarning() << "KwinVr: autoStart =" << cfg->autoStart()
-               << "width =" << cfg->width()
-               << "height =" << cfg->height();
-    if (cfg->autoStart()) {
-        QTimer::singleShot(15000, this, [this] {
-            if (!m_active) {
-                qWarning() << "KwinVr: Auto-starting VR mode now";
-                setVrActive(true);
-            }
-        });
-    }
+    // Set up profile-driven output monitoring (replaces blind 15s autoStart timer)
+    setupOutputMonitoring();
 }
 
 KwinVr::~KwinVr()
@@ -117,6 +108,7 @@ void KwinVr::setVrActive(bool active)
             }
             input()->pointer()->setForcedFocusWindow(nullptr);
 
+            m_vrOutput = nullptr;
             m_active = false;
             Q_EMIT vrActiveChanged();
         });
@@ -234,5 +226,142 @@ void KwinVr::registerDBusService()
     if (!bus.registerObject(QStringLiteral("/KwinVr"), this,
                             QDBusConnection::ExportAllProperties | QDBusConnection::ExportAllSignals)) {
         qCWarning(KWINVR) << "Failed to register /KwinVr object at session bus";
+    }
+}
+
+void KwinVr::setupOutputMonitoring()
+{
+    m_profiles = VrProfileLoader::loadProfiles();
+    if (m_profiles.isEmpty()) {
+        qCInfo(KWINVR) << "No VR profiles found, output monitoring disabled";
+        return;
+    }
+
+    // Ensure KWIN_FORCE_DESKTOP_OUTPUTS covers all profile connectors.
+    // This matters for headsets whose EDID has non-desktop=1 (e.g. Samsung Odyssey+):
+    // KWin checks this env var in DrmConnector::isNonDesktop() on every HPD event,
+    // so setting it here covers hot-plug even if the headset wasn't connected at boot.
+    QStringList forceDesktop = qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS")
+                                   .split(u',', Qt::SkipEmptyParts);
+    for (const auto &profile : std::as_const(m_profiles)) {
+        if (!forceDesktop.contains(profile.connectorName))
+            forceDesktop.append(profile.connectorName);
+    }
+    qputenv("KWIN_FORCE_DESKTOP_OUTPUTS", forceDesktop.join(u',').toUtf8());
+    qCInfo(KWINVR) << "KWIN_FORCE_DESKTOP_OUTPUTS set to:" << forceDesktop.join(u',');
+
+    // Check outputs already present (e.g. Samsung plugged in at boot)
+    const auto outputs = workspace()->outputs();
+    for (auto *output : outputs)
+        scheduleOutputCheck(output, /*isHotPlug=*/false);
+
+    connect(workspace(), &Workspace::outputAdded, this, &KwinVr::onOutputAdded);
+    connect(workspace(), &Workspace::outputRemoved, this, &KwinVr::onOutputRemoved);
+}
+
+std::optional<VrProfile> KwinVr::matchProfile(Output *output) const
+{
+    const QString name = output->name();
+    for (const auto &profile : m_profiles) {
+        if (profile.connectorName != name)
+            continue;
+        if (!VrProfileLoader::isUsbDevicePresent(profile.usbId))
+            continue;
+        return profile;
+    }
+    return std::nullopt;
+}
+
+void KwinVr::onOutputAdded(Output *output)
+{
+    scheduleOutputCheck(output, /*isHotPlug=*/true);
+}
+
+void KwinVr::onOutputRemoved(Output *output)
+{
+    // Disconnect mode-change watcher
+    if (m_watchedOutputs.remove(output))
+        output->disconnect(this);
+
+    // Deactivate VR if this was the triggering output
+    if (m_vrOutput == output && m_active) {
+        qCInfo(KWINVR) << "VR output" << output->name() << "removed, deactivating VR";
+        setVrActive(false);
+    }
+}
+
+void KwinVr::scheduleOutputCheck(Output *output, bool isHotPlug)
+{
+    auto profile = matchProfile(output);
+    if (!profile) {
+        qCDebug(KWINVR) << "No VR profile matched for output" << output->name();
+        return;
+    }
+
+    qCInfo(KWINVR) << "Output" << output->name() << "matched profile" << profile->name
+                   << "(autoStart:" << profile->autoStart << ", hotPlug:" << isHotPlug << ")";
+
+    if (!profile->autoStart) {
+        // Mode-triggered device (e.g. Xreal Air): watch for SBS mode change
+        watchOutputModes(output);
+        return;
+    }
+
+    // autoStart device (e.g. Samsung Odyssey+): activate after a short delay.
+    // The delay gives Monado time to finish initialising after the headset is detected.
+    // Boot-time connections need more time than hot-plug reconnects.
+    const int delayMs = isHotPlug ? 3000 : 15000;
+    qCInfo(KWINVR) << "Scheduling VR auto-start for" << profile->name << "in" << delayMs << "ms";
+
+    QTimer::singleShot(delayMs, this, [this, output, profileName = profile->name] {
+        if (m_active)
+            return; // already in VR
+        if (!workspace()->outputs().contains(output)) {
+            qCInfo(KWINVR) << "Output for profile" << profileName << "gone before auto-start";
+            return;
+        }
+        qCInfo(KWINVR) << "Auto-starting VR for" << profileName << "on" << output->name();
+        m_vrOutput = output;
+        setVrActive(true);
+    });
+}
+
+void KwinVr::watchOutputModes(Output *output)
+{
+    if (m_watchedOutputs.contains(output))
+        return;
+
+    m_watchedOutputs.insert(output);
+    connect(output, &Output::currentModeChanged, this, [this, output] {
+        checkOutputMode(output);
+    });
+
+    // Check current mode immediately in case we started with SBS already active
+    checkOutputMode(output);
+}
+
+void KwinVr::checkOutputMode(Output *output)
+{
+    auto profile = matchProfile(output);
+    if (!profile || profile->autoStart)
+        return;
+
+    const auto mode = output->currentMode();
+    if (!mode)
+        return;
+
+    const bool inSbs = profile->isSbsMode(mode->size().width());
+
+    if (inSbs && !m_active) {
+        qCInfo(KWINVR) << "SBS mode detected on" << output->name()
+                       << "(" << mode->size().width() << "x" << mode->size().height() << ")"
+                       << "— activating VR for" << profile->name;
+        m_vrOutput = output;
+        setVrActive(true);
+    } else if (!inSbs && m_active && m_vrOutput == output) {
+        qCInfo(KWINVR) << "SBS mode ended on" << output->name()
+                       << "(" << mode->size().width() << "x" << mode->size().height() << ")"
+                       << "— deactivating VR";
+        setVrActive(false);
     }
 }

@@ -119,6 +119,7 @@ qt6_add_qml_module(vr
         textureprovideritem.h textureprovideritem.cpp
         kwinvrconfigwrapper.h
         kwincompat.h
+        vrprofile.h vrprofile.cpp
 
     RESOURCES
         shaders/yuv.vert

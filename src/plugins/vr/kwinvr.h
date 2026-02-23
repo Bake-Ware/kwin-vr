@@ -15,14 +15,18 @@
 #include <QKeySequence>
 #include <QObject>
 #include <QQmlApplicationEngine>
+#include <QSet>
 
 #include <plugin.h>
 
 #include "kwinvrbridge.h"
 #include "openxrtest.h"
+#include "vrprofile.h"
 
 namespace KWin
 {
+
+class Output;
 
 class KwinVr : public Plugin
 {
@@ -51,12 +55,25 @@ private:
 
     void registerDBusService();
 
+    // Output hot-plug monitoring
+    void setupOutputMonitoring();
+    void scheduleOutputCheck(Output *output, bool isHotPlug);
+    void watchOutputModes(Output *output);
+    void checkOutputMode(Output *output);
+    void onOutputAdded(Output *output);
+    void onOutputRemoved(Output *output);
+    std::optional<VrProfile> matchProfile(Output *output) const;
+
     bool m_active = false;
     QQmlApplicationEngine *m_engine = nullptr;
     KwinVrBridge m_vrbridge;
     OpenXRTest m_xrTest;
     KConfigWatcher::Ptr m_watcher;
     KNotification *m_notification = nullptr;
+
+    QList<VrProfile> m_profiles;
+    Output *m_vrOutput = nullptr;       // the output that triggered current VR session
+    QSet<Output *> m_watchedOutputs;    // outputs we are watching for SBS mode changes
 };
 }
 
