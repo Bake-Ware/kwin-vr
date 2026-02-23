@@ -19,6 +19,16 @@ XrView {
     id: xrView
     onInitializeFailed: (errorString) => kwinVrBridge.xrFailed(errorString);
     onSessionEnded: (errorString) => kwinVrBridge.xrFailed("Session ended")
+
+    // Health ping: lets the C++ watchdog detect XR_ERROR_INSTANCE_LOST spin loops
+    // (Qt's XrView does not emit onSessionEnded for runtime crashes/restarts)
+    Timer {
+        id: healthPing
+        interval: 5000
+        repeat: true
+        running: true
+        onTriggered: kwinVrBridge.xrPing()
+    }
     referenceSpace: XrView.ReferenceSpaceLocal
     depthSubmissionEnabled: false
 
@@ -104,11 +114,6 @@ XrView {
         }
     }
 
-    property bool test1: false
-    onTest1Changed: {
-        KwinVrHelpers.activateOutput(kvs.output, KWinVRConfig.scale)
-    }
-
     function die() {  }
     function resetView() { allWindows.resetView() }
 
@@ -120,6 +125,13 @@ XrView {
                                                          KWinVRConfig.height * KWinVRConfig.scale
                                                          ),
                                                      KWinVRConfig.scale)
+        // When the virtual output is ready, make it the primary display and
+        // move headset outputs (KWIN_FORCE_DESKTOP_OUTPUTS) off-screen so
+        // windows and snap targets land on the virtual desktop, not the headset.
+        onOutputChanged: {
+            if (kvs.output)
+                KwinVrHelpers.activateOutput(kvs.output, KWinVRConfig.scale)
+        }
     }
 
     property KwinVrInputDevice kwinInput

@@ -12,9 +12,12 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QFile>
+#include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include "core/output.h"
@@ -49,11 +52,41 @@ KwinVr::KwinVr()
     KGlobalAccel::self()->setDefaultShortcut(cycleAction, {{Qt::CTRL | Qt::META | Qt::Key_J}});
     KGlobalAccel::self()->setShortcut(cycleAction, {});
 
+    // Watchdog: every 5s while VR is active, compare the running Monado PID to the
+    // one we recorded when the session started. If it changed, Monado restarted and
+    // the XR IPC connection is broken (Qt's XrView does not detect this itself).
+    m_watchdogTimer = new QTimer(this);
+    m_watchdogTimer->setInterval(5000);
+    connect(m_watchdogTimer, &QTimer::timeout, this, [this] {
+        if (!m_active)
+            return;
+        const QString pidFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+                                + QStringLiteral("/monado.pid");
+        QFile pf(pidFile);
+        if (!pf.open(QIODevice::ReadOnly))
+            return;
+        const qint64 currentPid = pf.readAll().trimmed().toLongLong();
+        if (m_monadoPidAtVrStart > 0 && currentPid != m_monadoPidAtVrStart) {
+            qCWarning(KWINVR) << "Monado restarted (old PID:" << m_monadoPidAtVrStart
+                              << "new PID:" << currentPid << "), XR session is broken — stopping";
+            if (m_vrOutput && isOutputInSbsMode(m_vrOutput)) {
+                qCInfo(KWINVR) << "Output still in SBS mode, scheduling retry";
+                m_retryOutput = m_vrOutput;
+            }
+            stop();
+        }
+    });
+
     connect(&m_vrbridge, &KwinVrBridge::xrFailed, this, [this](const QString &errorString) {
         qCWarning(KWINVR) << "XR failed signal received:" << errorString;
         showNotification(QStringLiteral("Failed to Activate VR mode"),
                          QStringLiteral("error: ") + errorString,
                          KNotification::CloseOnTimeout);
+        // Retry if the triggering output is still in SBS mode
+        if (m_vrOutput && isOutputInSbsMode(m_vrOutput)) {
+            qCInfo(KWINVR) << "Output still in SBS mode after XR failure, scheduling retry";
+            m_retryOutput = m_vrOutput;
+        }
         stop();
     }, Qt::QueuedConnection);
 
@@ -111,14 +144,43 @@ void KwinVr::setVrActive(bool active)
             m_vrOutput = nullptr;
             m_active = false;
             Q_EMIT vrActiveChanged();
+
+            // If flagged for retry (watchdog or xrFailed), restart VR after a delay
+            if (m_retryOutput) {
+                Output *output = m_retryOutput;
+                m_retryOutput = nullptr;
+                if (workspace()->outputs().contains(output)) {
+                    qCInfo(KWINVR) << "Retrying VR on" << output->name() << "in 3s";
+                    m_vrOutput = output;
+                    QTimer::singleShot(3000, this, [this] {
+                        if (!m_active && m_vrOutput)
+                            setVrActive(true);
+                    });
+                }
+            }
         });
         /* m_active will be set to false only when engine is deleted */
         m_active = true;
         Q_EMIT vrActiveChanged();
 
+        // Record Monado PID so the watchdog can detect restarts
+        m_monadoPidAtVrStart = -1;
+        {
+            const QString pidFile = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+                                    + QStringLiteral("/monado.pid");
+            QFile pf(pidFile);
+            if (pf.open(QIODevice::ReadOnly))
+                m_monadoPidAtVrStart = pf.readAll().trimmed().toLongLong();
+        }
+        qCInfo(KWINVR) << "VR starting with Monado PID" << m_monadoPidAtVrStart;
+        // Start PID-based watchdog (repeating every 5s)
+        m_watchdogTimer->start();
+
         // XR test disabled - go straight to start
         start();
     } else {
+        // Cancel any pending retry before stopping
+        m_retryOutput = nullptr;
         stop();
         closeNotification();
     }
@@ -184,6 +246,7 @@ void KwinVr::stop()
 {
     m_xrTest.stop();
     KwinVrHelpers::setDmabufFormatFilterForQt(false);
+    m_watchdogTimer->stop();
 
     if (m_engine) {
         m_engine->deleteLater();
@@ -237,6 +300,18 @@ void KwinVr::setupOutputMonitoring()
         return;
     }
 
+    // If Monado is already running from a previous KWin session, its Wayland surface
+    // is connected to the old (dead) KWin, causing VK_ERROR_SURFACE_LOST_KHR when
+    // a new VR session starts. Restart Monado now to give it a fresh connection.
+    const QString monadoSocket = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+                                 + QStringLiteral("/monado_comp_ipc");
+    if (QFile::exists(monadoSocket)) {
+        qCInfo(KWINVR) << "Monado already running at KWin start — restarting for fresh Wayland connection";
+        QProcess::startDetached(QStringLiteral("systemctl"),
+                                {QStringLiteral("--user"), QStringLiteral("restart"),
+                                 QStringLiteral("monado.service")});
+    }
+
     // Ensure KWIN_FORCE_DESKTOP_OUTPUTS covers all profile connectors.
     // This matters for headsets whose EDID has non-desktop=1 (e.g. Samsung Odyssey+):
     // KWin checks this env var in DrmConnector::isNonDesktop() on every HPD event,
@@ -257,6 +332,17 @@ void KwinVr::setupOutputMonitoring()
 
     connect(workspace(), &Workspace::outputAdded, this, &KwinVr::onOutputAdded);
     connect(workspace(), &Workspace::outputRemoved, this, &KwinVr::onOutputRemoved);
+}
+
+bool KwinVr::isOutputInSbsMode(Output *output) const
+{
+    if (!output)
+        return false;
+    auto profile = matchProfile(output);
+    if (!profile || profile->autoStart)
+        return false;
+    const auto mode = output->currentMode();
+    return mode && profile->isSbsMode(mode->size().width());
 }
 
 std::optional<VrProfile> KwinVr::matchProfile(Output *output) const
@@ -357,6 +443,22 @@ void KwinVr::checkOutputMode(Output *output)
                        << "(" << mode->size().width() << "x" << mode->size().height() << ")"
                        << "— activating VR for" << profile->name;
         m_vrOutput = output;
+        // Ensure Monado is running before starting XR. If it was explicitly
+        // stopped (e.g. by a previous stop_vr script call), start it back up
+        // and give it 2s to initialise before we try xrCreateInstance.
+        const QString monadoSocket = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+                                     + QStringLiteral("/monado_comp_ipc");
+        if (!QFile::exists(monadoSocket)) {
+            qCWarning(KWINVR) << "Monado IPC socket not found, starting monado.service...";
+            QProcess::startDetached(QStringLiteral("systemctl"),
+                                    {QStringLiteral("--user"), QStringLiteral("start"),
+                                     QStringLiteral("monado.service")});
+            QTimer::singleShot(3000, this, [this] {
+                if (m_vrOutput && !m_active)
+                    setVrActive(true);
+            });
+            return;
+        }
         setVrActive(true);
     } else if (!inSbs && m_active && m_vrOutput == output) {
         qCInfo(KWINVR) << "SBS mode ended on" << output->name()

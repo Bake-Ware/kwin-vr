@@ -16,8 +16,12 @@ class KwinVrBridge : public QObject
 public:
     explicit KwinVrBridge(QObject *parent = nullptr);
 
+    // Called from QML's health-ping timer; resets the watchdog in kwinvr.cpp
+    Q_INVOKABLE void xrPing();
+
 Q_SIGNALS:
     void xrFailed(const QString &errorString);
+    void xrPingReceived();
 };
 
 #endif // KWINVRBRIDGE_H
