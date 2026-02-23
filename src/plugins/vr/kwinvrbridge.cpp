@@ -10,3 +10,8 @@ KwinVrBridge::KwinVrBridge(QObject *parent)
     : QObject(parent)
 {
 }
+
+void KwinVrBridge::xrPing()
+{
+    Q_EMIT xrPingReceived();
+}

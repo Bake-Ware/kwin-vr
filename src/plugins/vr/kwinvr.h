@@ -16,6 +16,7 @@
 #include <QObject>
 #include <QQmlApplicationEngine>
 #include <QSet>
+#include <QTimer>
 
 #include <plugin.h>
 
@@ -63,6 +64,7 @@ private:
     void onOutputAdded(Output *output);
     void onOutputRemoved(Output *output);
     std::optional<VrProfile> matchProfile(Output *output) const;
+    bool isOutputInSbsMode(Output *output) const;
 
     bool m_active = false;
     QQmlApplicationEngine *m_engine = nullptr;
@@ -74,6 +76,12 @@ private:
     QList<VrProfile> m_profiles;
     Output *m_vrOutput = nullptr;       // the output that triggered current VR session
     QSet<Output *> m_watchedOutputs;    // outputs we are watching for SBS mode changes
+
+    // Watchdog: periodically checks Monado PID; detects restarts that break the XR session
+    QTimer *m_watchdogTimer = nullptr;
+    qint64 m_monadoPidAtVrStart = -1;  // Monado PID recorded when VR session started
+    // If set when engine is destroyed, retry setVrActive(true) on this output
+    Output *m_retryOutput = nullptr;
 };
 }
 
