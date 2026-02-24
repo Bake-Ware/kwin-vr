@@ -336,6 +336,16 @@ QVector3D KwinVrHelpers::rotateVector(const QQuaternion &rotation, const QVector
     return rotation.rotatedVector(vector);
 }
 
+QVector2D KwinVrHelpers::headAnglesFromInitialRotation(const QQuaternion &initial,
+                                                       const QQuaternion &current)
+{
+    const QQuaternion relRot = initial.inverted() * current;
+    const QVector3D forward = relRot.rotatedVector(QVector3D(0, 0, -1));
+    const float pitch = qRadiansToDegrees(std::asin(std::clamp(forward.y(), -1.0f, 1.0f)));
+    const float yaw = qRadiansToDegrees(std::atan2(forward.x(), -forward.z()));
+    return QVector2D(pitch, yaw);
+}
+
 QVector2D KwinVrHelpers::raySphereIntersect(const QVector3D &rayOrigin,
                                             const QVector3D &rayDirection,
                                             const QVector3D &sphereCenter,

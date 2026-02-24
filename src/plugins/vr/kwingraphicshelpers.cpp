@@ -7,6 +7,8 @@
 #include <epoxy/egl.h>
 #include <epoxy/gl.h>
 
+#include <cstring>
+
 #include "kwingraphicshelpers.h"
 #include "kwinvr_logging.h"
 
@@ -669,6 +671,203 @@ static GraphicsBufferTextures importDmaBufViaEglReadback(QQuickWindow *win, Grap
     }
 
     return result;
+}
+
+bool startEglDmaBufReadback(AsyncReadbackState &state, GraphicsBuffer *buf)
+{
+    if (state.pending)
+        return false;
+
+    auto *eglDpy = eglDisplayFromCompositor();
+    if (!eglDpy)
+        return false;
+
+    EGLDisplay dpy = eglDpy->handle();
+    if (!s_readbackHelper.init(dpy))
+        return false;
+
+    const DmaBufAttributes *dmabuf = buf->dmabufAttributes();
+    if (!dmabuf)
+        return false;
+
+    if (eglDpy->isExternalOnly(dmabuf->format, dmabuf->modifier))
+        return false;
+
+    EGLImageKHR image = eglDpy->importDmaBufAsImage(*dmabuf);
+    if (image == EGL_NO_IMAGE)
+        return false;
+
+    EGLContext prevCtx = eglGetCurrentContext();
+    EGLSurface prevDraw = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface prevRead = eglGetCurrentSurface(EGL_READ);
+    EGLDisplay prevDpy = eglGetCurrentDisplay();
+
+    if (!s_readbackHelper.activate()) {
+        eglDpy->destroyImage(image);
+        return false;
+    }
+
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    eglDpy->destroyImage(image);
+
+    if (!texture) {
+        if (prevCtx != EGL_NO_CONTEXT)
+            eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+        else
+            s_readbackHelper.deactivate();
+        return false;
+    }
+
+    const int w = dmabuf->width;
+    const int h = dmabuf->height;
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+
+    bool ok = false;
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
+        // Allocate or resize PBO as needed
+        const GLsizeiptr bufSize = w * h * 4;
+        if (!state.pbo || state.width != w || state.height != h) {
+            if (!state.pbo)
+                glGenBuffers(1, &state.pbo);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, state.pbo);
+            glBufferData(GL_PIXEL_PACK_BUFFER, bufSize, nullptr, GL_DYNAMIC_READ);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        }
+
+        // Non-blocking readback: with a PBO bound, glReadPixels initiates async DMA
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, state.pbo);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+        // Fence signals when the DMA transfer completes
+        if (state.fence)
+            glDeleteSync(static_cast<GLsync>(state.fence));
+        state.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+
+        // Flush ensures commands are submitted to the GPU before we release the context
+        glFlush();
+
+        state.width = w;
+        state.height = h;
+        state.hasAlpha = buf->hasAlphaChannel();
+        state.pending = true;
+        ok = true;
+    } else {
+        qCWarning(KWINVR) << "EGL async readback: framebuffer incomplete:"
+                          << glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &fbo);
+    glDeleteTextures(1, &texture);
+
+    if (prevCtx != EGL_NO_CONTEXT)
+        eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+    else
+        s_readbackHelper.deactivate();
+
+    return ok;
+}
+
+QSGTexture *tryHarvestEglReadback(AsyncReadbackState &state, QQuickWindow *win)
+{
+    if (!state.pending || !state.fence)
+        return nullptr;
+
+    auto *eglDpy = eglDisplayFromCompositor();
+    if (!eglDpy)
+        return nullptr;
+
+    EGLContext prevCtx = eglGetCurrentContext();
+    EGLSurface prevDraw = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface prevRead = eglGetCurrentSurface(EGL_READ);
+    EGLDisplay prevDpy = eglGetCurrentDisplay();
+
+    if (!s_readbackHelper.activate())
+        return nullptr;
+
+    // Non-blocking fence poll: returns immediately if not yet signaled
+    GLenum fenceStatus = glClientWaitSync(static_cast<GLsync>(state.fence), 0, 0);
+    if (fenceStatus == GL_TIMEOUT_EXPIRED || fenceStatus == GL_WAIT_FAILED) {
+        if (prevCtx != EGL_NO_CONTEXT)
+            eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+        else
+            s_readbackHelper.deactivate();
+        return nullptr;
+    }
+
+    // Fence signaled: readback DMA is complete
+    glDeleteSync(static_cast<GLsync>(state.fence));
+    state.fence = nullptr;
+    state.pending = false;
+
+    // Map PBO and copy pixel data to a QImage
+    const GLsizeiptr bufSize = state.width * state.height * 4;
+    const auto imgFmt = state.hasAlpha ? QImage::Format_RGBA8888 : QImage::Format_RGBX8888;
+    QImage qimg(state.width, state.height, imgFmt);
+
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, state.pbo);
+    void *ptr = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, bufSize, GL_MAP_READ_BIT);
+    if (ptr) {
+        memcpy(qimg.bits(), ptr, bufSize);
+        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+    } else {
+        qCWarning(KWINVR) << "EGL async readback: glMapBufferRange failed";
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+    if (prevCtx != EGL_NO_CONTEXT)
+        eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+    else
+        s_readbackHelper.deactivate();
+
+    if (!ptr)
+        return nullptr;
+
+    // Upload to Vulkan RHI via Qt's createTextureFromImage (Vulkan path, unaffected by EGL context)
+    return win->createTextureFromImage(
+        qimg,
+        state.hasAlpha ? QQuickWindow::TextureHasAlphaChannel : QQuickWindow::CreateTextureOptions{});
+}
+
+void cancelEglReadback(AsyncReadbackState &state)
+{
+    if (!state.pbo && !state.fence)
+        return;
+
+    if (!s_readbackHelper.initialized)
+        return;
+
+    EGLContext prevCtx = eglGetCurrentContext();
+    EGLSurface prevDraw = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface prevRead = eglGetCurrentSurface(EGL_READ);
+    EGLDisplay prevDpy = eglGetCurrentDisplay();
+
+    if (!s_readbackHelper.activate())
+        return;
+
+    if (state.fence) {
+        glDeleteSync(static_cast<GLsync>(state.fence));
+        state.fence = nullptr;
+    }
+    if (state.pbo) {
+        glDeleteBuffers(1, &state.pbo);
+        state.pbo = 0;
+    }
+    state.pending = false;
+
+    if (prevCtx != EGL_NO_CONTEXT)
+        eglMakeCurrent(prevDpy, prevDraw, prevRead, prevCtx);
+    else
+        s_readbackHelper.deactivate();
 }
 
 GraphicsBufferTextures loadGraphicsBufferToQSGTextures(GraphicsBuffer *buf, QQuickWindow *win)

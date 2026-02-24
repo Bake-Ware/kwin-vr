@@ -47,6 +47,22 @@ ColumnLayout {
         configObject: kcm.settings
         settingName: "distance"
     }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "immersiveMode"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudDistanceFraction"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudVerticalAngle"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudScale"
+    }
 
     // Main display configuration area
     Item {
@@ -283,6 +299,86 @@ ColumnLayout {
         }
     }
 
+    // Immersive mode
+    RowLayout {
+        Layout.alignment: Qt.AlignHCenter
+        spacing: Kirigami.Units.smallSpacing
+
+        Controls.CheckBox {
+            id: tImmersiveMode
+            text: i18nc("@option:check", "Immersive Mode")
+            checked: kcm.settings.immersiveMode
+            onToggled: kcm.settings.immersiveMode = checked
+        }
+
+        Kirigami.ContextualHelpButton {
+            toolTipText: xi18nc("@info:tooltip", "Hides the flat desktop mirror and floats all windows in VR space. The taskbar is pinned as a HUD at the bottom of your view. Windows return to flat mode when VR is deactivated.")
+        }
+    }
+
+    // HUD taskbar placement (only relevant in immersive mode)
+    RowLayout {
+        Layout.alignment: Qt.AlignHCenter
+        spacing: Kirigami.Units.largeSpacing * 2
+        enabled: tImmersiveMode.checked
+
+        ColumnLayout {
+            spacing: 2
+            Controls.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: i18nc("@label:spinbox", "HUD Distance")
+                font.bold: true
+            }
+            RowLayout {
+                Controls.SpinBox {
+                    id: tHudDistanceFraction
+                    value: kcm.settings.hudDistanceFraction
+                    from: 10
+                    to: 200
+                    editable: true
+                }
+                Controls.Label { text: i18nc("@item:valuesuffix", "% dist") }
+            }
+        }
+
+        ColumnLayout {
+            spacing: 2
+            Controls.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: i18nc("@label:spinbox", "HUD Angle")
+                font.bold: true
+            }
+            RowLayout {
+                Controls.SpinBox {
+                    id: tHudVerticalAngle
+                    value: kcm.settings.hudVerticalAngle
+                    from: 0
+                    to: 45
+                    editable: true
+                }
+                Controls.Label { text: i18nc("@item:valuesuffix", "° down") }
+            }
+        }
+
+        ColumnLayout {
+            spacing: 2
+            Controls.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: i18nc("@label:spinbox", "HUD Scale")
+                font.bold: true
+            }
+            Controls.SpinBox {
+                id: tHudScale
+                value: Math.round(kcm.settings.hudScale * 10)
+                from: 1
+                to: 30
+                editable: true
+                textFromValue: (v, l) => (v / 10).toFixed(1)
+                valueFromText: (t, l) => Math.round(parseFloat(t) * 10)
+            }
+        }
+    }
+
     Binding {
         target: kcm.settings
         property: "width"
@@ -312,5 +408,20 @@ ColumnLayout {
         target: kcm.settings
         property: "distance"
         value: tDistance.value
+    }
+    Binding {
+        target: kcm.settings
+        property: "hudDistanceFraction"
+        value: tHudDistanceFraction.value
+    }
+    Binding {
+        target: kcm.settings
+        property: "hudVerticalAngle"
+        value: tHudVerticalAngle.value
+    }
+    Binding {
+        target: kcm.settings
+        property: "hudScale"
+        value: tHudScale.value / 10.0
     }
 }

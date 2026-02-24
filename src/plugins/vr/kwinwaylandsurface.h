@@ -8,6 +8,7 @@
 #define KWINWAYLANDSURFACE_H
 
 #include "core/graphicsbuffer.h"
+#include "kwinasyncreadback.h"
 #include "textureprovideritem.h"
 #include "wayland/subcompositor.h"
 #include "wayland/surface.h"
@@ -76,6 +77,9 @@ private:
     bool m_noInput = false;
 
     KWin::TextureProviderItem *m_uvTextureItem = nullptr;
+
+    // Render-thread-only: async PBO readback state for Vulkan RHI path
+    AsyncReadbackState m_asyncReadback;
 };
 }
 

@@ -42,6 +42,22 @@
       <label>Click and drag in empty space moves all windows</label>
       <default>false</default>
     </entry>
+    <entry name="immersiveMode" type="Bool">
+      <label>Immersive mode: all windows float in VR, dock pinned as HUD</label>
+      <default>false</default>
+    </entry>
+    <entry name="hudDistanceFraction" type="Int">
+      <label>HUD taskbar distance as percentage of workspace distance</label>
+      <default>70</default>
+    </entry>
+    <entry name="hudVerticalAngle" type="Int">
+      <label>HUD taskbar angle below center (degrees)</label>
+      <default>12</default>
+    </entry>
+    <entry name="hudScale" type="Double">
+      <label>HUD taskbar scale</label>
+      <default>0.8</default>
+    </entry>
     <entry name="followFovH" type="Int">
       <label>Horizontal field of view threshold for follow mode (degrees)</label>
       <default>40</default>
