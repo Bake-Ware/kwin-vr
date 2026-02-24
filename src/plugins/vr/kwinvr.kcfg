@@ -38,6 +38,10 @@
       <label>Enable follow mode by default</label>
       <default>true</default>
     </entry>
+    <entry name="emptySpaceDragMovesWindows" type="Bool">
+      <label>Click and drag in empty space moves all windows</label>
+      <default>false</default>
+    </entry>
     <entry name="followFovH" type="Int">
       <label>Horizontal field of view threshold for follow mode (degrees)</label>
       <default>40</default>
@@ -148,6 +152,18 @@
     <entry name="rightClickBindings" type="StringList">
       <label>Keys triggering a right mouse click in VR</label>
       <default></default>
+    </entry>
+    <entry name="leftClickToggle" type="Bool">
+      <label>Left click binding acts as toggle (press once = down, press again = up)</label>
+      <default>false</default>
+    </entry>
+    <entry name="middleClickToggle" type="Bool">
+      <label>Middle click binding acts as toggle</label>
+      <default>false</default>
+    </entry>
+    <entry name="rightClickToggle" type="Bool">
+      <label>Right click binding acts as toggle</label>
+      <default>false</default>
     </entry>
     <entry name="headgazePositionX" type="Double">
       <label>Headgaze ray X offset from head position (centimeters)</label>

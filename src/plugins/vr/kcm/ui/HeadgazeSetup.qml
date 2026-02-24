@@ -69,6 +69,10 @@ ColumnLayout {
         KCMUtils.SettingStateBinding {
             configObject: kcm.settings
             settingName: "gazeReclaimThreshold"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "distance"
         }
     ]
 
@@ -212,6 +216,30 @@ ColumnLayout {
             Synchronizer on value {
                 sourceObject: kcm.settings
                 sourceProperty: "headgazePositionZ"
+            }
+        }
+
+        // Workspace Distance
+        Controls.Label {
+            Layout.columnSpan: 2
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            text: i18nc("@title:group", "Workspace Distance (cm)")
+            font.italic: true
+        }
+
+        Controls.Label {
+            text: i18nc("@label:slider", "Distance:")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        }
+        ValueSlider {
+            Layout.fillWidth: true
+            label: ""
+            labelWidth: 0
+            from: 50; to: 500; stepSize: 10; decimals: 0
+            Synchronizer on value {
+                sourceObject: kcm.settings
+                sourceProperty: "distance"
             }
         }
     }

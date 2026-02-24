@@ -235,6 +235,16 @@ XrView {
         }
     }
 
+    // Grabs allWindowsGrabHandle only if cursor is over empty space.
+    // Returns true if the grab was initiated, false if cursor is over a window.
+    function grabAllWindows(): bool {
+        if (focusTracking.cursorHoverObject) return false
+        if (!pickRay.grabbedObject) {
+            pickRay.grab(allWindowsGrabHandle)
+        }
+        return true
+    }
+
     function grab(grabAll: bool): void {
         if (pipGrabActive) {
             pipGrabActive = false

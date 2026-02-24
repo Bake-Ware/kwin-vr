@@ -18,6 +18,7 @@ ColumnLayout {
     property string label
     property string settingName
     property string toolTipText
+    property string toggleSettingName: ""
 
     property list<string> bindings: kcm.settings[root.settingName]
     property string lastBinding: bindings.length > 0 ? bindings[bindings.length - 1] : ""
@@ -27,6 +28,12 @@ ColumnLayout {
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
         settingName: root.settingName
+    }
+
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: root.toggleSettingName
+        enabled: root.toggleSettingName !== ""
     }
 
     RowLayout {
@@ -84,6 +91,17 @@ ColumnLayout {
             var list = kcm.settings[root.settingName].slice()
             list.push("none")
             kcm.settings[root.settingName] = list
+        }
+    }
+
+    Controls.CheckBox {
+        visible: root.toggleSettingName !== ""
+        Layout.alignment: Qt.AlignHCenter
+        text: i18nc("@option:check", "Toggle")
+        checked: root.toggleSettingName !== "" && kcm.settings[root.toggleSettingName]
+        onToggled: {
+            if (root.toggleSettingName !== "")
+                kcm.settings[root.toggleSettingName] = checked
         }
     }
 }

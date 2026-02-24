@@ -40,12 +40,14 @@ Item {
         id: mouseArea
         focus: true
         Keys.onPressed: (event) => {
-                            xrView.closeRadialMenu();
-
+                            // Handle mouse-button bindings first so the synthetic click
+                            // reaches the radial menu before we close it.
                             if (mouseBindings.handleKey(event, true)) {
                                 event.accepted = true
                                 return
                             }
+
+                            xrView.closeRadialMenu();
 
                             if (!event.isAutoRepeat && headScrollBindings.isHeadScrollKey(event.key, event.modifiers)) {
                                 xrView.headScrollActive = true
@@ -137,6 +139,7 @@ Item {
         acceptedButtons: Qt.AllButtons
 
         property bool desktopGrabbed: false
+        property bool emptySpaceDragGrabbed: false
         onPressed: (event) => {
                        /* Release grabbed object on any button press */
                        if(xrView.release()) {
@@ -159,6 +162,13 @@ Item {
                            }
                        }
 
+                       /* Empty space drag to move all windows */
+                       if (KWinVRConfig.emptySpaceDragMovesWindows) {
+                           emptySpaceDragGrabbed = xrView.grabAllWindows()
+                           if (emptySpaceDragGrabbed)
+                               return
+                       }
+
                        /* Activate/close radial menu if click on empty space */
                        if(xrView.radialMenuActivate(true)) {
                            return;
@@ -171,6 +181,12 @@ Item {
                             xrView.grab(false)
                             desktopGrabbed = false
                             return;
+                        }
+
+                        if (emptySpaceDragGrabbed) {
+                            xrView.release()
+                            emptySpaceDragGrabbed = false
+                            return
                         }
 
                         if (headScrollBindings.isHeadScrollButton(event.button)) {
