@@ -39,18 +39,21 @@ Item {
                 Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
                 label: i18nc("@title:group", "Left Button")
                 settingName: "leftClickBindings"
+                toggleSettingName: "leftClickToggle"
             }
 
             BindingGroup {
                 Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
                 label: i18nc("@title:group", "Middle Button")
                 settingName: "middleClickBindings"
+                toggleSettingName: "middleClickToggle"
             }
 
             BindingGroup {
                 Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
                 label: i18nc("@title:group", "Right Button")
                 settingName: "rightClickBindings"
+                toggleSettingName: "rightClickToggle"
             }
         }
     }

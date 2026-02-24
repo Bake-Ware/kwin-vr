@@ -51,6 +51,11 @@ Item {
         settingName: "vignetteFadeWidth"
     }
 
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "emptySpaceDragMovesWindows"
+    }
+
     // Centered content wrapper
     ColumnLayout {
         id: innerLayout
@@ -179,6 +184,15 @@ Item {
             Kirigami.ContextualHelpButton {
                 toolTipText: xi18nc("@info:tooltip", "Curvature applied to windows when they enter VR mode. 0 = flat, higher values = more curved.")
             }
+        }
+
+        // Empty Space Drag
+        Controls.CheckBox {
+            id: tEmptySpaceDragMovesWindows
+            Layout.alignment: Qt.AlignHCenter
+            text: i18nc("@option:check", "Drag empty space to move all windows")
+            checked: kcm.settings.emptySpaceDragMovesWindows
+            onToggled: kcm.settings.emptySpaceDragMovesWindows = checked
         }
 
         // Edge Vignette
