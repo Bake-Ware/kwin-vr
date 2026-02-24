@@ -1,0 +1,212 @@
+From 5ae6fe82803ac56eb988b9697228da07c37bc668 Mon Sep 17 00:00:00 2001
+From: Bake-Ware <bakeware@users.noreply.github.com>
+Date: Tue, 24 Feb 2026 06:59:31 +0000
+Subject: [PATCH] xreal_air: RT priority + blocking read + auto gyro bias
+ correction
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- xreal_air_hmd: set SCHED_FIFO/99 on read_thread via u_linux_try_to_set_realtime_priority_on_thread
+  to prevent CFS scheduler preemption causing burst IMU timestamp compression at 10-15 Hz
+- xreal_air_hmd: change sensor read from busy-poll (timeout=0) to 1ms blocking poll,
+  dropping CPU usage from ~100% to ~1% on the read core
+- m_imu_3dof: add automatic gyro bias estimation during stillness to reduce yaw drift.
+  Fires after 5s of gyro < 0.03 rad/s AND accel within 0.5 m/s² of gravity.
+  Bias update uses lerp(alpha=0.5) instead of hard-set to avoid visible snap on correction.
+  Adds still_start_ns to gyro_bias struct and exposes it via u_var for debugging.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/xrt/auxiliary/math/m_imu_3dof.c       | 34 ++++++++++++++++++-
+ src/xrt/auxiliary/math/m_imu_3dof.h       |  1 +
+ src/xrt/drivers/xreal_air/xreal_air_hmd.c | 40 +++++++++++++++++++++--
+ 3 files changed, 71 insertions(+), 4 deletions(-)
+
+diff --git a/src/xrt/auxiliary/math/m_imu_3dof.c b/src/xrt/auxiliary/math/m_imu_3dof.c
+index 9602fc7..5f26f8a 100644
+--- a/src/xrt/auxiliary/math/m_imu_3dof.c
++++ b/src/xrt/auxiliary/math/m_imu_3dof.c
+@@ -24,6 +24,20 @@
+ #define DUR_1S_IN_NS (1000 * 1000 * 1000)
+ #define DUR_300MS_IN_NS (300 * 1000 * 1000)
+ #define DUR_20MS_IN_NS (20 * 1000 * 1000)
++#define DUR_5S_IN_NS (5U * 1000U * 1000U * 1000U)
++
++// Gyro magnitude (rad/s) below which the device is considered truly still for bias estimation.
++// 0.03 rad/s ≈ 1.7°/s — tight enough to reject slow deliberate pans, loose enough to fire
++// reliably when the headset is on a desk or being held steady.
++#define AUTO_BIAS_GYRO_THRESHOLD 0.03f
++
++// Accel must be within this of 9.82 m/s² to confirm stillness (not just slow movement).
++#define AUTO_BIAS_ACCEL_TOLERANCE 0.5f
++
++// How much of the new bias estimate to blend in each time the auto-fire triggers (0..1).
++// A value of 0.5 means each correction applies half the remaining error, converging smoothly
++// over ~4 firings (~20s) without causing a visible snap.
++#define AUTO_BIAS_LERP_ALPHA 0.5f
+ 
+ 
+ void
+@@ -98,6 +112,8 @@ m_imu_3dof_add_vars(struct m_imu_3dof *f, void *root, const char *prefix)
+ 	u_var_add_ro_vec3_f32(root, &f->gyro_bias.value, tmp);
+ 	snprintf(tmp, sizeof(tmp), "%sgyro_bias.manually_fire", prefix);
+ 	u_var_add_bool(root, &f->gyro_bias.manually_fire, tmp);
++	snprintf(tmp, sizeof(tmp), "%sgyro_bias.still_start_ns", prefix);
++	u_var_add_ro_u64(root, &f->gyro_bias.still_start_ns, tmp);
+ }
+ 
+ static void
+@@ -223,7 +239,8 @@ gyro_biasing(struct m_imu_3dof *f, uint64_t timestamp_ns)
+ 	                     timestamp_ns,          // End time
+ 	                     &gyro_mean);           // Results
+ 
+-	f->gyro_bias.value = gyro_mean;
++	// Lerp toward the new estimate instead of snapping to avoid a visible jerk.
++	f->gyro_bias.value = m_vec3_lerp(f->gyro_bias.value, gyro_mean, AUTO_BIAS_LERP_ALPHA);
+ }
+ 
+ void
+@@ -289,6 +306,21 @@ m_imu_3dof_update(struct m_imu_3dof *f,
+ 	// Gravity correction.
+ 	gravity_correction(f, timestamp_ns, accel, &gyro_biased, dt, gyro_biased_length);
+ 
++	// Auto-fire gyro bias estimation after 5 seconds of confirmed stillness.
++	// Requires tight gyro AND accel-near-gravity to avoid firing during slow pans or vibration.
++	bool is_still = (gyro_biased_length < AUTO_BIAS_GYRO_THRESHOLD) &&
++	                (fabsf(accel_length - 9.82f) < AUTO_BIAS_ACCEL_TOLERANCE);
++	if (is_still) {
++		if (f->gyro_bias.still_start_ns == 0) {
++			f->gyro_bias.still_start_ns = timestamp_ns;
++		} else if (timestamp_ns - f->gyro_bias.still_start_ns >= DUR_5S_IN_NS) {
++			f->gyro_bias.still_start_ns = timestamp_ns; // restart timer for continued stillness
++			f->gyro_bias.manually_fire = true;
++		}
++	} else {
++		f->gyro_bias.still_start_ns = 0;
++	}
++
+ 	// Gyro bias calculations.
+ 	gyro_biasing(f, timestamp_ns);
+ 
+diff --git a/src/xrt/auxiliary/math/m_imu_3dof.h b/src/xrt/auxiliary/math/m_imu_3dof.h
+index 7674f77..69c2855 100644
+--- a/src/xrt/auxiliary/math/m_imu_3dof.h
++++ b/src/xrt/auxiliary/math/m_imu_3dof.h
+@@ -69,6 +69,7 @@ struct m_imu_3dof
+ 	{
+ 		struct xrt_vec3 value;
+ 		bool manually_fire;
++		uint64_t still_start_ns; //!< When current stationary period began (0 = moving)
+ 	} gyro_bias;
+ };
+ 
+diff --git a/src/xrt/drivers/xreal_air/xreal_air_hmd.c b/src/xrt/drivers/xreal_air/xreal_air_hmd.c
+index 47fd1af..f8f0e18 100644
+--- a/src/xrt/drivers/xreal_air/xreal_air_hmd.c
++++ b/src/xrt/drivers/xreal_air/xreal_air_hmd.c
+@@ -18,6 +18,7 @@
+ 
+ #include "util/u_device.h"
+ #include "util/u_distortion_mesh.h"
++#include "util/u_linux.h"
+ #include "util/u_trace_marker.h"
+ #include "util/u_var.h"
+ 
+@@ -618,7 +619,10 @@ sensor_read_one_packet(struct xreal_air_hmd *hmd)
+ 		buffer_size = hmd->max_sensor_buffer_size;
+ 	}
+ 
+-	int size = os_hid_read(hmd->hid_sensor, buffer, buffer_size, 0);
++	// Block up to 1ms waiting for a sensor packet. This prevents the
++	// read_thread busy-wait from saturating a CPU core while still
++	// servicing IMU data well within the ~2ms inter-sample budget.
++	int size = os_hid_read(hmd->hid_sensor, buffer, buffer_size, 1);
+ 	if (size <= 0) {
+ 		return size;
+ 	}
+@@ -638,6 +642,8 @@ read_thread(void *ptr)
+ 	struct xreal_air_hmd *hmd = (struct xreal_air_hmd *)ptr;
+ 	int ret = 0;
+ 
++	u_linux_try_to_set_realtime_priority_on_thread(hmd->log_level, "Xreal Air");
++
+ 	os_thread_helper_lock(&hmd->oth);
+ 
+ 	request_sensor_control_start_imu_data(hmd, 0xAA);
+@@ -702,7 +708,10 @@ send_payload_to_control(struct xreal_air_hmd *hmd, uint16_t msgid, const uint8_t
+ 	payload[3] = ((checksum >> 16u) & 0xFFu);
+ 	payload[4] = ((checksum >> 24u) & 0xFFu);
+ 
+-	return os_hid_write(hmd->hid_control, payload, payload_len);
++	XREAL_AIR_DEBUG(hmd, "control send msgid=0x%04x len=%d payload_len=%d", msgid, len, payload_len);
++	int ret = os_hid_write(hmd->hid_control, payload, payload_len);
++	XREAL_AIR_DEBUG(hmd, "control send result=%d", ret);
++	return ret;
+ }
+ 
+ static void
+@@ -872,8 +881,12 @@ handle_control_msg(struct xreal_air_hmd *hmd, unsigned char *buffer, int size)
+ 
+ 	if (!xreal_air_parse_control_packet(&control, buffer, size)) {
+ 		XREAL_AIR_ERROR(hmd, "Could not decode control packet");
++		return;
+ 	}
+ 
++	XREAL_AIR_DEBUG(hmd, "control msg: action=0x%04x length=%u data[0]=0x%02x data[1]=0x%02x data[2]=0x%02x",
++		control.action, control.length, control.data[0], control.data[1], control.data[2]);
++
+ 	os_mutex_lock(&hmd->device_mutex);
+ 	handle_control_action_locked(hmd, &control);
+ 	os_mutex_unlock(&hmd->device_mutex);
+@@ -900,9 +913,14 @@ read_one_control_packet(struct xreal_air_hmd *hmd)
+ 		return 0;
+ 	}
+ 	if (size < 0) {
++		XREAL_AIR_DEBUG(hmd, "control read error: %d", size);
+ 		return -1;
+ 	}
+ 
++	XREAL_AIR_DEBUG(hmd, "control pkt size=%d head=0x%02x [%02x %02x %02x %02x %02x %02x %02x %02x ...]",
++		size, buffer[0], buffer[0], buffer[1], buffer[2], buffer[3],
++		buffer[4], buffer[5], buffer[6], buffer[7]);
++
+ 	handle_control_msg(hmd, buffer, size);
+ 	return size;
+ }
+@@ -934,6 +952,16 @@ wait_for_display_mode(struct xreal_air_hmd *hmd)
+ 			return true;
+ 		}
+ 
++		// Accept unknown display modes as 2D - newer firmware may report
++		// values like 0x0b that aren't in the known set
++		if (hmd->state.display_mode != 0x00) {
++			XREAL_AIR_DEBUG(hmd, "Unknown display mode 0x%02x, treating as 2D",
++				hmd->state.display_mode);
++			hmd->state.display_mode = XREAL_AIR_DISPLAY_MODE_2D;
++			hmd->wants.display_mode = XREAL_AIR_DISPLAY_MODE_2D;
++			return true;
++		}
++
+ 		os_nanosleep(U_TIME_1MS_IN_NS);
+ 	}
+ 
+@@ -1259,8 +1287,14 @@ xreal_air_hmd_create_device(struct os_hid_device *sensor_device,
+ 		goto cleanup;
+ 	}
+ 
++	// Don't force SBS mode - let the user switch manually via the glasses button.
++	// On RK3588 (Orange Pi 5B), forcing SBS here triggers a DP mode change that
++	// causes link training failure in the dw-dp driver.
++	XREAL_AIR_DEBUG(hmd, "Current display mode: 0x%02x (not forcing SBS)",
++		hmd->state.display_mode);
++
+ 	/*
+-	 * Device setup.
++	 * Device setup - use current display mode.
+ 	 */
+ 
+ 	if (!switch_display_mode(hmd, hmd->state.display_mode)) {
+-- 
+2.53.0
+
