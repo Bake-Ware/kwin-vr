@@ -45,6 +45,11 @@ XrView {
     property real ppu: KWinVRConfig.ppu
     property real distance: KWinVRConfig.distance
 
+    // HUD dock geometry (taskbar pinned to camera in immersive mode)
+    readonly property real hudDockDistance: distance * KWinVRConfig.hudDistanceFraction / 100.0
+    readonly property real hudDockY: -(hudDockDistance * Math.tan(KWinVRConfig.hudVerticalAngle * Math.PI / 180.0))
+    readonly property real hudDockScale: KWinVRConfig.hudScale
+
     property alias hudEnabled: hudLoader.active
     property alias rayEnabled: pickRay.enabled
     property alias grabbed: pickRay.grabbedObject
@@ -283,13 +288,79 @@ XrView {
     }
 
     property alias headScrollActive: headScroll.headScrollActive
+
+    // Head-as-mouse cursor lock mode: toggled by pressing the head-scroll key over empty space.
+    // World spatial position locks, head rotation drives cursor position directly.
+    property bool headLookCursorToggle: false
+    property quaternion headLookInitialRotation
+    property real headLookLastPitch: 0
+    property real headLookLastYaw: 0
+
+    // Disable ray picking while cursor lock is active (cursor position managed by head rotation)
+    Binding {
+        target: focusTracking
+        property: "headLookCursorMode"
+        value: xrView.headLookCursorToggle
+    }
+
+    // Toggle cursor lock on each head-scroll button press
+    Connections {
+        target: headScroll
+        function onHeadScrollActiveChanged() {
+            if (!headScroll.headScrollActive) return
+            if (xrView.headLookCursorToggle) {
+                // Second press: exit cursor lock, snap to center
+                xrView.headLookCursorToggle = false
+                xrView.kwinInput.pointerPosition = Qt.point(
+                    KWinVRConfig.width * KWinVRConfig.scale / 2,
+                    KWinVRConfig.height * KWinVRConfig.scale / 2
+                )
+            } else if (!focusTracking.cursorHoverObject) {
+                // First press over empty space: enter cursor lock
+                xrView.headLookCursorToggle = true
+                xrView.headLookInitialRotation = cam.sceneRotation
+                xrView.headLookLastPitch = 0
+                xrView.headLookLastYaw = 0
+            }
+            // Pressed over a window: normal head scroll, do nothing extra
+        }
+    }
+
+    // Head-as-mouse: camera rotation → cursor position while cursor lock is active
+    Connections {
+        target: cam
+        enabled: xrView.headLookCursorToggle
+        function onSceneRotationChanged() {
+            const angles = KwinVrHelpers.headAnglesFromInitialRotation(
+                xrView.headLookInitialRotation, cam.sceneRotation)
+            const pitchDiff = angles.x - xrView.headLookLastPitch
+            const yawDiff = angles.y - xrView.headLookLastYaw
+            const thr = KWinVRConfig.headScrollThreshold
+            if (Math.abs(pitchDiff) < thr && Math.abs(yawDiff) < thr) return
+            const pxPerDeg = xrView.distance * xrView.ppu * Math.PI / 180
+            const w = KWinVRConfig.width * KWinVRConfig.scale
+            const h = KWinVRConfig.height * KWinVRConfig.scale
+            xrView.kwinInput.pointerPosition = Qt.point(
+                Math.max(0, Math.min(w, xrView.kwinInput.pointerPosition.x + yawDiff * pxPerDeg)),
+                Math.max(0, Math.min(h, xrView.kwinInput.pointerPosition.y - pitchDiff * pxPerDeg))
+            )
+            xrView.headLookLastPitch = angles.x
+            xrView.headLookLastYaw = angles.y
+        }
+    }
+
     VrHeadScroll {
         id: headScroll
         camera: cam
         verticalScrollMultiplier: KWinVRConfig.verticalHeadScrollSpeed
         horizontalScrollMultiplier: KWinVRConfig.horizontalHeadScrollSpeed
         threshold: KWinVRConfig.headScrollThreshold
-        onWheel: (v) => xrView.kwinInput.setAxis(v.x, v.y)
+        onWheel: (v) => {
+            // Suppress scroll when cursor lock is active (head rotation handles cursor instead)
+            if (!xrView.headLookCursorToggle) {
+                xrView.kwinInput.setAxis(v.x, v.y)
+            }
+        }
     }
 
     VrFocusControl {
@@ -448,6 +519,9 @@ XrView {
                 if(headScroll.headScrollActive)
                     return null
 
+                if(xrView.headLookCursorToggle)
+                    return null
+
                 if(pickRay.grabbedObject)
                     return null
 
@@ -478,6 +552,24 @@ XrView {
             id: allWindowsGrabHandle
             position: Qt.vector3d(0, 0, -xrView.distance)
 
+            // Cursor lock indicator: white sphere at cursor position on the virtual screen plane
+            Model {
+                visible: xrView.headLookCursorToggle
+                source: "#Sphere"
+                depthBias: -9000
+                position: Qt.vector3d(
+                    (xrView.kwinInput.pointerPosition.x - KWinVRConfig.width  * KWinVRConfig.scale / 2) / xrView.ppu,
+                    -(xrView.kwinInput.pointerPosition.y - KWinVRConfig.height * KWinVRConfig.scale / 2) / xrView.ppu,
+                    0.5
+                )
+                scale: Qt.vector3d(0.4, 0.4, 0.4)
+                materials: PrincipledMaterial {
+                    baseColor: "#ffffff"
+                    lighting: PrincipledMaterial.NoLighting
+                    opacity: 0.85
+                }
+            }
+
             SpaceAllocator3D {
                 id: spaceAllocator
                 viewpoint: cam
@@ -493,6 +585,9 @@ XrView {
                 delegate: KwinPseudoOutputMirror {
                     id: pseudoOutput
                     ppu: allWindows.ppu
+                    // Hidden in immersive mode: windows float freely, but the node stays
+                    // alive so window sizing/placement geometry remains available.
+                    visible: !KWinVRConfig.immersiveMode
                     Component.onCompleted: {
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
@@ -531,6 +626,8 @@ XrView {
                     focusControl: focusTracking
                     property real zOffset: 0
                     property int stackingOrder: client.stackingOrder
+                    // Tracks whether VR mode was forced on by immersive mode (not manually set)
+                    property bool autoVr: false
 
                     function centerOffset(childRect: rect, parentRect: rect, zValue: real, ppu: real): vector3d {
                         return Qt.vector3d(
@@ -549,11 +646,32 @@ XrView {
                     }
 
                     function registerForSpaceAllocator() {
-                        if (spaceAllocator)
-                            spaceAllocator.registerObject(kwinAppWindow)
+                        if (!spaceAllocator) return
+                        if (client.vr) {
+                            // Find a free position and orient the window in 3D space
+                            const pos = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
+                            kwinAppWindow.position = allWindowsGrabHandle.mapPositionFromScene(pos)
+                            KwinVrHelpers.turnToFaceKeepRoll(kwinAppWindow, spaceAllocator.viewpoint)
+                        }
+                        spaceAllocator.registerObject(kwinAppWindow)
                     }
+                    // Returns true if this window should be forced into VR in immersive mode.
+                    // Skips desktop backgrounds and non-app Plasma infrastructure.
+                    function immersiveVrEligible(): bool {
+                        if (client.dock) return true
+                        if (client.desktopWindow) return false
+                        return client.normalWindow || client.dialog
+                    }
+
                     Component.onCompleted: {
-                        if (KwinVrHelpers.hasVrPose(client)) {
+                        if (KWinVRConfig.immersiveMode) {
+                            if (!kwinAppWindow.immersiveVrEligible()) return
+                            // Force app windows into VR space; dock is handled by "hud" state
+                            client.vr = true
+                            kwinAppWindow.autoVr = true
+                            if (!client.dock)
+                                Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        } else if (KwinVrHelpers.hasVrPose(client)) {
                             client.vr = true
                             Qt.callLater(function() {
                                 if (!kwinAppWindow) return
@@ -566,8 +684,28 @@ XrView {
                         }
                     }
                     Component.onDestruction: {
-                        if (client.vr)
+                        if (KWinVRConfig.immersiveMode) {
+                            // Restore to flat mode on VR exit; don't save poses
+                            client.vr = false
+                        } else if (client.vr) {
                             KwinVrHelpers.saveVrPose(client, position, rotation, curvature)
+                        }
+                    }
+
+                    Connections {
+                        target: KWinVRConfig
+                        function onImmersiveModeChanged() {
+                            if (KWinVRConfig.immersiveMode) {
+                                if (!kwinAppWindow.immersiveVrEligible()) return
+                                client.vr = true
+                                kwinAppWindow.autoVr = true
+                                if (!client.dock)
+                                    Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                            } else if (kwinAppWindow.autoVr) {
+                                client.vr = false
+                                kwinAppWindow.autoVr = false
+                            }
+                        }
                     }
 
                     VrWindowControls {
@@ -602,7 +740,8 @@ XrView {
                     states: [
                         State {
                             name: "pip"
-                            when: kwinAppWindow === xrView.pipTarget
+                            when: kwinAppWindow === xrView.pipTarget &&
+                                  !(KWinVRConfig.immersiveMode && kwinAppWindow.client.dock)
                             PropertyChanges {
                                 kwinAppWindow {
                                     parent: cam
@@ -612,6 +751,24 @@ XrView {
                                     eulerRotation: Qt.vector3d(0, 0, 0)
                                     scale: Qt.vector3d(xrView.pipScale, xrView.pipScale, xrView.pipScale)
                                     curvature: xrView.pipCurvature
+                                }
+                            }
+                            StateChangeScript {
+                                script: followMode.unregisterObject(kwinAppWindow)
+                            }
+                        },
+                        State {
+                            name: "hud"
+                            when: KWinVRConfig.immersiveMode && kwinAppWindow.client.dock
+                            PropertyChanges {
+                                kwinAppWindow {
+                                    parent: cam
+                                    grabHandle: kwinAppWindow
+                                    zOffsetGlobal: 50
+                                    position: Qt.vector3d(0, xrView.hudDockY, -xrView.hudDockDistance)
+                                    eulerRotation: Qt.vector3d(0, 0, 0)
+                                    scale: Qt.vector3d(xrView.hudDockScale, xrView.hudDockScale, xrView.hudDockScale)
+                                    curvature: KWinVRConfig.defaultCurvature
                                 }
                             }
                             StateChangeScript {
@@ -634,6 +791,21 @@ XrView {
                                     if (!KwinVrHelpers.hasVrPose(kwinAppWindow.client))
                                         kwinAppWindow.curvature = KWinVRConfig.defaultCurvature
                                 }
+                            }
+                        },
+                        State {
+                            name: "hiddenScreen"
+                            when: !kwinAppWindow.client.vr && KWinVRConfig.immersiveMode
+                            PropertyChanges {
+                                kwinAppWindow {
+                                    parent: allWindowsGrabHandle
+                                    grabHandle: null
+                                    position: Qt.vector3d(0, -100000, 0)
+                                }
+                                restoreEntryValues: false
+                            }
+                            StateChangeScript {
+                                script: followMode.unregisterObject(kwinAppWindow)
                             }
                         },
                         State {

@@ -74,6 +74,7 @@ QtObject {
 
     // Window manipulation (used by XrScene and KwinTransientWindow)
     property alias currentMovingResizingWindow: root.pointerHandler.currentMovingResizingWindow
+    property alias headLookCursorMode: root.pointerHandler.headLookCursorMode
 
     // Cursor manager (used by XrScene for radial menu visibility check)
     readonly property Node cursorHoverObject: root.cursorManager.cursorHoverObject

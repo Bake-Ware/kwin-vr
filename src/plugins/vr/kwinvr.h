@@ -82,6 +82,8 @@ private:
     qint64 m_monadoPidAtVrStart = -1;  // Monado PID recorded when VR session started
     // If set when engine is destroyed, retry setVrActive(true) on this output
     Output *m_retryOutput = nullptr;
+    // Tracks whether hideCursor() was called so stop() only calls showCursor() when needed
+    bool m_cursorHidden = false;
 };
 }
 

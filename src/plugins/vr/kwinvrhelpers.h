@@ -224,6 +224,14 @@ public:
      * @return (t1, t2) where each is an intersection at rayOrigin + t * rayDirection,
      *         or (-1, -1) if no intersection exists.
      */
+    /**
+     * Extracts pitch and yaw angles (in degrees) of 'current' relative to 'initial'.
+     * Returns QVector2D(pitch_deg, yaw_deg) where:
+     *   pitch > 0 = look up,  yaw > 0 = look right
+     */
+    Q_INVOKABLE static QVector2D headAnglesFromInitialRotation(const QQuaternion &initial,
+                                                               const QQuaternion &current);
+
     Q_INVOKABLE static QVector2D raySphereIntersect(const QVector3D &rayOrigin,
                                                     const QVector3D &rayDirection,
                                                     const QVector3D &sphereCenter,

@@ -21,6 +21,7 @@
 #include <QTimer>
 
 #include "core/output.h"
+#include "cursor.h"
 #include "input.h"
 #include "pointer_input.h"
 #include "window.h"
@@ -222,6 +223,8 @@ void KwinVr::start()
     qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
 
     workspace()->setVrMode(true);
+    Cursors::self()->hideCursor();
+    m_cursorHidden = true;
     KwinVrHelpers::setDmabufFormatFilterForQt(true);
 
     // Force Vulkan rendering for the XR subsystem. Qt6Quick3DXr selects
@@ -245,6 +248,10 @@ void KwinVr::start()
 void KwinVr::stop()
 {
     m_xrTest.stop();
+    if (m_cursorHidden) {
+        Cursors::self()->showCursor();
+        m_cursorHidden = false;
+    }
     KwinVrHelpers::setDmabufFormatFilterForQt(false);
     m_watchdogTimer->stop();
 

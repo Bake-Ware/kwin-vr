@@ -18,6 +18,10 @@ QtObject {
     required property VrPicking picking
     required property VrHoverState hoverState
 
+    // Set to true when head-as-mouse cursor lock is active.
+    // In this mode, picking is disabled — cursor position is driven by head rotation instead.
+    property bool headLookCursorMode: false
+
     // Set externally when a window starts moving/resizing
     property Node currentMovingResizingWindow: null
 
@@ -63,7 +67,8 @@ QtObject {
                 when:
                     root.hoverState.activePickHandler &&
                     !root.headScroll.headScrollActive &&
-                    !root.xray.grabbedObject
+                    !root.xray.grabbedObject &&
+                    !root.headLookCursorMode
                 StateChangeScript {
                     script: Qt.callLater(root.updateLastIntersection)
                 }

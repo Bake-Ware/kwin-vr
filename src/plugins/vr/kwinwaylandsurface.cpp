@@ -105,6 +105,27 @@ QSGNode *KwinWaylandSurface::updatePaintNode(QSGNode *, UpdatePaintNodeData *)
         return nullptr;
     }
 
+    // For Vulkan RHI + DMA-BUF: use async PBO readback to avoid blocking glReadPixels.
+    // The synchronous path stalls the GPU pipeline on every buffer commit, delaying xrEndFrame().
+    QRhi *rhi = window() ? window()->rhi() : nullptr;
+    if (rhi && rhi->backend() != QRhi::OpenGLES2 && buf->dmabufAttributes()) {
+        // Step 1: try to harvest a completed readback from the previous frame
+        if (auto *newTex = tryHarvestEglReadback(m_asyncReadback, window())) {
+            newTex->setFiltering(QSGTexture::Linear);
+            newTex->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+            newTex->setVerticalWrapMode(QSGTexture::ClampToEdge);
+            setTexture(newTex, 0);
+        }
+
+        // Step 2: start a new async readback for this frame's buffer (if none is in flight)
+        if (!m_asyncReadback.pending)
+            startEglDmaBufReadback(m_asyncReadback, buf);
+
+        // Return without blocking: the existing (or newly set) texture is displayed
+        return nullptr;
+    }
+
+    // For OpenGL RHI or SHM/single-pixel buffers: use the existing synchronous path
     auto textures = loadGraphicsBufferToQSGTextures(buf, window());
     if (!textures.planeCount) {
         clear();
@@ -177,6 +198,7 @@ void KwinWaylandSurface::calculateNoInput()
 
 void KwinWaylandSurface::releaseResources()
 {
+    cancelEglReadback(m_asyncReadback);
     m_bufferref = nullptr;
     TextureProviderItem::releaseResources();
 }
