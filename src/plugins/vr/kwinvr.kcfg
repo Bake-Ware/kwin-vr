@@ -58,6 +58,26 @@
       <label>HUD taskbar scale</label>
       <default>0.8</default>
     </entry>
+    <entry name="sysInfoEnabled" type="Bool">
+      <label>Show MangoHud-style system info overlay in VR</label>
+      <default>false</default>
+    </entry>
+    <entry name="sysInfoPositionX" type="Double">
+      <label>Sysinfo HUD horizontal offset from screen center (cm)</label>
+      <default>-18.0</default>
+    </entry>
+    <entry name="sysInfoPositionY" type="Double">
+      <label>Sysinfo HUD vertical offset from screen center (cm)</label>
+      <default>10.0</default>
+    </entry>
+    <entry name="sysInfoDistance" type="Double">
+      <label>Sysinfo HUD distance from camera (cm, 0 = use hudDockDistance)</label>
+      <default>0</default>
+    </entry>
+    <entry name="sysInfoWidth" type="Double">
+      <label>Sysinfo HUD physical width in world-space cm</label>
+      <default>12.0</default>
+    </entry>
     <entry name="followFovH" type="Int">
       <label>Horizontal field of view threshold for follow mode (degrees)</label>
       <default>40</default>

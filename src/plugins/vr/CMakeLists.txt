@@ -83,6 +83,7 @@ qt6_add_qml_module(vr
 
         qml/KwinShadowModel.qml
         qml/VrVignette.qml
+        qml/VrSysInfoHud.qml
 
     SOURCES
         main.cpp
@@ -107,6 +108,7 @@ qt6_add_qml_module(vr
         outputmodel.h outputmodel.cpp
         kwincurrentcursor.h kwincurrentcursor.cpp
         kwinvrhelpers.h kwinvrhelpers.cpp
+        kwinvrsysinfo.h kwinvrsysinfo.cpp
         kwinvr.h kwinvr.cpp
         kwinvrinputfilter.h kwinvrinputfilter.cpp
         kwinvrshortcuts.h kwinvrshortcuts.cpp

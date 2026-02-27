@@ -379,6 +379,12 @@ XrView {
         visible: false
     }
 
+    // System info stats backend
+    KwinVrSysInfo {
+        id: sysInfo
+        active: KWinVRConfig.sysInfoEnabled
+    }
+
     xrOrigin: XrOrigin {
         VrInputBindings {
             kwinInput: xrView.kwinInput
@@ -392,6 +398,26 @@ XrView {
             VrVignette {
                 visible: KWinVRConfig.vignetteEnabled
                 fadeWidth: KWinVRConfig.vignetteFadeWidth
+            }
+
+            // System info HUD — pinned to camera, upper-left of view
+            VrSysInfoHud {
+                visible: KWinVRConfig.sysInfoEnabled
+                sysInfo: sysInfo
+                cmWidth: KWinVRConfig.sysInfoWidth
+                hudPosition: Qt.vector3d(
+                    KWinVRConfig.sysInfoPositionX,
+                    KWinVRConfig.sysInfoPositionY,
+                    -(KWinVRConfig.sysInfoDistance > 0
+                      ? KWinVRConfig.sysInfoDistance
+                      : xrView.hudDockDistance)
+                )
+            }
+
+            // FrameAnimation to feed frame timing into sysInfo
+            FrameAnimation {
+                running: KWinVRConfig.sysInfoEnabled
+                onTriggered: sysInfo.recordFrame(frameTime)
             }
 
             /* Draw OSD windows in front of user */
