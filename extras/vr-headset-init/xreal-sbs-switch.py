@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Switch Xreal Air glasses to SBS (3D) display mode via HID control interface.
+"""Switch Xreal Air glasses display mode via HID control interface.
 
-Sends a W_DISP_MODE command (msgid 0x0008) with mode=0x03 (3D/SBS) to the
-control interface (USB interface 4) of the Xreal Air Gen 1 glasses.
+Sends a W_DISP_MODE command (msgid 0x0008) with mode=0x01 (2D) or 0x03 (3D/SBS)
+to the control interface (USB interface 4) of the Xreal Air Gen 1 glasses.
+
+Usage:
+    xreal-sbs-switch.py          # switch to 3D/SBS mode (default)
+    xreal-sbs-switch.py --2d     # switch to 2D/desktop mode
+    xreal-sbs-switch.py --3d     # switch to 3D/SBS mode
 
 Protocol reference: Monado xreal_air_hmd.c send_payload_to_control()
 """
 import glob
 import os
+import select
 import struct
 import sys
 import binascii
@@ -18,7 +24,9 @@ CONTROL_IFACE = 4
 PACKET_SIZE = 64
 HEADER = 0xFD
 MSGID_W_DISP_MODE = 0x0008
+MODE_2D = 0x01
 MODE_3D_SBS = 0x03
+READ_TIMEOUT_S = 5
 
 
 def find_control_hidraw():
@@ -43,8 +51,8 @@ def find_control_hidraw():
     return None
 
 
-def build_sbs_packet():
-    """Build the 64-byte control packet to set display mode to 3D/SBS."""
+def build_mode_packet(mode):
+    """Build the 64-byte control packet to set display mode."""
     packet = bytearray(PACKET_SIZE)
 
     # Header
@@ -61,8 +69,8 @@ def build_sbs_packet():
 
     # Bytes 17-21: reserved (5 zero bytes - already zero)
 
-    # Byte 22: display_mode = 0x03 (3D/SBS)
-    packet[22] = MODE_3D_SBS
+    # Byte 22: display_mode
+    packet[22] = mode
 
     # Bytes 1-4: CRC32 over bytes [5..5+packet_len-1] = bytes [5..22]
     crc_data = bytes(packet[5:5 + packet_len])
@@ -73,6 +81,20 @@ def build_sbs_packet():
 
 
 def main():
+    mode = MODE_3D_SBS
+    mode_name = "3D/SBS"
+    for arg in sys.argv[1:]:
+        if arg == '--2d':
+            mode = MODE_2D
+            mode_name = "2D/desktop"
+        elif arg == '--3d':
+            mode = MODE_3D_SBS
+            mode_name = "3D/SBS"
+        else:
+            print(f"Unknown argument: {arg}")
+            print("Usage: xreal-sbs-switch.py [--2d|--3d]")
+            sys.exit(1)
+
     hidraw = find_control_hidraw()
     if not hidraw:
         print(f"Xreal Air control interface not found (VID {VID:04x}:PID {PID:04x} iface {CONTROL_IFACE})")
@@ -80,8 +102,8 @@ def main():
 
     print(f"Found Xreal Air control at {hidraw}")
 
-    packet = build_sbs_packet()
-    print(f"Sending SBS mode command ({len(packet)} bytes)...")
+    packet = build_mode_packet(mode)
+    print(f"Sending {mode_name} mode command (0x{mode:02x}, {len(packet)} bytes)...")
 
     try:
         fd = open(hidraw, 'r+b', buffering=0)
@@ -93,15 +115,21 @@ def main():
         fd.write(packet)
         print("Command sent, reading response...")
 
-        response = fd.read(PACKET_SIZE)
-        if response and len(response) >= 23:
-            status = response[22]
-            if status == 0x00:
-                print("SBS mode switch confirmed (status=0x00)")
+        # Use select() to avoid blocking forever if the device doesn't respond
+        # (e.g. during a USB reconnect triggered by the mode switch)
+        ready, _, _ = select.select([fd], [], [], READ_TIMEOUT_S)
+        if ready:
+            response = fd.read(PACKET_SIZE)
+            if response and len(response) >= 23:
+                status = response[22]
+                if status == 0x00:
+                    print(f"{mode_name} mode switch confirmed (status=0x00)")
+                else:
+                    print(f"{mode_name} mode switch returned status=0x{status:02x}")
             else:
-                print(f"SBS mode switch returned status=0x{status:02x}")
+                print(f"Short/no response ({len(response) if response else 0} bytes)")
         else:
-            print(f"Short/no response ({len(response) if response else 0} bytes)")
+            print(f"No response within {READ_TIMEOUT_S}s (command was sent; mode switch may trigger USB reconnect)")
     finally:
         fd.close()
 

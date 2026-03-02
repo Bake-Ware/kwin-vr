@@ -1,0 +1,134 @@
+#!/bin/bash
+# vr-link-monitor — Check DP link quality and notify kwin-vr if degraded.
+#
+# Runs as root (system service) to access /sys/kernel/debug/dri/.
+# Communicates with the kwin-vr plugin over the user's session D-Bus.
+#
+# Currently targets the amdgpu debugfs link_settings format.
+# Other drivers (i915, nouveau, etc.) may use a different format —
+# this is flagged as a review point for multi-driver support.
+#
+# link_settings format (amdgpu):
+#   Current:
+#       link_rate: 0x06    (0x06=HBR/2.7Gbps, 0x0a=HBR2/5.4Gbps, 0x14=HBR3)
+#       num_lanes: 2
+#   Verified:
+#       link_rate: 0x06
+#       num_lanes: 2
+#   Max:
+#       link_rate: 0x0a
+#       num_lanes: 2
+
+set -euo pipefail
+
+DEBUGFS_DRI="/sys/kernel/debug/dri"
+
+# Find the first non-root logged-in user and their session D-Bus socket.
+find_user_dbus() {
+    local uid dbus_addr
+    while IFS= read -r line; do
+        local user
+        user=$(echo "$line" | awk '{print $3}')
+        [ "$user" = "root" ] && continue
+        uid=$(id -u "$user" 2>/dev/null) || continue
+        dbus_addr="unix:path=/run/user/$uid/bus"
+        [ -S "/run/user/$uid/bus" ] || continue
+        echo "$dbus_addr"
+        return 0
+    done < <(loginctl list-sessions --no-legend 2>/dev/null)
+    return 1
+}
+
+# Check via D-Bus whether kwin-vr is currently in VR mode.
+# Returns 0 (true) if VR is active, 1 if not or if kwin-vr is unreachable.
+vr_is_active() {
+    local dbus_addr="$1"
+    local result
+    result=$(dbus-send \
+        --address="$dbus_addr" \
+        --print-reply \
+        --dest=org.kde.kwinvr \
+        /KwinVr \
+        org.freedesktop.DBus.Properties.Get \
+        string:org.kde.kwinvr string:vrActive \
+        2>/dev/null | grep -o 'true\|false' || echo "false")
+    [ "$result" = "true" ]
+}
+
+# Send a link-degraded notification to the kwin-vr plugin.
+notify_degraded() {
+    local dbus_addr="$1"
+    local connector="$2"
+    local current_lanes="$3"
+    local current_rate_hex="$4"
+    local verified_lanes="$5"
+    local verified_rate_hex="$6"
+
+    logger -t vr-link-monitor \
+        "Link degraded on $connector: current=$current_lanes lanes @ $current_rate_hex," \
+        "verified=$verified_lanes lanes @ $verified_rate_hex"
+
+    dbus-send \
+        --address="$dbus_addr" \
+        --dest=org.kde.kwinvr \
+        --type=method_call \
+        /KwinVr \
+        org.kde.kwinvr.notifyLinkDegraded \
+        string:"$connector" \
+        int32:"$current_lanes" \
+        string:"$current_rate_hex" \
+        2>/dev/null || true
+}
+
+# Parse an integer from a hex string (e.g. "0x06" → 6).
+hex_to_int() {
+    printf '%d' "$1" 2>/dev/null || echo "0"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+dbus_addr=$(find_user_dbus) || {
+    # No user session active yet; nothing to do.
+    exit 0
+}
+
+# Skip the check while VR is active — mode changes are expected during a session.
+if vr_is_active "$dbus_addr"; then
+    exit 0
+fi
+
+# Scan all DRM cards' debugfs directories for DP connector link_settings files.
+for card_dir in "$DEBUGFS_DRI"/*/; do
+    [ -d "$card_dir" ] || continue
+
+    for connector_dir in "$card_dir"*/; do
+        [ -d "$connector_dir" ] || continue
+        link_file="${connector_dir}link_settings"
+        [ -f "$link_file" ] || continue
+
+        connector=$(basename "$connector_dir")
+
+        # Parse amdgpu link_settings: "Current:", "Verified:", "Max:" sections.
+        content=$(cat "$link_file" 2>/dev/null) || continue
+
+        current_lanes=$(echo "$content" | awk '/^Current:/{s=1} s && /num_lanes:/{print $2; exit}')
+        current_rate=$(echo  "$content" | awk '/^Current:/{s=1} s && /link_rate:/{print $2; exit}')
+        verified_lanes=$(echo "$content" | awk '/^Verified:/{s=1} s && /num_lanes:/{print $2; exit}')
+        verified_rate=$(echo  "$content" | awk '/^Verified:/{s=1} s && /link_rate:/{print $2; exit}')
+
+        # Skip if we couldn't parse the file (wrong driver format).
+        [[ -z "$current_lanes" || -z "$current_rate" || -z "$verified_lanes" || -z "$verified_rate" ]] && continue
+
+        cur_lanes_int=$(hex_to_int "$current_lanes")
+        cur_rate_int=$(hex_to_int "$current_rate")
+        ver_lanes_int=$(hex_to_int "$verified_lanes")
+        ver_rate_int=$(hex_to_int "$verified_rate")
+
+        # Degraded if current lane count or rate is below the verified baseline.
+        if (( cur_lanes_int < ver_lanes_int || cur_rate_int < ver_rate_int )); then
+            notify_degraded "$dbus_addr" "$connector" \
+                "$cur_lanes_int" "$current_rate" \
+                "$ver_lanes_int" "$verified_rate"
+        fi
+    done
+done

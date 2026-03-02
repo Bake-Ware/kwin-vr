@@ -42,10 +42,6 @@ Item {
     }
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
-        settingName: "immersiveMode"
-    }
-    KCMUtils.SettingStateBinding {
-        configObject: kcm.settings
         settingName: "hudDistanceFraction"
     }
     KCMUtils.SettingStateBinding {
@@ -316,28 +312,10 @@ Item {
             }
         }
 
-        // Immersive mode
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Kirigami.Units.smallSpacing
-
-            Controls.CheckBox {
-                id: tImmersiveMode
-                text: i18nc("@option:check", "Immersive Mode")
-                checked: kcm.settings.immersiveMode
-                onToggled: kcm.settings.immersiveMode = checked
-            }
-
-            Kirigami.ContextualHelpButton {
-                toolTipText: xi18nc("@info:tooltip", "Hides the flat desktop mirror and floats all windows in VR space. The taskbar is pinned as a HUD at the bottom of your view. Windows return to flat mode when VR is deactivated.")
-            }
-        }
-
-        // HUD taskbar placement (only relevant in immersive mode)
+        // HUD taskbar placement
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing * 2
-            enabled: tImmersiveMode.checked
 
             ColumnLayout {
                 spacing: 2

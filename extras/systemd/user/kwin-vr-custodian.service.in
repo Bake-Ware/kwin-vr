@@ -1,0 +1,13 @@
+[Unit]
+Description=kwin-vr Custodian — VR hardware observer and event router
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@KDE_INSTALL_FULL_LIBEXECDIR@/kwin-vr-custodian
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

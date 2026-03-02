@@ -84,47 +84,67 @@ void KwinVrHelpers::setHackedFocus(Window *window)
     input()->pointer()->setForcedFocusWindow(window);
 }
 
-void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale)
+void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale, int virtualLogicalWidth)
 {
+    const QStringList headsetOutputNames =
+        qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS")
+            .split(QLatin1Char(','), Qt::SkipEmptyParts);
+
+    const auto outputs = Workspace::self()->outputs();
+
+    // Find the right edge of all physical monitors (not headset, not virtual).
+    // Virtual-T will be placed immediately to the right, acting as a buffer
+    // between the physical desktop and the SBS headset output.
+    int physicalRight = 0;
+    for (auto *output : outputs) {
+        auto *bo = kwinGetBackendOutput(output);
+        if (bo == o)
+            continue;
+        if (bo->name().startsWith(QLatin1String("Virtual")))
+            continue;
+        if (headsetOutputNames.contains(bo->name()))
+            continue;
+        const QRect geom = output->geometry();
+        physicalRight = qMax(physicalRight, geom.x() + geom.width());
+    }
+
     OutputConfiguration config;
     config.changeSet(o)->enabled = true;
     config.changeSet(o)->scale = scale;
-    config.changeSet(o)->pos = QPoint(0, 0);
+    config.changeSet(o)->pos = QPoint(physicalRight, 0);
 
-    // Move headset outputs (from KWIN_FORCE_DESKTOP_OUTPUTS) far off-screen
-    // so window tiling/snapping doesn't use them as targets
-    const QString forceDesktop = qEnvironmentVariable("KWIN_FORCE_DESKTOP_OUTPUTS");
-    QStringList headsetOutputNames;
-    if (!forceDesktop.isEmpty()) {
-        headsetOutputNames = forceDesktop.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    // Place headset outputs to the right of Virtual-T.
+    // This prevents windows from reaching the SBS display by dragging right
+    // off a physical monitor pseudo-mirror.
+    const int headsetX = physicalRight + virtualLogicalWidth;
+    for (auto *output : outputs) {
+        auto *bo = kwinGetBackendOutput(output);
+        if (!headsetOutputNames.contains(bo->name()))
+            continue;
+        config.changeSet(bo)->pos = QPoint(headsetX, 0);
+        qWarning() << "VR: moving headset output" << bo->name() << "to x=" << headsetX;
     }
 
-    // Build output order with VR virtual screen first (primary)
+    // Build output order: Virtual-T first (primary), then physical, then headset
     QList<Output *> newOrder;
-    const auto outputs = Workspace::self()->outputs();
-
+    Output *virtualOutput = nullptr;
     for (auto *output : outputs) {
         auto *bo = kwinGetBackendOutput(output);
         if (bo == o) {
-            // This is the VR virtual screen — already configured above, make it first
-            newOrder.prepend(output);
-        } else if (headsetOutputNames.contains(bo->name())) {
-            // This is a headset output — move it far off-screen
-            config.changeSet(bo)->pos = QPoint(32000, 32000);
-            newOrder.append(output);
-            qWarning() << "VR: moved headset output" << bo->name() << "off-screen";
+            virtualOutput = output;
         } else {
             newOrder.append(output);
         }
     }
+    if (virtualOutput)
+        newOrder.prepend(virtualOutput);
 
-    qWarning() << "VR: activating virtual output at (0,0) as primary";
+    qWarning() << "VR: activating virtual output at x=" << physicalRight
+               << "as primary; headset at x=" << headsetX;
     Workspace::self()->applyOutputConfiguration(config, newOrder);
 
-    // Set virtual output as active so new windows open on it, not the headset
-    if (!newOrder.isEmpty()) {
+    if (!newOrder.isEmpty())
         Workspace::self()->setActiveOutput(newOrder.first());
-    }
 }
 
 SurfaceInterface *KwinVrHelpers::winGetSurf(Window *window)

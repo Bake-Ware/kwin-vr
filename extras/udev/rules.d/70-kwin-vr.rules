@@ -1,0 +1,12 @@
+# kwin-vr — VR headset device permissions
+#
+# Grants the active session user access to HID and USB nodes for VR headsets.
+# TAG+="uaccess" uses logind ACLs: only the user currently at the seat gets access,
+# so there is no need for world-writable MODE="0666".
+#
+# Add a new stanza here for each supported device (copy VID/PID from its profile).
+# The kwin-vr-custodian handles all USB event routing; no RUN+= rules are needed.
+
+# Xreal Air Gen 1 (VID 3318, PID 0424)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", TAG+="uaccess"
+SUBSYSTEM=="usb",    ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", TAG+="uaccess"

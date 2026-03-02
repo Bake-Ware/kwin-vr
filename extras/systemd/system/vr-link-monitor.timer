@@ -1,0 +1,13 @@
+[Unit]
+Description=VR Display Link Quality Monitor Timer
+After=graphical.target
+
+[Timer]
+# First check 60s after boot to allow all displays to train
+OnBootSec=60
+# Repeat every 30s
+OnUnitActiveSec=30
+Unit=vr-link-monitor.service
+
+[Install]
+WantedBy=timers.target

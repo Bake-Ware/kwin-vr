@@ -56,10 +56,15 @@ int OutputModel::rowCount(const QModelIndex &parent) const
 
 bool OutputModel::shouldExclude(LogicalOutput *output) const
 {
-    if (m_excludeOutputs.isEmpty())
-        return false;
     auto *bo = kwinGetBackendOutput(output);
-    return m_excludeOutputs.contains(bo->name());
+    const QString name = bo->name();
+    // Exclude headset outputs (from KWIN_FORCE_DESKTOP_OUTPUTS, e.g. DP-1 in SBS mode)
+    if (!m_excludeOutputs.isEmpty() && m_excludeOutputs.contains(name))
+        return true;
+    // Exclude virtual outputs (created by KwinVirtualScreenHandle as VR rendering targets)
+    if (name.startsWith(QLatin1String("Virtual")))
+        return true;
+    return false;
 }
 
 void OutputModel::rebuildFilteredList()

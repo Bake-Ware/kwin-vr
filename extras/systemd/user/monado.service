@@ -1,19 +1,21 @@
 [Unit]
-Description=Monado OpenXR Runtime Service
+Description=Monado OpenXR Runtime
 After=graphical-session.target
 
 [Service]
 Type=simple
-StandardInput=null
-Environment=XRT_NO_STDIN=1
-Environment=XRT_COMPOSITOR_FORCE_WAYLAND=1
-Environment=WAYLAND_DISPLAY=wayland-0
-Environment=XRT_COMPOSITOR_FORCE_GPU_INDEX=0
 ExecStart=/usr/bin/monado-service
 Restart=on-failure
 RestartSec=3
-Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+# Wayland compositor mode — Monado creates a Wayland surface rather than owning
+# the display directly. XDG_RUNTIME_DIR and WAYLAND_DISPLAY are inherited from
+# the user session environment; do not hardcode them here.
+Environment=XRT_COMPOSITOR_FORCE_WAYLAND=1
+Environment=XRT_COMPOSITOR_XCB_FULLSCREEN=1
+Environment=XRT_NO_STDIN=1
 Environment=WMR_SLAM=false
 
-[Install]
-WantedBy=graphical-session.target
+# Started on demand by kwin-vr-custodian; do not enable this unit directly.
+# [Install] section intentionally omitted — enabling it causes Monado to
+# start at login regardless of whether a VR headset is connected.

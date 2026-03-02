@@ -45,6 +45,10 @@ XrView {
     property real ppu: KWinVRConfig.ppu
     property real distance: KWinVRConfig.distance
 
+    // true when no physical monitor was primary at VR activation — drives
+    // all formerly-immersive-mode behaviors automatically
+    readonly property bool immersive: !kwinVrBridge.hasPhysicalPrimary
+
     // HUD dock geometry (taskbar pinned to camera in immersive mode)
     readonly property real hudDockDistance: distance * KWinVRConfig.hudDistanceFraction / 100.0
     readonly property real hudDockY: -(hudDockDistance * Math.tan(KWinVRConfig.hudVerticalAngle * Math.PI / 180.0))
@@ -135,7 +139,7 @@ XrView {
         // windows and snap targets land on the virtual desktop, not the headset.
         onOutputChanged: {
             if (kvs.output)
-                KwinVrHelpers.activateOutput(kvs.output, KWinVRConfig.scale)
+                KwinVrHelpers.activateOutput(kvs.output, KWinVRConfig.scale, KWinVRConfig.width)
         }
     }
 
@@ -611,9 +615,8 @@ XrView {
                 delegate: KwinPseudoOutputMirror {
                     id: pseudoOutput
                     ppu: allWindows.ppu
-                    // Hidden in immersive mode: windows float freely, but the node stays
-                    // alive so window sizing/placement geometry remains available.
-                    visible: !KWinVRConfig.immersiveMode
+                    // Physical monitor pseudo-mirrors are always visible: they act as
+                    // drop targets so the user can drag a VR window to a physical display.
                     Component.onCompleted: {
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
@@ -681,22 +684,35 @@ XrView {
                         }
                         spaceAllocator.registerObject(kwinAppWindow)
                     }
-                    // Returns true if this window should be forced into VR in immersive mode.
+                    // Returns true if this window should be forced into VR when immersive=true.
                     // Skips desktop backgrounds and non-app Plasma infrastructure.
+                    // Docks (taskbar) enter VR only in immersive mode (no physical primary).
                     function immersiveVrEligible(): bool {
-                        if (client.dock) return true
+                        if (client.dock) return xrView.immersive
                         if (client.desktopWindow) return false
                         return client.normalWindow || client.dialog
                     }
 
                     Component.onCompleted: {
-                        if (KWinVRConfig.immersiveMode) {
+                        if (xrView.immersive) {
                             if (!kwinAppWindow.immersiveVrEligible()) return
                             // Force app windows into VR space; dock is handled by "hud" state
                             client.vr = true
                             kwinAppWindow.autoVr = true
                             if (!client.dock)
                                 Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        } else if (client.dock) {
+                            // Non-immersive: defer until OutputModel populates. Only force the
+                            // dock to HUD if there are no physical pseudo-mirrors at all (pure
+                            // VR with no physical monitors). When physical pseudo-mirrors exist,
+                            // the dock stays in screen state and renders on the first one.
+                            Qt.callLater(function() {
+                                if (!kwinAppWindow) return
+                                if (outputMirrorRepeater.count === 0) {
+                                    client.vr = true
+                                    kwinAppWindow.autoVr = true
+                                }
+                            })
                         } else if (KwinVrHelpers.hasVrPose(client)) {
                             client.vr = true
                             Qt.callLater(function() {
@@ -710,27 +726,11 @@ XrView {
                         }
                     }
                     Component.onDestruction: {
-                        if (KWinVRConfig.immersiveMode) {
-                            // Restore to flat mode on VR exit; don't save poses
+                        if (xrView.immersive || kwinAppWindow.autoVr) {
+                            // Auto-VR windows: restore to flat mode on VR exit; don't save poses
                             client.vr = false
                         } else if (client.vr) {
                             KwinVrHelpers.saveVrPose(client, position, rotation, curvature)
-                        }
-                    }
-
-                    Connections {
-                        target: KWinVRConfig
-                        function onImmersiveModeChanged() {
-                            if (KWinVRConfig.immersiveMode) {
-                                if (!kwinAppWindow.immersiveVrEligible()) return
-                                client.vr = true
-                                kwinAppWindow.autoVr = true
-                                if (!client.dock)
-                                    Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
-                            } else if (kwinAppWindow.autoVr) {
-                                client.vr = false
-                                kwinAppWindow.autoVr = false
-                            }
                         }
                     }
 
@@ -767,7 +767,7 @@ XrView {
                         State {
                             name: "pip"
                             when: kwinAppWindow === xrView.pipTarget &&
-                                  !(KWinVRConfig.immersiveMode && kwinAppWindow.client.dock)
+                                  (!xrView.immersive || !kwinAppWindow.client.dock)
                             PropertyChanges {
                                 kwinAppWindow {
                                     parent: cam
@@ -785,7 +785,7 @@ XrView {
                         },
                         State {
                             name: "hud"
-                            when: KWinVRConfig.immersiveMode && kwinAppWindow.client.dock
+                            when: kwinAppWindow.client.dock && (xrView.immersive || kwinAppWindow.autoVr)
                             PropertyChanges {
                                 kwinAppWindow {
                                     parent: cam
@@ -814,24 +814,8 @@ XrView {
                             StateChangeScript {
                                 script: {
                                     followMode.registerObject(kwinAppWindow)
-                                    if (!KwinVrHelpers.hasVrPose(kwinAppWindow.client))
-                                        kwinAppWindow.curvature = KWinVRConfig.defaultCurvature
+                                    kwinAppWindow.curvature = KWinVRConfig.defaultCurvature
                                 }
-                            }
-                        },
-                        State {
-                            name: "hiddenScreen"
-                            when: !kwinAppWindow.client.vr && KWinVRConfig.immersiveMode
-                            PropertyChanges {
-                                kwinAppWindow {
-                                    parent: allWindowsGrabHandle
-                                    grabHandle: null
-                                    position: Qt.vector3d(0, -100000, 0)
-                                }
-                                restoreEntryValues: false
-                            }
-                            StateChangeScript {
-                                script: followMode.unregisterObject(kwinAppWindow)
                             }
                         },
                         State {
@@ -839,7 +823,15 @@ XrView {
                             when: !kwinAppWindow.client.vr
                             PropertyChanges {
                                 kwinAppWindow {
-                                    parent: outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
+                                    parent: {
+                                        const pseudo = outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
+                                        if (pseudo !== null) return pseudo
+                                        // Dock on Virtual-T (no pseudo-mirror): attach to first
+                                        // physical pseudo-mirror so it's visible in VR space.
+                                        if (kwinAppWindow.client.dock && outputMirrorRepeater.count > 0)
+                                            return outputMirrorRepeater.itemAt(0)
+                                        return null
+                                    }
                                     grabHandle: kwinAppWindow.parent
                                     position: kwinAppWindow.centerOffset(
                                                   kwinAppWindow.client.frameGeometry,
@@ -847,6 +839,7 @@ XrView {
                                                   kwinAppWindow.zOffset,
                                                   allWindows.ppu)
                                     rotation: Qt.quaternion(1,0,0,0)
+                                    curvature: 0
                                 }
                                 restoreEntryValues: false
                             }
