@@ -78,13 +78,17 @@ void UdevMonitor::processEvent()
 
     if (subsys == QLatin1String("drm")) {
         if (act == QLatin1String("change")) {
-            // Filter to connector-level events only (have CONNECTOR_STATUS property).
-            // Card-level events (e.g. GPU mode changes) do not carry this property.
             const char *connStatus = udev_device_get_property_value(dev, "CONNECTOR_STATUS");
             if (connStatus) {
+                // Connector-level event: pass the specific connector path.
                 const char *sysPath = udev_device_get_syspath(dev);
                 if (sysPath)
                     Q_EMIT drmConnectorChanged(QString::fromLatin1(sysPath));
+            } else {
+                // Card-level change event (no CONNECTOR_STATUS) — some drivers (e.g. NVIDIA)
+                // emit these instead of connector-level events for mode switches such as the
+                // Xreal Air SBS button press.  Re-scan all connectors so nothing is missed.
+                Q_EMIT drmRescanNeeded();
             }
         }
     } else if (subsys == QLatin1String("usb") || subsys == QLatin1String("hidraw")) {

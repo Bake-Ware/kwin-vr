@@ -11,13 +11,20 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
+#include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDir>
 #include <QFile>
 #include <QFileSystemWatcher>
 
-#include <unistd.h> // getuid()
+#include <cerrno>
+#include <cstring>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h> // getuid(), close()
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -30,6 +37,8 @@ static const QString kProfileDirectory = QStringLiteral("/etc/vr-profiles.d");
 static const QString kSystemdService = QStringLiteral("org.freedesktop.systemd1");
 static const QString kSystemdObject = QStringLiteral("/org/freedesktop/systemd1");
 static const QString kSystemdManager = QStringLiteral("org.freedesktop.systemd1.Manager");
+static const QString kSystemdUnit = QStringLiteral("org.freedesktop.systemd1.Unit");
+static const QString kDBusProperties = QStringLiteral("org.freedesktop.DBus.Properties");
 
 // ─── Construction ─────────────────────────────────────────────────────────────
 
@@ -56,6 +65,8 @@ bool Custodian::start()
     } else {
         connect(m_udev, &UdevMonitor::drmConnectorChanged,
                 this, &Custodian::onDrmConnectorChanged);
+        connect(m_udev, &UdevMonitor::drmRescanNeeded,
+                this, &Custodian::scanConnectors);
         connect(m_udev, &UdevMonitor::usbDeviceAdded,
                 this, &Custodian::onUsbDeviceAdded);
         connect(m_udev, &UdevMonitor::usbDeviceRemoved,
@@ -82,8 +93,6 @@ bool Custodian::start()
 void Custodian::reloadProfiles()
 {
     m_profiles = CustodianProfileLoader::loadProfiles(kProfileDirectory);
-
-    // Rebuild the D-Bus runtime watcher for any service-triggered profiles
     setupRuntimeWatcher();
 }
 
@@ -101,11 +110,6 @@ void Custodian::setupProfileWatcher(const QString &directory)
 
 void Custodian::scanUsbDevices()
 {
-    // Walk /sys/bus/usb/devices to find any VR device already connected.
-    // For each match, send the 2D HID init payload so the device starts in
-    // desktop mode (mirrors what the old boot-init script did).
-    // Skip entirely if VR is already active — scanConnectors() already handled
-    // the SBS activation and we must not reset the device to 2D mode.
     if (m_active)
         return;
 
@@ -133,7 +137,7 @@ void Custodian::scanUsbDevices()
                                     << "USB device" << vid << ":" << pid
                                     << "— sending 2D init";
             sendHidInit(profile, false /* 2D */);
-            break; // One init per physical device
+            break;
         }
     }
 }
@@ -149,13 +153,11 @@ void Custodian::scanConnectors()
     const auto entries = sysdrm.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
     for (const QString &entry : entries) {
-        // Only connector entries (contain a dash after the card name)
         if (!entry.contains(u'-'))
             continue;
 
         const QString connectorPath = sysdrm.filePath(entry);
 
-        // Must be connected
         QFile statusFile(connectorPath + QStringLiteral("/status"));
         if (!statusFile.open(QIODevice::ReadOnly))
             continue;
@@ -166,7 +168,6 @@ void Custodian::scanConnectors()
         if (!profile)
             continue;
 
-        // Check if already in SBS mode
         const QString modeStr = CustodianProfileLoader::readCurrentMode(connectorPath);
         int w = 0, h = 0;
         if (!CustodianProfileLoader::parseMode(modeStr, w, h))
@@ -197,7 +198,6 @@ void Custodian::onDrmConnectorChanged(const QString &connectorPath)
     const QString modeStr = CustodianProfileLoader::readCurrentMode(connectorPath);
     int w = 0, h = 0;
     if (!CustodianProfileLoader::parseMode(modeStr, w, h)) {
-        // No current mode — connector may have disconnected
         if (m_active && m_activeOutput == outputName) {
             qCInfo(KWINVRCUSTODIAN) << "Connector" << outputName
                                     << "lost mode while VR active — deactivating";
@@ -227,7 +227,6 @@ void Custodian::onUsbDeviceAdded(const QString &vendorId,
 {
     Q_UNUSED(devNode)
 
-    // Find a profile matching this USB device for HID init
     for (const CustodianProfile &profile : std::as_const(m_profiles)) {
         if (profile.hidVendorId.isEmpty() || profile.hidProductId.isEmpty())
             continue;
@@ -247,7 +246,6 @@ void Custodian::onUsbDeviceAdded(const QString &vendorId,
             return;
         }
 
-        // Send 2D init payload — device just connected, put it in desktop mode
         if (!profile.hidPayload2D.isEmpty())
             sendHidInit(profile, false /* 2D */);
 
@@ -262,7 +260,7 @@ void Custodian::onUsbDeviceRemoved(const QString &vendorId, const QString &produ
     if (m_activeProfile->hidVendorId == vendorId && m_activeProfile->hidProductId == productId) {
         qCInfo(KWINVRCUSTODIAN) << "USB device removed for active profile:"
                                 << m_activeProfile->name;
-        // The DRM connector change will handle VR deactivation; no action needed here
+        // DRM connector change handles VR deactivation
     }
 }
 
@@ -272,12 +270,9 @@ void Custodian::onRuntimeServiceRegistered(const QString &serviceName)
 {
     qCInfo(KWINVRCUSTODIAN) << "OpenXR runtime service appeared:" << serviceName;
 
-    // For WiVRn: runtime appearing on D-Bus means it's ready
-    if (m_active && m_activeProfile && m_activeProfile->serviceName == serviceName) {
+    if (m_active && m_activeProfile && m_activeProfile->serviceName == serviceName)
         notifyPluginActivate(m_activeProfile->name, m_activeOutput);
-    }
 
-    // For service-triggered profiles: runtime appearing is the trigger
     for (const CustodianProfile &profile : std::as_const(m_profiles)) {
         if (profile.trigger != ProfileTrigger::Service)
             continue;
@@ -308,7 +303,6 @@ void Custodian::onPluginAppeared()
     qCInfo(KWINVRCUSTODIAN) << "kwin-vr plugin appeared on D-Bus";
     m_pluginAvailable = true;
 
-    // If we were already active (e.g. custodian restarted), re-notify
     if (m_active && m_activeProfile)
         notifyPluginActivate(m_activeProfile->name, m_activeOutput);
 }
@@ -317,15 +311,48 @@ void Custodian::onPluginVanished()
 {
     qCInfo(KWINVRCUSTODIAN) << "kwin-vr plugin vanished from D-Bus";
     m_pluginAvailable = false;
+
+    // If we were waiting for the plugin to call vrStopped() before stopping
+    // the runtime, we can no longer wait — the plugin is gone.  Execute the
+    // deferred stop immediately so the runtime isn't orphaned.
+    if (m_pendingRuntimeStop) {
+        qCWarning(KWINVRCUSTODIAN) << "Plugin vanished while VR deactivation was pending"
+                                   << "— executing deferred runtime stop now";
+        executePendingRuntimeStop();
+    }
 }
 
 // ─── Core activation/deactivation ─────────────────────────────────────────────
 
+static int triggerPriority(ProfileTrigger t)
+{
+    switch (t) {
+    case ProfileTrigger::Edid:
+        return 2;
+    case ProfileTrigger::Service:
+        return 1;
+    case ProfileTrigger::Always:
+        return 0;
+    default:
+        return 0;
+    }
+}
+
 void Custodian::activateProfile(const CustodianProfile &profile, const QString &outputName)
 {
     if (m_active) {
-        qCDebug(KWINVRCUSTODIAN) << "Ignoring activation — VR already active";
-        return;
+        const int newPrio = triggerPriority(profile.trigger);
+        const int activePrio = m_activeProfile ? triggerPriority(m_activeProfile->trigger) : 0;
+        if (newPrio <= activePrio) {
+            qCDebug(KWINVRCUSTODIAN) << "Ignoring activation of" << profile.name
+                                     << "— lower or equal priority to active profile"
+                                     << (m_activeProfile ? m_activeProfile->name : QString());
+            return;
+        }
+        qCInfo(KWINVRCUSTODIAN) << "Higher-priority profile" << profile.name
+                                << "preempting active profile"
+                                << (m_activeProfile ? m_activeProfile->name : QString());
+        deactivateActive(QStringLiteral("preempted by higher-priority profile"));
     }
 
     m_activeProfile = profile;
@@ -335,11 +362,9 @@ void Custodian::activateProfile(const CustodianProfile &profile, const QString &
     qCInfo(KWINVRCUSTODIAN) << "Activating profile:" << profile.name
                             << "on output:" << (outputName.isEmpty() ? QStringLiteral("(none)") : outputName);
 
-    // 1. Send HID init for 3D/SBS mode
     if (!profile.hidPayload3D.isEmpty())
         sendHidInit(profile, true /* 3D */);
 
-    // 2. Start the OpenXR runtime and wait for it to be ready
     startRuntime(profile);
 }
 
@@ -353,27 +378,59 @@ void Custodian::deactivateActive(const QString &reason)
     const QString profileName = m_activeProfile ? m_activeProfile->name : QString();
     const CustodianProfile profile = m_activeProfile.value_or(CustodianProfile{});
 
-    // 1. Notify the plugin — it will call vrStopped() when done
+    // 1. Notify the plugin to begin VR teardown.  The plugin will call vrStopped()
+    //    once KWin has torn down the XR session and reconfigured outputs back to
+    //    desktop layout.  stopRuntime() is called from vrStopped(), NOT here.
     notifyPluginDeactivate(profileName);
 
-    // 2. Send HID init for 2D/desktop mode
+    // 2. Queue HID 2D command to the glasses immediately.  This starts the hardware
+    //    mode switch in parallel with the software teardown.
     if (!profile.hidPayload2D.isEmpty())
         sendHidInit(profile, false /* 2D */);
 
-    // 3. Stop the runtime
-    // We stop immediately — the plugin handles XR_ERROR_SESSION_LOST gracefully.
-    // vrStopped() from the plugin is still accepted for any post-teardown actions.
-    stopRuntime(profile);
-
+    // 3. Clear active state.
     m_active = false;
     m_activeProfile = std::nullopt;
     m_activeOutput.clear();
 
-    // Clean up any pending Monado socket watcher
+    // 4. Stop watching for the Monado socket (no longer relevant).
     if (m_monadoSocketWatcher) {
         m_monadoSocketWatcher->deleteLater();
         m_monadoSocketWatcher = nullptr;
     }
+
+    // 5. Unsubscribe from unit state changes for any in-progress startup watch.
+    unsubscribeUnitStateChanges();
+
+    // 6. Arm the deferred runtime stop.
+    //    executePendingRuntimeStop() will be triggered by:
+    //      a) vrStopped() — plugin confirmed teardown complete  [normal path]
+    //      b) onPluginVanished() — plugin crashed before calling vrStopped()  [fallback]
+    m_pendingRuntimeStop = true;
+    m_stoppingProfile = profile;
+
+    // If the plugin is not on D-Bus right now, nothing will call vrStopped().
+    // Execute the stop immediately in this case.
+    if (!m_pluginAvailable) {
+        qCWarning(KWINVRCUSTODIAN) << "Plugin not on D-Bus — executing runtime stop without vrStopped confirmation";
+        executePendingRuntimeStop();
+    }
+}
+
+// ─── Deferred runtime stop ────────────────────────────────────────────────────
+
+void Custodian::executePendingRuntimeStop()
+{
+    if (!m_pendingRuntimeStop)
+        return;
+
+    m_pendingRuntimeStop = false;
+    const CustodianProfile profile = m_stoppingProfile.value_or(CustodianProfile{});
+    m_stoppingProfile = std::nullopt;
+
+    qCInfo(KWINVRCUSTODIAN) << "Executing deferred runtime stop for:"
+                            << (profile.name.isEmpty() ? QStringLiteral("(unknown)") : profile.name);
+    stopRuntime(profile);
 }
 
 // ─── Runtime lifecycle ────────────────────────────────────────────────────────
@@ -383,49 +440,100 @@ void Custodian::startRuntime(const CustodianProfile &profile)
     const QString unit = profile.inferredSystemdUnit();
 
     if (unit.isEmpty() || profile.openxrRuntime == QLatin1String("none")) {
-        // No runtime to start — notify plugin immediately
         notifyPluginActivate(profile.name, m_activeOutput);
         return;
     }
 
+    if (profile.openxrRuntime == QLatin1String("monado")) {
+        const QString socketPath = monadoSocketPath();
+
+        if (QFile::exists(socketPath)) {
+            // A socket file is present from a previous session.
+            // Verify the Monado service is actually running AND the socket
+            // is accepting connections before trusting it as "ready".
+            if (isServiceActive(unit) && isSocketLive(socketPath)) {
+                qCInfo(KWINVRCUSTODIAN) << "Monado already running with live IPC socket — runtime ready";
+                notifyPluginActivate(profile.name, m_activeOutput);
+                return;
+            }
+
+            // Socket is stale (service not active, or socket not accepting connections).
+            // Remove it so the filesystem watcher below fires exactly once when the
+            // new Monado instance creates a fresh socket.
+            qCWarning(KWINVRCUSTODIAN) << "Stale Monado IPC socket detected"
+                                       << "(service active:" << isServiceActive(unit)
+                                       << ", socket live:" << isSocketLive(socketPath)
+                                       << ") — removing before starting fresh instance";
+            if (!QFile::remove(socketPath))
+                qCWarning(KWINVRCUSTODIAN) << "Failed to remove stale socket:" << socketPath;
+        }
+    }
+
     qCInfo(KWINVRCUSTODIAN) << "Starting runtime unit:" << unit;
 
-    // Start the systemd user unit (non-blocking async call)
-    QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService,
-                                                      kSystemdObject,
-                                                      kSystemdManager,
-                                                      QStringLiteral("StartUnit"));
-    msg.setArguments({unit, QStringLiteral("replace")});
-    QDBusConnection::sessionBus().asyncCall(msg);
+    // Fire StartUnit and watch the reply to detect systemd-level failures
+    // (e.g. unit file not found, dependency not met).
+    QDBusMessage startMsg = QDBusMessage::createMethodCall(kSystemdService, kSystemdObject,
+                                                           kSystemdManager,
+                                                           QStringLiteral("StartUnit"));
+    startMsg.setArguments({unit, QStringLiteral("replace")});
 
-    if (profile.openxrRuntime == QLatin1String("monado")) {
-        // Wait for the Monado IPC socket to appear — that's when Monado is ready
-        const QString runtimeDir = qEnvironmentVariable(
-            "XDG_RUNTIME_DIR",
-            QStringLiteral("/run/user/") + QString::number(::getuid()));
-        const QString socketPath = runtimeDir + QStringLiteral("/monado_comp_ipc");
-
-        // If Monado is already running and the socket is live, notify immediately
-        // rather than deleting the socket from under the active OpenXR session.
-        if (QFile::exists(socketPath)) {
-            qCInfo(KWINVRCUSTODIAN) << "Monado IPC socket already present — runtime is ready";
-            notifyPluginActivate(profile.name, m_activeOutput);
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(startMsg);
+    auto *startWatcher = new QDBusPendingCallWatcher(pending, this);
+    connect(startWatcher, &QDBusPendingCallWatcher::finished,
+            this, [this, unit](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusObjectPath> reply = *w;
+        if (reply.isError()) {
+            qCWarning(KWINVRCUSTODIAN) << "systemd rejected StartUnit for" << unit
+                                       << ":" << reply.error().message();
+            // Abort the activation — there is no runtime to wait for.
+            m_active = false;
+            m_activeProfile = std::nullopt;
+            m_activeOutput.clear();
+            m_pendingRuntimeStop = false;
+            m_stoppingProfile = std::nullopt;
+            if (m_monadoSocketWatcher) {
+                m_monadoSocketWatcher->deleteLater();
+                m_monadoSocketWatcher = nullptr;
+            }
+            unsubscribeUnitStateChanges();
             return;
         }
+        qCInfo(KWINVRCUSTODIAN) << "StartUnit accepted, job:" << reply.value().path();
+    });
 
-        // Remove any stale socket left by a crashed Monado so the watcher
-        // fires only when the new instance creates a fresh socket.
-        QFile::remove(socketPath);
+    if (profile.openxrRuntime == QLatin1String("monado")) {
+        const QString socketPath = monadoSocketPath();
+        const QString runtimeDir = socketPath.left(socketPath.lastIndexOf(u'/'));
 
-        // Watch the runtime directory for the socket to appear
+        // Watch the runtime directory for the Monado IPC socket to appear.
+        // Monado creates this socket after Vulkan init is complete and it is
+        // ready to accept OpenXR connections.
         m_monadoSocketWatcher = new QFileSystemWatcher({runtimeDir}, this);
         connect(m_monadoSocketWatcher, &QFileSystemWatcher::directoryChanged,
                 this, &Custodian::onMonadoSocketAppeared);
 
+        // Also subscribe to the unit's PropertiesChanged signal so we know if
+        // Monado enters "failed" state after starting (e.g. crashes during Vulkan init).
+        // Use LoadUnit (synchronous) to get the unit object path immediately.
+        QDBusMessage loadMsg = QDBusMessage::createMethodCall(kSystemdService, kSystemdObject,
+                                                              kSystemdManager,
+                                                              QStringLiteral("LoadUnit"));
+        loadMsg.setArguments({unit});
+        const QDBusMessage loadReply = QDBusConnection::sessionBus().call(loadMsg, QDBus::Block, 3000);
+        if (loadReply.type() == QDBusMessage::ReplyMessage && !loadReply.arguments().isEmpty()) {
+            const QString unitPath = loadReply.arguments().first().value<QDBusObjectPath>().path();
+            if (!unitPath.isEmpty())
+                subscribeUnitStateChanges(unitPath);
+        } else {
+            qCWarning(KWINVRCUSTODIAN) << "Could not get unit object path for" << unit
+                                       << "— startup failure detection disabled";
+        }
+
         qCInfo(KWINVRCUSTODIAN) << "Watching for Monado IPC socket:" << socketPath;
+
     } else if (profile.openxrRuntime == QLatin1String("wivrn")) {
-        // WiVRn registers on D-Bus when ready — onRuntimeServiceRegistered() handles it.
-        // The runtimeWatcher was already set up for this service name in setupRuntimeWatcher().
         qCInfo(KWINVRCUSTODIAN) << "Waiting for WiVRn D-Bus service:"
                                 << (profile.serviceName.isEmpty()
                                         ? QStringLiteral("net.wivrn.Server")
@@ -438,23 +546,103 @@ void Custodian::onMonadoSocketAppeared()
     if (!m_activeProfile || m_activeProfile->openxrRuntime != QLatin1String("monado"))
         return;
 
-    const QString runtimeDir = qEnvironmentVariable(
-        "XDG_RUNTIME_DIR",
-        QStringLiteral("/run/user/") + QString::number(::getuid()));
-    const QString socketPath = runtimeDir + QStringLiteral("/monado_comp_ipc");
+    const QString socketPath = monadoSocketPath();
 
     if (!QFile::exists(socketPath))
-        return;
+        return; // Directory change was for something else — keep watching
 
-    qCInfo(KWINVRCUSTODIAN) << "Monado IPC socket appeared — runtime is ready";
+    // Verify the socket is genuinely accepting connections, not just a file.
+    // On NVIDIA, Monado's Vulkan init takes a moment after creating the socket
+    // file; the connect check confirms the IPC server is actually listening.
+    if (!isSocketLive(socketPath)) {
+        qCDebug(KWINVRCUSTODIAN) << "Monado IPC socket file appeared but is not yet"
+                                    " accepting connections — continuing to watch";
+        return; // Watcher will fire again on next directory change
+    }
 
-    // Socket appeared — clean up the watcher
+    qCInfo(KWINVRCUSTODIAN) << "Monado IPC socket appeared and verified live — runtime ready";
+
+    // Stop watching: socket is confirmed live; no longer need the watcher.
     if (m_monadoSocketWatcher) {
         m_monadoSocketWatcher->deleteLater();
         m_monadoSocketWatcher = nullptr;
     }
 
+    // Unsubscribe from startup failure detection — Monado is running successfully.
+    unsubscribeUnitStateChanges();
+
     notifyPluginActivate(m_activeProfile->name, m_activeOutput);
+}
+
+void Custodian::subscribeUnitStateChanges(const QString &unitPath)
+{
+    // Unsubscribe from any previous watcher first.
+    unsubscribeUnitStateChanges();
+    m_startingUnitPath = unitPath;
+
+    // Connect to org.freedesktop.DBus.Properties.PropertiesChanged on the unit object.
+    // This fires when ActiveState changes (e.g. "activating" → "active" or "failed").
+    const bool ok = QDBusConnection::sessionBus().connect(
+        kSystemdService,
+        m_startingUnitPath,
+        kDBusProperties,
+        QStringLiteral("PropertiesChanged"),
+        this,
+        SLOT(onStartingUnitPropertiesChanged(QString, QVariantMap, QStringList)));
+
+    if (!ok)
+        qCWarning(KWINVRCUSTODIAN) << "Failed to subscribe to unit PropertiesChanged for"
+                                   << unitPath;
+    else
+        qCDebug(KWINVRCUSTODIAN) << "Subscribed to unit state changes for" << unitPath;
+}
+
+void Custodian::unsubscribeUnitStateChanges()
+{
+    if (m_startingUnitPath.isEmpty())
+        return;
+
+    QDBusConnection::sessionBus().disconnect(
+        kSystemdService,
+        m_startingUnitPath,
+        kDBusProperties,
+        QStringLiteral("PropertiesChanged"),
+        this,
+        SLOT(onStartingUnitPropertiesChanged(QString, QVariantMap, QStringList)));
+
+    m_startingUnitPath.clear();
+}
+
+void Custodian::onStartingUnitPropertiesChanged(const QString &iface,
+                                                const QVariantMap &changed,
+                                                const QStringList &invalidated)
+{
+    Q_UNUSED(iface)
+    Q_UNUSED(invalidated)
+
+    const QString state = changed.value(QLatin1String("ActiveState")).toString();
+    if (state.isEmpty())
+        return;
+
+    qCDebug(KWINVRCUSTODIAN) << "Runtime unit state changed to:" << state;
+
+    if (state == QLatin1String("failed")) {
+        qCWarning(KWINVRCUSTODIAN) << "Runtime unit entered 'failed' state during startup"
+                                   << "— aborting VR activation";
+        unsubscribeUnitStateChanges();
+
+        if (m_monadoSocketWatcher) {
+            m_monadoSocketWatcher->deleteLater();
+            m_monadoSocketWatcher = nullptr;
+        }
+
+        // Clear activation state — nothing to stop (unit already failed).
+        m_active = false;
+        m_activeProfile = std::nullopt;
+        m_activeOutput.clear();
+        m_pendingRuntimeStop = false;
+        m_stoppingProfile = std::nullopt;
+    }
 }
 
 void Custodian::stopRuntime(const CustodianProfile &profile)
@@ -465,12 +653,24 @@ void Custodian::stopRuntime(const CustodianProfile &profile)
 
     qCInfo(KWINVRCUSTODIAN) << "Stopping runtime unit:" << unit;
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService,
-                                                      kSystemdObject,
+    QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService, kSystemdObject,
                                                       kSystemdManager,
                                                       QStringLiteral("StopUnit"));
     msg.setArguments({unit, QStringLiteral("replace")});
-    QDBusConnection::sessionBus().asyncCall(msg);
+
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    auto *stopWatcher = new QDBusPendingCallWatcher(pending, this);
+    connect(stopWatcher, &QDBusPendingCallWatcher::finished,
+            this, [unit](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusObjectPath> reply = *w;
+        if (reply.isError())
+            qCWarning(KWINVRCUSTODIAN) << "StopUnit reply error for" << unit
+                                       << ":" << reply.error().message();
+        else
+            qCInfo(KWINVRCUSTODIAN) << "StopUnit accepted for" << unit
+                                    << ", job:" << reply.value().path();
+    });
 }
 
 // ─── HID init ─────────────────────────────────────────────────────────────────
@@ -506,9 +706,7 @@ void Custodian::notifyPluginActivate(const QString &profileName, const QString &
         return;
     }
 
-    // Also call the plugin's requestActivateProfile method directly
-    QDBusMessage msg = QDBusMessage::createMethodCall(kPluginService,
-                                                      kPluginObject,
+    QDBusMessage msg = QDBusMessage::createMethodCall(kPluginService, kPluginObject,
                                                       kPluginInterface,
                                                       QStringLiteral("requestActivateProfile"));
     msg.setArguments({profileName, outputName});
@@ -524,8 +722,7 @@ void Custodian::notifyPluginDeactivate(const QString &profileName)
     if (!m_pluginAvailable)
         return;
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(kPluginService,
-                                                      kPluginObject,
+    QDBusMessage msg = QDBusMessage::createMethodCall(kPluginService, kPluginObject,
                                                       kPluginInterface,
                                                       QStringLiteral("requestDeactivate"));
     QDBusConnection::sessionBus().asyncCall(msg);
@@ -551,12 +748,10 @@ void Custodian::registerDBusService()
 
 void Custodian::setupRuntimeWatcher()
 {
-    // Collect all D-Bus service names from service-triggered profiles
     QStringList serviceNames;
     for (const CustodianProfile &profile : std::as_const(m_profiles)) {
         if (profile.trigger == ProfileTrigger::Service && !profile.serviceName.isEmpty())
             serviceNames.append(profile.serviceName);
-        // WiVRn runtime also registers a D-Bus service when ready
         if (profile.openxrRuntime == QLatin1String("wivrn") && !profile.serviceName.isEmpty())
             serviceNames.append(profile.serviceName);
     }
@@ -575,12 +770,10 @@ void Custodian::setupRuntimeWatcher()
                 this, &Custodian::onRuntimeServiceUnregistered);
     }
 
-    // Remove duplicates before adding
     serviceNames.removeDuplicates();
     for (const QString &svc : std::as_const(serviceNames))
         m_runtimeWatcher->addWatchedService(svc);
 
-    // Check whether any service is already registered
     auto iface = QDBusConnection::sessionBus().interface();
     for (const QString &svc : std::as_const(serviceNames)) {
         if (iface && iface->isServiceRegistered(svc).value())
@@ -604,7 +797,6 @@ void Custodian::setupPluginWatcher()
         onPluginVanished();
     });
 
-    // Check whether the plugin is already running
     auto iface = QDBusConnection::sessionBus().interface();
     if (iface && iface->isServiceRegistered(kPluginService).value())
         onPluginAppeared();
@@ -619,8 +811,9 @@ void Custodian::vrReady()
 
 void Custodian::vrStopped()
 {
-    qCInfo(KWINVRCUSTODIAN) << "Plugin reported VR stopped";
-    // Runtime was already stopped in deactivateActive(); nothing more to do.
+    qCInfo(KWINVRCUSTODIAN) << "Plugin confirmed VR fully stopped"
+                            << "— executing deferred runtime stop";
+    executePendingRuntimeStop();
 }
 
 void Custodian::manualActivate()
@@ -632,7 +825,6 @@ void Custodian::manualActivate()
         return;
     }
 
-    // Find an Always-trigger (flat_monitor) fallback profile
     for (const CustodianProfile &profile : std::as_const(m_profiles)) {
         if (profile.trigger == ProfileTrigger::Always) {
             activateProfile(profile, QString());
@@ -640,7 +832,6 @@ void Custodian::manualActivate()
         }
     }
 
-    // No fallback profile — notify plugin anyway; it will activate on the current primary output
     notifyPluginActivate(QString(), QString());
 }
 
@@ -661,15 +852,13 @@ std::optional<CustodianProfile> Custodian::matchConnector(const QString &connect
         if (profile.trigger != ProfileTrigger::Edid)
             continue;
 
-        // Match by binary vendor code (preferred) or monitor name substring
         bool edidMatch = false;
         if (hasVendorProduct && !profile.edidVendor.isEmpty()) {
             edidMatch = profile.matchesEdidVendor(vendor)
                 && (profile.edidProductId == 0 || profile.edidProductId == productId);
         }
-        if (!edidMatch && !profile.edidName.isEmpty()) {
+        if (!edidMatch && !profile.edidName.isEmpty())
             edidMatch = profile.matchesEdidName(monitorName);
-        }
 
         if (edidMatch) {
             qCDebug(KWINVRCUSTODIAN) << "Connector" << connectorPath
@@ -684,10 +873,77 @@ std::optional<CustodianProfile> Custodian::matchConnector(const QString &connect
 
 QString Custodian::outputNameFromConnectorPath(const QString &connectorPath)
 {
-    // e.g. /sys/class/drm/card1-DP-1  →  "DP-1"
-    const QString base = QDir(connectorPath).dirName(); // "card1-DP-1"
+    const QString base = QDir(connectorPath).dirName();
     const int dash = base.indexOf(u'-');
     if (dash < 0)
         return base;
     return base.mid(dash + 1);
+}
+
+// ─── System state verification helpers ───────────────────────────────────────
+
+bool Custodian::isServiceActive(const QString &unit) const
+{
+    // GetUnit returns the object path for the unit, or an error if not loaded.
+    QDBusMessage getUnit = QDBusMessage::createMethodCall(kSystemdService, kSystemdObject,
+                                                          kSystemdManager,
+                                                          QStringLiteral("GetUnit"));
+    getUnit.setArguments({unit});
+    const QDBusMessage reply = QDBusConnection::sessionBus().call(getUnit, QDBus::Block, 3000);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCDebug(KWINVRCUSTODIAN) << "GetUnit failed for" << unit
+                                 << "(likely not loaded) — treating as inactive";
+        return false;
+    }
+
+    const QString unitPath = reply.arguments().first().value<QDBusObjectPath>().path();
+    if (unitPath.isEmpty())
+        return false;
+
+    QDBusInterface unitIface(kSystemdService, unitPath, kSystemdUnit,
+                             QDBusConnection::sessionBus());
+    const QString state = unitIface.property("ActiveState").toString();
+    qCDebug(KWINVRCUSTODIAN) << "Unit" << unit << "ActiveState:" << state;
+
+    return state == QLatin1String("active") || state == QLatin1String("activating");
+}
+
+// static
+bool Custodian::isSocketLive(const QString &socketPath)
+{
+    // Attempt a non-blocking connect to the Unix domain socket.
+    // Returns true if a server is listening (EINPROGRESS = connect in progress,
+    // which means listen() has been called).  Returns false on ECONNREFUSED
+    // (file exists but no server) or other hard errors.
+    const int sock = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (sock < 0)
+        return false;
+
+    struct sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    const QByteArray pathBytes = socketPath.toLocal8Bit();
+    if (pathBytes.size() >= static_cast<int>(sizeof(addr.sun_path))) {
+        ::close(sock);
+        return false;
+    }
+    std::memcpy(addr.sun_path, pathBytes.constData(), pathBytes.size());
+
+    const int ret = ::connect(sock, reinterpret_cast<struct sockaddr *>(&addr),
+                              static_cast<socklen_t>(sizeof(addr)));
+    const int err = errno;
+    ::close(sock);
+
+    // ret == 0: connected immediately (shouldn't happen for IPC but handle it)
+    // EINPROGRESS: non-blocking connect queued — server is listening
+    // EAGAIN: resource temporarily unavailable — server is listening
+    // ECONNREFUSED: no server listening on this socket
+    return ret == 0 || err == EINPROGRESS || err == EAGAIN;
+}
+
+QString Custodian::monadoSocketPath() const
+{
+    const QString runtimeDir = qEnvironmentVariable(
+        "XDG_RUNTIME_DIR",
+        QStringLiteral("/run/user/") + QString::number(::getuid()));
+    return runtimeDir + QStringLiteral("/monado_comp_ipc");
 }

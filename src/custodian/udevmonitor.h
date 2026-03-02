@@ -41,6 +41,14 @@ Q_SIGNALS:
     void drmConnectorChanged(const QString &connectorPath);
 
     /**
+     * Emitted when a card-level DRM change event arrives without a connector path.
+     * The receiver should re-scan all connected connectors to detect mode changes.
+     * Needed for drivers (e.g. NVIDIA) that don't emit per-connector events for
+     * mode switches like the Xreal Air SBS button press.
+     */
+    void drmRescanNeeded();
+
+    /**
      * Emitted when a USB device is added.
      * vendorId and productId are lowercase hex strings, e.g. "3318", "0424".
      * devNode is the device node path (e.g. /dev/hidraw0); may be empty for interface-level events.

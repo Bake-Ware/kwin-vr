@@ -119,6 +119,16 @@ private:
     QMetaObject::Connection m_monadoWindowConnection;
     // One-shot: corrects the output after Monado's set_fullscreen(NULL) is processed by KWin.
     QMetaObject::Connection m_monadoFsConnection;
+
+    // Custodian D-Bus presence tracking.
+    // When VR stops, the plugin must call vrStopped() on the custodian so the
+    // custodian knows it is safe to stop the OpenXR runtime (stopping Monado
+    // while the display is still in SBS mode causes an NVIDIA GPU deadlock).
+    QDBusServiceWatcher *m_custodianWatcher = nullptr;
+    bool m_custodianAvailable = false;
+
+    /** Send vrStopped() to the custodian if it is on D-Bus. */
+    void notifyCustodianVrStopped();
 };
 } // namespace KWin
 

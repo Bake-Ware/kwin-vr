@@ -109,6 +109,28 @@ KwinVr::KwinVr()
         }
     }, Qt::QueuedConnection);
 
+    // Watch the custodian D-Bus service so we know whether to call vrStopped().
+    m_custodianWatcher = new QDBusServiceWatcher(
+        QStringLiteral("org.kde.kwinvr.Custodian"),
+        QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration,
+        this);
+    connect(m_custodianWatcher, &QDBusServiceWatcher::serviceRegistered,
+            this, [this](const QString &) {
+        qCInfo(KWINVR) << "kwin-vr-custodian appeared on D-Bus";
+        m_custodianAvailable = true;
+    });
+    connect(m_custodianWatcher, &QDBusServiceWatcher::serviceUnregistered,
+            this, [this](const QString &) {
+        qCInfo(KWINVR) << "kwin-vr-custodian vanished from D-Bus";
+        m_custodianAvailable = false;
+    });
+    {
+        auto *iface = QDBusConnection::sessionBus().interface();
+        if (iface && iface->isServiceRegistered(QStringLiteral("org.kde.kwinvr.Custodian")).value())
+            m_custodianAvailable = true;
+    }
+
     // Set up profile-driven output monitoring
     setupOutputMonitoring();
 }
@@ -166,6 +188,12 @@ void KwinVr::setVrActive(bool active)
             m_activeProfile = std::nullopt;
             m_active = false;
             Q_EMIT vrActiveChanged();
+
+            // Notify the custodian that VR teardown is complete.
+            // The custodian defers stopping the OpenXR runtime until it receives
+            // this signal, ensuring Monado is never stopped while the display is
+            // still in SBS mode (which causes an NVIDIA GPU deadlock on RTX 2070).
+            notifyCustodianVrStopped();
 
             // If flagged for retry (watchdog or xrFailed), restart VR after a delay
             if (m_retryOutput) {
@@ -403,6 +431,23 @@ void KwinVr::closeNotification()
         m_notification->deleteLater();
         m_notification = nullptr;
     }
+}
+
+void KwinVr::notifyCustodianVrStopped()
+{
+    if (!m_custodianAvailable) {
+        qCDebug(KWINVR) << "Custodian not on D-Bus — skipping vrStopped notification";
+        return;
+    }
+
+    qCInfo(KWINVR) << "Notifying custodian: VR teardown complete (vrStopped)";
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.kwinvr.Custodian"),
+        QStringLiteral("/Custodian"),
+        QStringLiteral("org.kde.kwinvr.Custodian"),
+        QStringLiteral("vrStopped"));
+    QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 void KwinVr::registerDBusService()

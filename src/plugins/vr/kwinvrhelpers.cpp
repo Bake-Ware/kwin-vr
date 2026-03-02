@@ -113,17 +113,11 @@ void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale, int virtualLog
     config.changeSet(o)->scale = scale;
     config.changeSet(o)->pos = QPoint(physicalRight, 0);
 
-    // Place headset outputs to the right of Virtual-T.
-    // This prevents windows from reaching the SBS display by dragging right
-    // off a physical monitor pseudo-mirror.
-    const int headsetX = physicalRight + virtualLogicalWidth;
-    for (auto *output : outputs) {
-        auto *bo = kwinGetBackendOutput(output);
-        if (!headsetOutputNames.contains(bo->name()))
-            continue;
-        config.changeSet(bo)->pos = QPoint(headsetX, 0);
-        qWarning() << "VR: moving headset output" << bo->name() << "to x=" << headsetX;
-    }
+    // NVIDIA workaround: do not reposition headset outputs.
+    // Setting pos on a physical connector triggers an atomic modeset commit
+    // that fails with "Permission denied" on RTX 2070 (driver 590.x).
+    // Headset outputs are left at their current position; Virtual-T acts
+    // as the primary and windows cannot reach the SBS display anyway.
 
     // Build output order: Virtual-T first (primary), then physical, then headset
     QList<Output *> newOrder;
@@ -139,8 +133,7 @@ void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale, int virtualLog
     if (virtualOutput)
         newOrder.prepend(virtualOutput);
 
-    qWarning() << "VR: activating virtual output at x=" << physicalRight
-               << "as primary; headset at x=" << headsetX;
+    qWarning() << "VR: activating virtual output at x=" << physicalRight << "as primary";
     Workspace::self()->applyOutputConfiguration(config, newOrder);
 
     if (!newOrder.isEmpty())
