@@ -1,4 +1,4 @@
-#!/home/alarm/gaze-venv/bin/python3
+#!/home/bake/gaze-venv/bin/python3
 """
 gaze_mouse.py — IR eye camera → mouse control (EyeTrackVR RANSAC + pye3d)
 

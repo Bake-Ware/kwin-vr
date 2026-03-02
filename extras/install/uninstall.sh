@@ -27,11 +27,16 @@ do_uninstall() {
     log_info "Disabling user services..."
     if [ "$DRY_RUN" = "true" ]; then
         echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user disable --now monado.service"
+        echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user disable --now kwin-vr-custodian.service"
     else
         sudo -u "$INSTALL_USER" \
             DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
             XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
             systemctl --user disable --now monado.service 2>/dev/null || true
+        sudo -u "$INSTALL_USER" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+            XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+            systemctl --user disable --now kwin-vr-custodian.service 2>/dev/null || true
     fi
     log_success "User services disabled"
 
@@ -47,6 +52,8 @@ do_uninstall() {
 
     # Udev rules
     run_sudo rm -f /etc/udev/rules.d/70-xreal-air.rules
+    run_sudo rm -f /etc/udev/rules.d/70-kwin-vr.rules
+    run_sudo rm -f /usr/lib/udev/rules.d/70-kwin-vr.rules
     run_sudo rm -f /etc/udev/rules.d/98-wmr-hololens-config.rules
     run_sudo rm -f /etc/udev/rules.d/99-wmr-headset.rules
 

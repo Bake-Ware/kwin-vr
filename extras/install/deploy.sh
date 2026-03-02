@@ -18,9 +18,10 @@ deploy_extras() {
 
     # ── Udev rules ───────────────────────────────────────────────────────
     log_info "Installing udev rules..."
+    run_sudo mkdir -p /usr/lib/udev/rules.d
     for f in "$extras"/udev/rules.d/*.rules; do
         [ -f "$f" ] || continue
-        run_sudo cp "$f" /etc/udev/rules.d/
+        run_sudo cp "$f" /usr/lib/udev/rules.d/
     done
     log_success "Udev rules installed"
 
