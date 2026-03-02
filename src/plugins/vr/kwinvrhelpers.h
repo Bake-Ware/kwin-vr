@@ -107,7 +107,7 @@ public:
     /* Forces the mouse pointer to hover over the window */
     Q_INVOKABLE static void setHackedFocus(Window *window);
 
-    Q_INVOKABLE void activateOutput(KWin::BackendOutput *window, qreal scale = 2);
+    Q_INVOKABLE void activateOutput(KWin::BackendOutput *o, qreal scale, int virtualLogicalWidth);
 
     bool isScreenLocked() const;
 

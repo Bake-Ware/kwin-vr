@@ -1,0 +1,8 @@
+[Unit]
+Description=VR Display Link Quality Monitor
+Documentation=https://github.com/Bake-Ware/kwin-vr
+After=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/vr-link-monitor/vr-link-monitor

@@ -6,17 +6,6 @@ deploy_extras() {
 
     local extras="$REPO_ROOT/extras"
     local user_systemd="$INSTALL_HOME/.config/systemd/user"
-    local plasma_env="$INSTALL_HOME/.config/plasma-workspace/env"
-
-    # ── VR headset init scripts ──────────────────────────────────────────
-    log_info "Installing vr-headset-init scripts..."
-    run_sudo mkdir -p /usr/lib/vr-headset-init
-    for f in "$extras"/vr-headset-init/*.sh "$extras"/vr-headset-init/*.py; do
-        [ -f "$f" ] || continue
-        run_sudo cp "$f" /usr/lib/vr-headset-init/
-        run_sudo chmod 755 "/usr/lib/vr-headset-init/$(basename "$f")"
-    done
-    log_success "vr-headset-init scripts installed"
 
     # ── VR profiles ──────────────────────────────────────────────────────
     log_info "Installing VR profiles..."
@@ -35,12 +24,20 @@ deploy_extras() {
     done
     log_success "Udev rules installed"
 
-    # ── System service ───────────────────────────────────────────────────
-    log_info "Installing system service..."
-    run_sudo cp "$extras/systemd/system/vr-headset-init.service" /etc/systemd/system/
-    log_success "vr-headset-init.service installed"
+    # ── System services (link monitor) ───────────────────────────────────
+    log_info "Installing system services..."
+    run_sudo cp "$extras/systemd/system/vr-link-monitor.service" /etc/systemd/system/
+    run_sudo cp "$extras/systemd/system/vr-link-monitor.timer"   /etc/systemd/system/
+    log_success "vr-link-monitor service and timer installed"
 
-    # ── User services (template UID) ─────────────────────────────────────
+    # ── Link monitor helper script ────────────────────────────────────────
+    log_info "Installing vr-link-monitor script..."
+    run_sudo mkdir -p /usr/lib/vr-link-monitor
+    run_sudo cp "$extras/vr-link-monitor/vr-link-monitor" /usr/lib/vr-link-monitor/
+    run_sudo chmod 755 /usr/lib/vr-link-monitor/vr-link-monitor
+    log_success "vr-link-monitor script installed"
+
+    # ── User services (monado only) ───────────────────────────────────────
     log_info "Installing user services..."
     run_cmd mkdir -p "$user_systemd"
 
@@ -55,13 +52,6 @@ deploy_extras() {
         fi
     done
     log_success "User services installed (UID templated to $INSTALL_UID)"
-
-    # ── Plasma env script ────────────────────────────────────────────────
-    log_info "Installing vr-env.sh..."
-    run_cmd mkdir -p "$plasma_env"
-    run_cmd cp "$extras/plasma-workspace/env/vr-env.sh" "$plasma_env/vr-env.sh"
-    run_cmd chmod 755 "$plasma_env/vr-env.sh"
-    log_success "vr-env.sh installed"
 
     # ── GL_ALPHA shim (ARM only) ─────────────────────────────────────────
     if [ "$ARCH" = "aarch64" ]; then
@@ -100,6 +90,5 @@ deploy_extras() {
     # ── Fix ownership of user files ──────────────────────────────────────
     if [ "$DRY_RUN" != "true" ]; then
         chown -R "$INSTALL_USER:$INSTALL_USER" "$user_systemd" 2>/dev/null
-        chown -R "$INSTALL_USER:$INSTALL_USER" "$plasma_env" 2>/dev/null
     fi
 }

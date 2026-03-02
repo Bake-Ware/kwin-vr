@@ -502,6 +502,7 @@ endif()
 add_subdirectory(data)
 add_subdirectory(kconf_update)
 add_subdirectory(src)
+add_subdirectory(extras)
 
 if (BUILD_TESTING)
     if (Qt6WaylandClient_VERSION VERSION_GREATER_EQUAL "6.10.0")

@@ -12,10 +12,30 @@
 
 DETECTED=$(cat /run/vr-detected 2>/dev/null)
 if [ -z "$DETECTED" ] || [ "$DETECTED" = "none" ]; then
-    echo "[xreal-mode-watch] No VR headset detected, exiting"
-    exit 0
+    echo "[xreal-mode-watch] No VR headset in /run/vr-detected, running detection (up to 60s)..."
+    for i in $(seq 1 60); do
+        DETECTED=$(/usr/lib/vr-headset-init/vr-detect.sh 2>/dev/null)
+        if [ -n "$DETECTED" ] && [ -f "$DETECTED" ]; then
+            echo "[xreal-mode-watch] VR detected: $DETECTED"
+            echo "$DETECTED" > /run/vr-detected
+            chmod 644 /run/vr-detected
+            break
+        fi
+        DETECTED=""
+        sleep 1
+    done
+    if [ -z "$DETECTED" ]; then
+        echo "[xreal-mode-watch] No VR headset detected after 60s, exiting"
+        exit 0
+    fi
 fi
 source "$DETECTED"
+
+# Run headset-specific init if defined (e.g. send 2D mode HID command to Xreal Air)
+if [ -n "${VR_BOOT_INIT:-}" ] && [ -x "$VR_BOOT_INIT" ]; then
+    echo "[xreal-mode-watch] Running headset init: $VR_BOOT_INIT"
+    timeout 15 "$VR_BOOT_INIT" 2>&1 | logger -t xreal-mode-watch || true
+fi
 
 CONNECTOR="${VR_DISPLAY_CONNECTOR:-DP-1}"
 
@@ -75,7 +95,7 @@ wait_for_monado() {
 }
 
 wait_for_connected() {
-    local timeout="${1:-15}"
+    local timeout="${1:-90}"
     log "Waiting for connector to come back..."
     for i in $(seq 1 "$timeout"); do
         local s
@@ -83,6 +103,12 @@ wait_for_connected() {
         if [ "$s" = "connected" ]; then
             log "Connector reconnected after ${i}s"
             return 0
+        fi
+        # Periodically poke the kernel to retry HPD/EDID detection.
+        # USB-C Alt Mode reconfiguration (2-lane→4-lane DP for SBS) can take
+        # 10-30s and may need a software nudge to complete link training.
+        if [ $((i % 10)) -eq 0 ]; then
+            sudo sh -c "echo detect > '$STATUS_FILE'" 2>/dev/null || true
         fi
         sleep 1
     done
@@ -186,10 +212,25 @@ stop_vr() {
 activate_vr() {
     log "SBS mode detected (${SBS_MODE}) - activating VR"
 
-    # 1. Kill old Monado FIRST (fast, before the slow apply_mode)
+    # 1. Stop kwin-vr XR session BEFORE killing Monado so it can clean up gracefully.
+    #    (kwin-vr may have auto-started VR when it detected the 3840x1080 mode change;
+    #     killing Monado while the XrView is live causes XR_ERROR_SESSION_LOST spam.)
+    local vr_was_active
+    vr_was_active=$(dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
+        org.freedesktop.DBus.Properties.Get \
+        string:org.kde.kwinvr string:vrActive 2>/dev/null | grep -o "true\|false")
+    if [ "$vr_was_active" = "true" ]; then
+        log "Stopping kwin-vr XR session before Monado restart..."
+        dbus-send --session --dest=org.kde.KWin --print-reply /KwinVr \
+            org.freedesktop.DBus.Properties.Set \
+            string:org.kde.kwinvr string:vrActive variant:boolean:false 2>/dev/null
+        sleep 1  # Let kwin-vr destroy the QML engine cleanly
+    fi
+
+    # 2. Kill old Monado (fast, before the slow apply_mode)
     stop_monado
 
-    # 2. Apply SBS mode (triggers modeset + DP link retrain at higher bandwidth)
+    # 3. Apply SBS mode (triggers modeset + DP link retrain at higher bandwidth)
     apply_mode 3840 1080 60
 
     # Re-check: glasses may have cycled during apply_mode (~5s)
@@ -199,14 +240,14 @@ activate_vr() {
         return
     fi
 
-    # 3. Update kwinvr config for Xreal Air (merge, don't overwrite user settings)
+    # 4. Update kwinvr config for Xreal Air (merge, don't overwrite user settings)
     kwriteconfig6 --file kwinvr --group General --key autoStart true
     kwriteconfig6 --file kwinvr --group General --key width "${VR_WIDTH}"
     kwriteconfig6 --file kwinvr --group General --key height "${VR_HEIGHT}"
     kwriteconfig6 --file kwinvr --group General --key scale "${VR_SCALE}"
     kwriteconfig6 --file kwinvr --group General --key refreshrate "${VR_REFRESH}"
 
-    # 4. Start Monado and wait for IPC socket
+    # 5. Start Monado and wait for IPC socket
     systemctl --user start monado.service
     if ! wait_for_monado 15; then
         log "Monado failed to start, aborting VR activation"
@@ -223,7 +264,7 @@ activate_vr() {
         return
     fi
 
-    # 5. Activate VR via D-Bus (with retry — KWin may fail on first attempt)
+    # 6. Activate VR via D-Bus (with retry — KWin may fail on first attempt)
     if ! wait_for_kwin_vr 10; then
         log "KWin VR D-Bus not available"
         VR_ACTIVE=true
@@ -308,11 +349,18 @@ while true; do
             log "Connector disconnected while VR active"
             stop_vr
         fi
-        # Wait for reconnection, then let the main loop handle the new mode
-        if wait_for_connected; then
+        # Wait for reconnection, then let the main loop handle the new mode.
+        # USB-C Alt Mode switching (e.g. 2-lane→4-lane DP for SBS) causes a
+        # brief USB disconnect; give it up to 90s with active probing.
+        if wait_for_connected 90; then
             # Give KWin time to process the HPD reconnect and read EDID
             sleep 2
             LAST_MODE=""
+        else
+            # Glasses absent for 90s — physically disconnected or stuck.
+            # Exit so the udev rule (ACTION==add on USB reconnect) restarts us.
+            log "Connector absent for 90s — exiting; will restart on USB reconnect"
+            exit 0
         fi
     fi
 

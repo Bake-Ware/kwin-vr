@@ -330,6 +330,7 @@ target_sources(kwin PRIVATE
 
 add_subdirectory(backends)
 add_subdirectory(plugins)
+add_subdirectory(custodian)
 add_subdirectory(utils)
 add_subdirectory(wayland)
 

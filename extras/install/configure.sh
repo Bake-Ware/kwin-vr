@@ -10,15 +10,15 @@ configure_system() {
     run_sudo udevadm trigger
     log_success "Udev rules reloaded"
 
-    # ── Enable system service ────────────────────────────────────────────
-    log_info "Enabling vr-headset-init.service..."
+    # ── Enable system services ───────────────────────────────────────────
+    log_info "Enabling vr-link-monitor.timer..."
     run_sudo systemctl daemon-reload
-    run_sudo systemctl enable vr-headset-init.service
-    log_success "vr-headset-init.service enabled"
+    run_sudo systemctl enable --now vr-link-monitor.timer
+    log_success "vr-link-monitor.timer enabled"
 
     # ── Enable user services ─────────────────────────────────────────────
-    # monado.service is the core runtime — always enable
-    # Watch services (xreal-mode-watch, wivrn-watch) are managed dynamically by vr-env.sh
+    # monado.service is started on-demand by the kwin-vr plugin when SBS mode
+    # is detected. Enable it so it can be started/stopped via systemctl --user.
     log_info "Enabling monado.service (user)..."
     if [ "$DRY_RUN" = "true" ]; then
         echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user enable monado.service"
@@ -28,14 +28,27 @@ configure_system() {
             XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
             systemctl --user enable monado.service 2>/dev/null || true
     fi
-    log_success "monado.service enabled (watch services managed by vr-env.sh)"
+    log_success "monado.service enabled (started on-demand by kwin-vr plugin)"
+
+    # Enable xreal-mode-watch if an Xreal Air profile is installed
+    if [ -f /etc/vr-profiles.d/xreal-air-gen1.conf ]; then
+        log_info "Enabling xreal-mode-watch.service (user)..."
+        if [ "$DRY_RUN" = "true" ]; then
+            echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user enable xreal-mode-watch.service"
+        else
+            sudo -u "$INSTALL_USER" \
+                DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+                XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+                systemctl --user enable xreal-mode-watch.service 2>/dev/null || true
+        fi
+        log_success "xreal-mode-watch.service enabled (auto-starts at login, retries USB detection)"
+    fi
 
     # ── GPU-specific configuration ───────────────────────────────────────
     case "$GPU_VENDOR" in
         NVIDIA)
             log_info "Configuring NVIDIA GPU..."
 
-            # modprobe settings
             local modprobe_conf="/etc/modprobe.d/nvidia-kwin-vr.conf"
             if [ "$DRY_RUN" = "true" ]; then
                 echo -e "  ${YELLOW}[DRY-RUN]${RESET} Would create $modprobe_conf (modeset=1, fbdev=1)"
@@ -44,7 +57,6 @@ configure_system() {
             fi
             log_success "NVIDIA modprobe config created"
 
-            # Check driver version
             if command -v nvidia-smi &>/dev/null && [ "$DRY_RUN" != "true" ]; then
                 local nv_ver
                 nv_ver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)

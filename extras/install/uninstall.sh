@@ -16,32 +16,33 @@ do_uninstall() {
     detect_runtime_user
 
     local user_systemd="$INSTALL_HOME/.config/systemd/user"
-    local plasma_env="$INSTALL_HOME/.config/plasma-workspace/env"
 
-    # ── Disable services ─────────────────────────────────────────────────
-    log_info "Disabling services..."
+    # ── Disable system services ──────────────────────────────────────────
+    log_info "Disabling system services..."
+    run_sudo systemctl disable --now vr-link-monitor.timer  2>/dev/null || true
+    run_sudo systemctl disable --now vr-link-monitor.service 2>/dev/null || true
+    log_success "System services disabled"
 
-    run_sudo systemctl disable --now vr-headset-init.service 2>/dev/null || true
-
-    for svc in monado.service xreal-mode-watch.service wivrn-watch.service; do
-        if [ "$DRY_RUN" = "true" ]; then
-            echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user disable --now $svc"
-        else
-            sudo -u "$INSTALL_USER" \
-                DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
-                XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
-                systemctl --user disable --now "$svc" 2>/dev/null || true
-        fi
-    done
-    log_success "Services disabled"
+    # ── Disable user services ─────────────────────────────────────────────
+    log_info "Disabling user services..."
+    if [ "$DRY_RUN" = "true" ]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user disable --now monado.service"
+    else
+        sudo -u "$INSTALL_USER" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+            XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+            systemctl --user disable --now monado.service 2>/dev/null || true
+    fi
+    log_success "User services disabled"
 
     # ── Remove deployed files ────────────────────────────────────────────
     log_info "Removing deployed files..."
 
     # System files
-    run_sudo rm -rf /usr/lib/vr-headset-init
+    run_sudo rm -rf /usr/lib/vr-link-monitor
     run_sudo rm -rf /etc/vr-profiles.d
-    run_sudo rm -f /etc/systemd/system/vr-headset-init.service
+    run_sudo rm -f /etc/systemd/system/vr-link-monitor.service
+    run_sudo rm -f /etc/systemd/system/vr-link-monitor.timer
     run_sudo rm -f /etc/modprobe.d/nvidia-kwin-vr.conf
 
     # Udev rules
@@ -54,12 +55,6 @@ do_uninstall() {
 
     # User files
     run_cmd rm -f "$user_systemd/monado.service"
-    run_cmd rm -f "$user_systemd/xreal-mode-watch.service"
-    run_cmd rm -f "$user_systemd/wivrn-watch.service"
-    run_cmd rm -f "$plasma_env/vr-env.sh"
-
-    # Runtime detection file
-    run_sudo rm -f /run/vr-detected
 
     log_success "Deployed files removed"
 

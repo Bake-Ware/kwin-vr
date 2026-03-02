@@ -12,6 +12,7 @@
 #include <KConfigWatcher>
 #include <KNotification>
 
+#include <QDBusServiceWatcher>
 #include <QKeySequence>
 #include <QObject>
 #include <QQmlApplicationEngine>
@@ -41,6 +42,20 @@ public:
     bool vrActive() const;
     void setVrActive(bool active);
 
+    // Called by the kwin-vr-custodian service when it has matched a profile to
+    // hardware and the OpenXR runtime is ready. The plugin looks up the profile
+    // by name, finds the output by name, and calls activateForProfile().
+    Q_SCRIPTABLE void requestActivateProfile(const QString &profileName,
+                                             const QString &outputName);
+
+    // Called by the kwin-vr-custodian service to deactivate VR.
+    Q_SCRIPTABLE void requestDeactivate();
+
+    // D-Bus method called by vr-link-monitor (system service) when a DP link
+    // is found to be operating below its verified quality baseline.
+    Q_SCRIPTABLE void notifyLinkDegraded(const QString &connector, int lanes,
+                                         const QString &rateHex);
+
 Q_SIGNALS:
     void vrActiveChanged();
 
@@ -58,13 +73,24 @@ private:
 
     // Output hot-plug monitoring
     void setupOutputMonitoring();
+    void setupServiceWatcher();
     void scheduleOutputCheck(Output *output, bool isHotPlug);
     void watchOutputModes(Output *output);
     void checkOutputMode(Output *output);
     void onOutputAdded(Output *output);
     void onOutputRemoved(Output *output);
-    std::optional<VrProfile> matchProfile(Output *output) const;
+
+    // Profile matching
+    std::optional<VrProfile> matchDisplayProfile(Output *output) const;
     bool isOutputInSbsMode(Output *output) const;
+
+    // Start VR for a given profile; handles Monado/WiVRn runtime selection.
+    void activateForProfile(const VrProfile &profile, Output *output);
+
+    // Service-type VR management
+    void onServiceRegistered(const QString &service);
+    void onServiceUnregistered(const QString &service);
+    void maybeRestoreServiceVr();
 
     bool m_active = false;
     QQmlApplicationEngine *m_engine = nullptr;
@@ -74,17 +100,26 @@ private:
     KNotification *m_notification = nullptr;
 
     QList<VrProfile> m_profiles;
-    Output *m_vrOutput = nullptr;       // the output that triggered current VR session
-    QSet<Output *> m_watchedOutputs;    // outputs we are watching for SBS mode changes
+    Output *m_vrOutput = nullptr; // Output that triggered current display VR session
+    std::optional<VrProfile> m_activeProfile; // Profile driving the current VR session
+    QSet<Output *> m_watchedOutputs; // Outputs we are watching for SBS mode changes
+
+    // Service watcher for service-type profiles (WiVRn etc.)
+    QDBusServiceWatcher *m_serviceWatcher = nullptr;
 
     // Watchdog: periodically checks Monado PID; detects restarts that break the XR session
     QTimer *m_watchdogTimer = nullptr;
-    qint64 m_monadoPidAtVrStart = -1;  // Monado PID recorded when VR session started
+    qint64 m_monadoPidAtVrStart = -1; // Monado PID recorded when VR session started
     // If set when engine is destroyed, retry setVrActive(true) on this output
     Output *m_retryOutput = nullptr;
     // Tracks whether hideCursor() was called so stop() only calls showCursor() when needed
     bool m_cursorHidden = false;
+    // Persistent watcher: any new "openxr" window during the VR session gets steered to the VR output.
+    // Remains connected for the full VR session to handle Monado restarts.
+    QMetaObject::Connection m_monadoWindowConnection;
+    // One-shot: corrects the output after Monado's set_fullscreen(NULL) is processed by KWin.
+    QMetaObject::Connection m_monadoFsConnection;
 };
-}
+} // namespace KWin
 
 #endif // KWINVR_H

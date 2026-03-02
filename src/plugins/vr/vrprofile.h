@@ -13,29 +13,55 @@ namespace KWin
 {
 
 /**
- * Describes a VR headset profile loaded from /etc/vr-profiles.d/ (*.conf files).
+ * How a VR device is identified at runtime.
  *
- * Key fields:
- *  - connectorName: KWin output name, e.g. "HDMI-A-1", "DP-1"
- *  - usbId: "VID:PID" used to confirm the right device is on the connector
- *  - autoStart: true  → activate VR as soon as the output appears (Samsung)
- *               false → watch for SBS mode change to trigger VR (Xreal)
+ * Display: matched by EDID monitor name (+ optional USB VID:PID).
+ *          Activates VR when the display enters the configured SBS resolution.
+ *          If sbsWidth/sbsHeight are 0 the headset triggers VR on connect (e.g. Samsung Odyssey+).
+ *
+ * Service: matched by a D-Bus service name (e.g. WiVRn).
+ *          Activates VR when the service appears on the session bus.
+ *          Display-type profiles take priority over service-type ones.
+ */
+enum class VrDetectType {
+    Display,
+    Service,
+};
+
+/**
+ * VR headset profile loaded from /etc/vr-profiles.d/ (*.conf files).
  */
 struct VrProfile {
     QString name;
-    QString usbId;         // "VID:PID", empty = skip USB check
-    QString connectorName; // KWin output name
-    int width = 0;         // 2D/native width  (also VR activation width for autoStart)
-    int height = 0;
+    VrDetectType detectType = VrDetectType::Display;
+
+    // Display-type fields
+    QString edidName; // EDID 0xFC monitor name substring, e.g. "Air"
+    QString usbId; // optional "VID:PID" to confirm correct device on connector
+    QString connectorHint; // optional connector name for KWIN_FORCE_DESKTOP_OUTPUTS
+    int sbsWidth = 0; // output width that triggers VR (0 = auto-start on connect)
+    int sbsHeight = 0; // output height that triggers VR
+
+    // Service-type fields
+    QString detectService; // D-Bus service name, e.g. "org.meumeu.wivrn"
+
+    // VR rendering parameters (all types)
+    int width = 0; // per-eye render width
+    int height = 0; // per-eye render height
     int refresh = 60;
     float scale = 1.0f;
-    bool autoStart = false;
+    QString openxrRuntime; // "monado" or "wivrn"
 
-    bool isValid() const { return !connectorName.isEmpty() && width > 0; }
+    bool isValid() const;
 
-    // For non-autoStart profiles the SBS trigger is any mode wider than 'width'.
-    // (Xreal Air: 1920→3840 on button press)
-    bool isSbsMode(int modeWidth) const { return !autoStart && modeWidth > width; }
+    /** True if the given output resolution matches this profile's SBS trigger. */
+    bool isSbsMode(int modeWidth, int modeHeight) const;
+
+    /** True for display-type profiles that activate VR on connect (no SBS detection). */
+    bool isAutoStart() const
+    {
+        return detectType == VrDetectType::Display && sbsWidth == 0 && sbsHeight == 0;
+    }
 };
 
 class VrProfileLoader
@@ -43,6 +69,13 @@ class VrProfileLoader
 public:
     static QList<VrProfile> loadProfiles(const QString &dir = QStringLiteral("/etc/vr-profiles.d"));
     static bool isUsbDevicePresent(const QString &usbId);
+
+    /**
+     * Reads the EDID monitor name for a KWin output (e.g. "DP-1" → "Air").
+     * Scans /sys/class/drm/card*-<outputName>/edid and parses 0xFC descriptors.
+     * Returns an empty string if the EDID is unavailable or contains no monitor name.
+     */
+    static QString readEdidMonitorName(const QString &outputName);
 };
 
 } // namespace KWin

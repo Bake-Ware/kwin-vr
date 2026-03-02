@@ -42,10 +42,6 @@
       <label>Click and drag in empty space moves all windows</label>
       <default>false</default>
     </entry>
-    <entry name="immersiveMode" type="Bool">
-      <label>Immersive mode: all windows float in VR, dock pinned as HUD</label>
-      <default>false</default>
-    </entry>
     <entry name="hudDistanceFraction" type="Int">
       <label>HUD taskbar distance as percentage of workspace distance</label>
       <default>70</default>
@@ -215,7 +211,7 @@
     </entry>
     <entry name="headgazeRotationHorizontal" type="Double">
       <label>Headgaze ray horizontal rotation / yaw (degrees)</label>
-      <default>4.0</default>
+      <default>9.0</default>
     </entry>
     <entry name="headgazeRotationVertical" type="Double">
       <label>Headgaze ray vertical rotation / pitch (degrees)</label>
@@ -237,7 +233,7 @@
     </entry>
     <entry name="blockOtherPointerMotion" type="Bool">
       <label>Block pointer motion from other input sources</label>
-      <default>true</default>
+      <default>false</default>
     </entry>
     <entry name="defaultCurvature" type="Double">
       <label>Default curvature for VR windows</label>
@@ -253,9 +249,9 @@
     </entry>
     <entry name="mouseOffsetMaxDegrees" type="Double">
       <label>Maximum mouse offset from center (degrees)</label>
-      <default>20.0</default>
+      <default>90.0</default>
       <min>1.0</min>
-      <max>60.0</max>
+      <max>90.0</max>
     </entry>
     <entry name="gazeReclaimEnabled" type="Bool">
       <label>Snap cursor back when gaze moves away</label>
