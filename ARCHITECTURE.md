@@ -194,6 +194,24 @@ device. Failing to guard this causes an infinite reset loop:
 The guard: if `m_active && m_activeProfile->hidVendorId == vendorId`, skip HID init
 and log "USB reconnect during active VR session — not resetting HID mode".
 
+### DRM Uevent Gap (Polling Fallback)
+
+Some GPU drivers (notably `i915` on Intel) do **not** generate `CONNECTOR_STATUS`
+DRM uevents when a DP-Alt display switches modes via USB HID. The Xreal Air on Intel
+HD 520 is a confirmed example — pressing the SBS button sends no DRM uevent at all.
+
+Relying solely on udev DRM events for these devices means VR never activates.
+
+**Fix**: when a USB device matching a display-type profile is added, start a
+2-second interval `QTimer` that calls `scanConnectors()` repeatedly. Stop the
+timer when VR activates (connector found in SBS mode). Resume polling when VR
+deactivates so the next SBS press is caught. Stop immediately if the USB device
+is removed.
+
+This is intentionally a polling fallback, not the primary mechanism. Hardware
+that generates proper DRM uevents never needs the timer — `onDrmConnectorChanged`
+fires immediately and the timer is never started.
+
 ### Monado IPC Socket Lifecycle
 
 - Socket path: `$XDG_RUNTIME_DIR/monado_comp_ipc`
