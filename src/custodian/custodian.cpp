@@ -423,36 +423,33 @@ void Custodian::startRuntime(const CustodianProfile &profile)
         return;
     }
 
-    qCInfo(KWINVRCUSTODIAN) << "Starting runtime unit:" << unit;
+    const bool isMonado = (profile.openxrRuntime == QLatin1String("monado"));
 
-    // Start the systemd user unit (non-blocking async call)
+    // For Monado: always use RestartUnit so any running instance (which may
+    // have selected "Simulated HMD" if started without glasses) is replaced
+    // with a fresh instance that probes the currently-connected hardware.
+    // For other runtimes: StartUnit is a no-op if the service is already running.
+    qCInfo(KWINVRCUSTODIAN) << (isMonado ? "Restarting" : "Starting") << "runtime unit:" << unit;
+
     QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService,
                                                       kSystemdObject,
                                                       kSystemdManager,
-                                                      QStringLiteral("StartUnit"));
+                                                      isMonado ? QStringLiteral("RestartUnit")
+                                                               : QStringLiteral("StartUnit"));
     msg.setArguments({unit, QStringLiteral("replace")});
     QDBusConnection::sessionBus().asyncCall(msg);
 
-    if (profile.openxrRuntime == QLatin1String("monado")) {
-        // Wait for the Monado IPC socket to appear — that's when Monado is ready
+    if (isMonado) {
         const QString runtimeDir = qEnvironmentVariable(
             "XDG_RUNTIME_DIR",
             QStringLiteral("/run/user/") + QString::number(::getuid()));
         const QString socketPath = runtimeDir + QStringLiteral("/monado_comp_ipc");
 
-        // If Monado is already running and the socket is live, notify immediately
-        // rather than deleting the socket from under the active OpenXR session.
-        if (QFile::exists(socketPath)) {
-            qCInfo(KWINVRCUSTODIAN) << "Monado IPC socket already present — runtime is ready";
-            notifyPluginActivate(profile.name, m_activeOutput);
-            return;
-        }
-
-        // Remove any stale socket left by a crashed Monado so the watcher
-        // fires only when the new instance creates a fresh socket.
+        // Remove any existing socket (from a stale or just-stopped Monado instance)
+        // so the watcher fires only when the fresh instance creates its socket.
         QFile::remove(socketPath);
 
-        // Watch the runtime directory for the socket to appear
+        // Watch the runtime directory for the new socket to appear
         m_monadoSocketWatcher = new QFileSystemWatcher({runtimeDir}, this);
         connect(m_monadoSocketWatcher, &QFileSystemWatcher::directoryChanged,
                 this, &Custodian::onMonadoSocketAppeared);
