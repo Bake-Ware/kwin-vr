@@ -78,8 +78,23 @@ install_kwin_vr() {
         local kwin_rpath
         kwin_rpath=$(patchelf --print-rpath /usr/bin/kwin_wayland 2>/dev/null)
         if [ -n "$kwin_rpath" ]; then
-            # Apply the same RPATH to libkwin.so.6 and the VR plugin so all
-            # transitive dependencies are found correctly.
+            # Apply DT_RPATH (not RUNPATH) to all KWin executables and libraries.
+            # DT_RPATH propagates to transitive dependencies (unlike DT_RUNPATH which
+            # only covers direct deps). This prevents system Qt from being pulled in
+            # by system KF6 libraries compiled against a newer Qt version.
+            #
+            # kwin_wayland and kwin_wayland_wrapper: may be busy if SDDM is running,
+            # so use copy+patch+atomic-rename to avoid "Text file busy".
+            for bin in /usr/bin/kwin_wayland /usr/bin/kwin_wayland_wrapper; do
+                if [ -f "$bin" ]; then
+                    local tmp
+                    tmp=$(mktemp)
+                    cp "$bin" "$tmp"
+                    patchelf --force-rpath --set-rpath "$kwin_rpath" "$tmp" 2>/dev/null \
+                        && run_sudo mv "$tmp" "$bin" \
+                        || rm -f "$tmp"
+                fi
+            done
             # Find the versioned libkwin.so dynamically (avoids hardcoding the KDE version).
             local libkwin
             libkwin=$(find /usr/lib -maxdepth 1 -name "libkwin.so.6.*.*" ! -name "libkwin.so.6" 2>/dev/null | head -1)
@@ -89,7 +104,7 @@ install_kwin_vr() {
             run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
                 /usr/lib/plugins/kwin/plugins/vr.so 2>/dev/null || true
             run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
-                /usr/lib/kwin-vr-custodian 2>/dev/null || true
+                /usr/lib/libexec/kwin-vr-custodian 2>/dev/null || true
             # KCMs
             find /usr/lib -name "kcm_kwin*" 2>/dev/null | while read -r f; do
                 run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" "$f" 2>/dev/null || true
