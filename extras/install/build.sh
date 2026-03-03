@@ -68,5 +68,14 @@ install_kwin_vr() {
         exit 1
     fi
 
+    # Reload the user systemd daemon so it picks up kwin-vr-custodian.service
+    # (installed to /usr/lib/systemd/user/ by cmake)
+    if [ "$DRY_RUN" != "true" ]; then
+        sudo -u "$INSTALL_USER" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+            XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+            systemctl --user daemon-reload 2>/dev/null || true
+    fi
+
     log_success "KWin VR installed"
 }

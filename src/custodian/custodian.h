@@ -16,6 +16,7 @@
 #include <optional>
 
 class HidInit;
+class QTimer;
 class UdevMonitor;
 
 /**
@@ -154,6 +155,13 @@ private:
 
     // Watches for the Monado IPC socket appearing in XDG_RUNTIME_DIR
     QFileSystemWatcher *m_monadoSocketWatcher = nullptr;
+
+    // Polling fallback for hardware (e.g. Xreal Air) that doesn't generate
+    // DRM uevents on mode change. Started when a USB device matching a
+    // display-type profile is added; stopped when VR activates or USB removes.
+    QTimer *m_connectorPollTimer = nullptr;
+    void startConnectorPolling();
+    void stopConnectorPolling();
 
     std::optional<CustodianProfile> m_activeProfile;
     QString m_activeOutput;

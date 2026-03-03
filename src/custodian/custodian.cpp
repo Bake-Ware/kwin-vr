@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileSystemWatcher>
+#include <QTimer>
 
 #include <unistd.h> // getuid()
 
@@ -251,12 +252,18 @@ void Custodian::onUsbDeviceAdded(const QString &vendorId,
         if (!profile.hidPayload2D.isEmpty())
             sendHidInit(profile, false /* 2D */);
 
+        // Some hardware (e.g. Xreal Air on i915) doesn't generate DRM uevents on
+        // connect or mode change. Start polling connectors so we catch SBS activation.
+        startConnectorPolling();
+
         return;
     }
 }
 
 void Custodian::onUsbDeviceRemoved(const QString &vendorId, const QString &productId)
 {
+    stopConnectorPolling();
+
     if (!m_active || !m_activeProfile)
         return;
     if (m_activeProfile->hidVendorId == vendorId && m_activeProfile->hidProductId == productId) {
@@ -264,6 +271,28 @@ void Custodian::onUsbDeviceRemoved(const QString &vendorId, const QString &produ
                                 << m_activeProfile->name;
         // The DRM connector change will handle VR deactivation; no action needed here
     }
+}
+
+void Custodian::startConnectorPolling()
+{
+    if (m_connectorPollTimer)
+        return; // already polling
+
+    qCInfo(KWINVRCUSTODIAN) << "Starting connector poll (2s) — DRM uevents not available for this hardware";
+    m_connectorPollTimer = new QTimer(this);
+    m_connectorPollTimer->setInterval(2000);
+    connect(m_connectorPollTimer, &QTimer::timeout, this, &Custodian::scanConnectors);
+    m_connectorPollTimer->start();
+}
+
+void Custodian::stopConnectorPolling()
+{
+    if (!m_connectorPollTimer)
+        return;
+    qCInfo(KWINVRCUSTODIAN) << "Stopping connector poll";
+    m_connectorPollTimer->stop();
+    m_connectorPollTimer->deleteLater();
+    m_connectorPollTimer = nullptr;
 }
 
 // ─── D-Bus service event handlers ─────────────────────────────────────────────
@@ -328,6 +357,8 @@ void Custodian::activateProfile(const CustodianProfile &profile, const QString &
         return;
     }
 
+    stopConnectorPolling(); // no longer needed once VR is active
+
     m_activeProfile = profile;
     m_activeOutput = outputName;
     m_active = true;
@@ -368,6 +399,10 @@ void Custodian::deactivateActive(const QString &reason)
     m_active = false;
     m_activeProfile = std::nullopt;
     m_activeOutput.clear();
+
+    // Resume polling so we detect the next SBS button press
+    if (!profile.hidVendorId.isEmpty())
+        startConnectorPolling();
 
     // Clean up any pending Monado socket watcher
     if (m_monadoSocketWatcher) {

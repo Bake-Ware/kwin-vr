@@ -30,19 +30,22 @@ configure_system() {
     fi
     log_success "monado.service enabled (started on-demand by kwin-vr plugin)"
 
-    # Enable xreal-mode-watch if an Xreal Air profile is installed
-    if [ -f /etc/vr-profiles.d/xreal-air-gen1.conf ]; then
-        log_info "Enabling xreal-mode-watch.service (user)..."
-        if [ "$DRY_RUN" = "true" ]; then
-            echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user enable xreal-mode-watch.service"
-        else
-            sudo -u "$INSTALL_USER" \
-                DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
-                XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
-                systemctl --user enable xreal-mode-watch.service 2>/dev/null || true
-        fi
-        log_success "xreal-mode-watch.service enabled (auto-starts at login, retries USB detection)"
+    # Enable the custodian — it replaces all per-device shell scripts (xreal-mode-watch etc.)
+    log_info "Enabling kwin-vr-custodian.service (user)..."
+    if [ "$DRY_RUN" = "true" ]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${RESET} sudo -u $INSTALL_USER systemctl --user enable kwin-vr-custodian.service"
+    else
+        sudo -u "$INSTALL_USER" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+            XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+            systemctl --user enable kwin-vr-custodian.service 2>/dev/null || true
+        # Disable the old per-device watcher if previously enabled
+        sudo -u "$INSTALL_USER" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$INSTALL_UID/bus" \
+            XDG_RUNTIME_DIR="/run/user/$INSTALL_UID" \
+            systemctl --user disable xreal-mode-watch.service 2>/dev/null || true
     fi
+    log_success "kwin-vr-custodian.service enabled (watches all hardware events, routes to profiles)"
 
     # ── GPU-specific configuration ───────────────────────────────────────
     case "$GPU_VENDOR" in
