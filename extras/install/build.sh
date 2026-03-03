@@ -80,8 +80,12 @@ install_kwin_vr() {
         if [ -n "$kwin_rpath" ]; then
             # Apply the same RPATH to libkwin.so.6 and the VR plugin so all
             # transitive dependencies are found correctly.
-            run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
-                /usr/lib/libkwin.so.6.5.5 2>/dev/null || true
+            # Find the versioned libkwin.so dynamically (avoids hardcoding the KDE version).
+            local libkwin
+            libkwin=$(find /usr/lib -maxdepth 1 -name "libkwin.so.6.*.*" ! -name "libkwin.so.6" 2>/dev/null | head -1)
+            if [ -n "$libkwin" ]; then
+                run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" "$libkwin" 2>/dev/null || true
+            fi
             run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
                 /usr/lib/plugins/kwin/plugins/vr.so 2>/dev/null || true
             run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
