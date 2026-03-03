@@ -155,11 +155,6 @@ void KwinVr::setVrActive(bool active)
 
         m_engine = new QQmlApplicationEngine(this);
         connect(m_engine, &QObject::destroyed, this, [this] {
-            // Re-enable physical outputs that were disabled for VR mode.
-            // Must run first — the virtual output is already gone at this point,
-            // and restoreOutputs() re-enables the outputs we disabled in activateOutput().
-            KwinVrHelpers::restoreOutputs();
-
             workspace()->setVrMode(false);
             KwinVrHelpers::setDmabufFormatFilterForQt(false);
             const auto windows = workspace()->windows();

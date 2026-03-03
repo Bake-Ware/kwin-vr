@@ -54,11 +54,6 @@
 #include <xdgshellwindow.h>
 
 using namespace KWin;
-
-// Tracks physical output names that activateOutput() disabled for VR mode.
-// Used by restoreOutputs() to re-enable only the outputs we disabled.
-static QStringList s_disabledOutputsForVr;
-
 KwinVrHelpers::KwinVrHelpers(QObject *parent)
     : QObject(parent)
 {
@@ -130,26 +125,6 @@ void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale, int virtualLog
         qWarning() << "VR: moving headset output" << bo->name() << "to x=" << headsetX;
     }
 
-    // Disable physical desktop outputs (all non-headset, non-virtual displays).
-    // Virtual-T takes over as the sole desktop output.
-    // This prevents GPU memory bandwidth exhaustion on integrated GPUs
-    // (e.g. Intel HD 520 cannot sustain SBS@3840x1080 alongside a 1080p laptop panel).
-    s_disabledOutputsForVr.clear();
-    for (auto *output : outputs) {
-        auto *bo = kwinGetBackendOutput(output);
-        if (bo == o)
-            continue; // skip the virtual output being activated
-        if (bo->name().startsWith(QLatin1String("Virtual")))
-            continue; // skip other virtual outputs
-        if (headsetOutputNames.contains(bo->name()))
-            continue; // skip the headset output
-        if (!output->isEnabled())
-            continue; // already disabled — don't track it
-        config.changeSet(bo)->enabled = false;
-        s_disabledOutputsForVr.append(bo->name());
-        qWarning() << "VR: disabling physical output" << bo->name() << "for VR mode";
-    }
-
     // Build output order: Virtual-T first (primary), then physical, then headset
     QList<Output *> newOrder;
     Output *virtualOutput = nullptr;
@@ -170,30 +145,6 @@ void KwinVrHelpers::activateOutput(BackendOutput *o, qreal scale, int virtualLog
 
     if (!newOrder.isEmpty())
         Workspace::self()->setActiveOutput(newOrder.first());
-}
-
-void KwinVrHelpers::restoreOutputs()
-{
-    if (s_disabledOutputsForVr.isEmpty())
-        return;
-
-    const auto outputs = Workspace::self()->outputs();
-    OutputConfiguration config;
-    bool changed = false;
-
-    for (auto *output : outputs) {
-        auto *bo = kwinGetBackendOutput(output);
-        if (!s_disabledOutputsForVr.contains(bo->name()))
-            continue;
-        config.changeSet(bo)->enabled = true;
-        changed = true;
-        qWarning() << "VR: re-enabling physical output" << bo->name();
-    }
-
-    if (changed)
-        Workspace::self()->applyOutputConfiguration(config);
-
-    s_disabledOutputsForVr.clear();
 }
 
 SurfaceInterface *KwinVrHelpers::winGetSurf(Window *window)

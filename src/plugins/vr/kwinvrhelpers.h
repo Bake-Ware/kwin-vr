@@ -109,13 +109,6 @@ public:
 
     Q_INVOKABLE void activateOutput(KWin::BackendOutput *o, qreal scale, int virtualLogicalWidth);
 
-    /**
-     * Re-enables physical outputs that were disabled by activateOutput() for VR mode.
-     * Call this after the VR QML engine is destroyed so the desktop can use its
-     * physical displays again.
-     */
-    static void restoreOutputs();
-
     bool isScreenLocked() const;
 
     /* Surface related stuff */
