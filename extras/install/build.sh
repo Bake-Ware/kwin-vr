@@ -68,6 +68,32 @@ install_kwin_vr() {
         exit 1
     fi
 
+    # ── Fix RPATH on all installed KWin binaries/libraries ───────────────
+    # CMake sets RUNPATH (not RPATH) which only covers direct dependencies.
+    # KWin's transitive deps (e.g. libQt6WaylandClient loaded by libkwin.so.6)
+    # must also find our custom Qt, so we force RPATH on everything.
+    # This is a no-op on systems where kwin was built against system Qt.
+    log_info "Fixing RPATH on KWin binaries..."
+    if [ "$DRY_RUN" != "true" ] && command -v patchelf &>/dev/null; then
+        local kwin_rpath
+        kwin_rpath=$(patchelf --print-rpath /usr/bin/kwin_wayland 2>/dev/null)
+        if [ -n "$kwin_rpath" ]; then
+            # Apply the same RPATH to libkwin.so.6 and the VR plugin so all
+            # transitive dependencies are found correctly.
+            run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
+                /usr/lib/libkwin.so.6.5.5 2>/dev/null || true
+            run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
+                /usr/lib/plugins/kwin/plugins/vr.so 2>/dev/null || true
+            run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" \
+                /usr/lib/kwin-vr-custodian 2>/dev/null || true
+            # KCMs
+            find /usr/lib -name "kcm_kwin*" 2>/dev/null | while read -r f; do
+                run_sudo patchelf --force-rpath --set-rpath "$kwin_rpath" "$f" 2>/dev/null || true
+            done
+            log_success "RPATH fixed"
+        fi
+    fi
+
     # Reload the user systemd daemon so it picks up kwin-vr-custodian.service
     # (installed to /usr/lib/systemd/user/ by cmake)
     if [ "$DRY_RUN" != "true" ]; then
