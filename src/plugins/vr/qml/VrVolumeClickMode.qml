@@ -30,7 +30,7 @@ Item {
     }
 
     function handleKey(event, pressed) {
-        if (!KWinVRConfig.volumeClickEnabled) return false
+        // Always allow combo detection to work regardless of current mode
         if (event.isAutoRepeat) return false
 
         let key = event.key
@@ -38,13 +38,24 @@ Item {
 
         if (pressed) {
             if (pendingKey !== -1 && pendingKey !== key) {
-                // Second key of combo — toggle mode
+                // Second key of combo — toggle clickModeActive, but only enable it if volumeClickEnabled is true
                 comboTimer.stop()
-                clickModeActive = !clickModeActive
-                if (!clickModeActive) releaseAll()
-                console.log(Logger.kwinvr, "Volume click mode:", clickModeActive ? "click" : "volume")
+
+                if (clickModeActive) {
+                    // Turning OFF click mode -> always allowed
+                    clickModeActive = false
+                    releaseAll()
+                } else {
+                    // Turning ON click mode -> only if volumeClickEnabled
+                    if (KWinVRConfig.volumeClickEnabled) {
+                        clickModeActive = true
+                    } else {
+                        console.log(Logger.kwinvr, "Volume click mode disabled in settings")
+                    }
+                }
+
                 pendingKey = -1
-                return true
+                return true // Consume both events of the combo
             }
 
             if (pendingKey === -1) {
@@ -52,15 +63,16 @@ Item {
                 pendingKey = key
                 comboTimer.restart()
 
-                if (clickModeActive) {
-                    return true // consume, will handle on timer or combo
+                // Only use click mode if BOTH clickModeActive AND volumeClickEnabled are true
+                if (clickModeActive && KWinVRConfig.volumeClickEnabled) {
+                    return true // consume, will toggle on timer expiry or same-key-press
                 } else {
                     return false // let volume through immediately
                 }
             }
 
-            // Same key pressed again while waiting — in click mode this is toggle
-            if (clickModeActive) {
+            // Same key pressed again while waiting — toggle in click mode if enabled
+            if (clickModeActive && KWinVRConfig.volumeClickEnabled) {
                 comboTimer.stop()
                 toggleClick(key)
                 pendingKey = -1
@@ -69,8 +81,8 @@ Item {
             return false
         }
 
-        // Release events
-        if (clickModeActive) return true
+        // Release events — only consume in click mode when enabled
+        if (clickModeActive && KWinVRConfig.volumeClickEnabled) return true
         return false
     }
 

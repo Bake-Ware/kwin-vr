@@ -31,6 +31,11 @@ Item {
         kwinInput: kwinInput
     }
 
+    VrVolumeClickMode {
+        id: volumeClickMode
+        kwinInput: kwinInput
+    }
+
     HeadScrollBindings {
         id: headScrollBindings
     }
@@ -40,7 +45,13 @@ Item {
         id: mouseArea
         focus: true
         Keys.onPressed: (event) => {
-                            // Handle mouse-button bindings first so the synthetic click
+                            // Handle volume key click toggle first
+                            if (volumeClickMode.handleKey(event, true)) {
+                                event.accepted = true
+                                return
+                            }
+
+                            // Handle mouse-button bindings so the synthetic click
                             // reaches the radial menu before we close it.
                             if (mouseBindings.handleKey(event, true)) {
                                 event.accepted = true
@@ -93,6 +104,12 @@ Item {
                             }
                         }
         Keys.onReleased: (event) => {
+                             // Handle volume key release events
+                             if (volumeClickMode.handleKey(event, false)) {
+                                 event.accepted = true
+                                 return
+                             }
+
                              if (mouseBindings.handleKey(event, false)) {
                                  event.accepted = true
                                  return

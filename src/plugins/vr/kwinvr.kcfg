@@ -273,6 +273,25 @@
       <min>0.02</min>
       <max>0.5</max>
     </entry>
+    <!-- Volume key click toggle for Xreal Air glasses -->
+    <entry name="volumeClickEnabled" type="Bool">
+      <label>Enable volume key click mode (toggle with vol+ + vol- combo)</label>
+      <default>true</default>
+    </entry>
+    <entry name="volumeClickComboTimeout" type="Int">
+      <label>Timeout for volume key combo to toggle click mode (ms)</label>
+      <default>500</default>
+      <min>200</min>
+      <max>2000</max>
+    </entry>
+    <entry name="volUpClickButton" type="String">
+      <label>Mouse button triggered by Volume Up in click mode (left/right/middle)</label>
+      <default>left</default>
+    </entry>
+    <entry name="volDownClickButton" type="String">
+      <label>Mouse button triggered by Volume Down in click mode (left/right/middle)</label>
+      <default>right</default>
+    </entry>
   </group>
 
   <group name="InputMapping">
