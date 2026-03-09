@@ -145,8 +145,9 @@ install_system_files() {
 
     # ── Custodian binary ──────────────────────────────────────────────────────
     local custodian_src
-    custodian_src=$(find "$KWIN_INSTALL" -name "kwin-vr-custodian" -type f | head -1)
-    [ -n "$custodian_src" ] || die "kwin-vr-custodian binary not found in $KWIN_INSTALL"
+    # Check kwin-install first, fall back to build dir (cmake puts it in build/bin/)
+    custodian_src=$(find "$KWIN_INSTALL" "$REPO_DIR/build" -name "kwin-vr-custodian" -type f 2>/dev/null | head -1)
+    [ -n "$custodian_src" ] || die "kwin-vr-custodian binary not found in $KWIN_INSTALL or $REPO_DIR/build"
 
     sudo install -Dm755 "$custodian_src" /usr/lib/kwin-vr-custodian
     log "Installed: /usr/lib/kwin-vr-custodian"
@@ -355,13 +356,14 @@ install_monado() {
 
     local comp_settings="$monado_src/src/xrt/compositor/main/comp_settings.c"
 
-    # Apply patch (idempotent — skip if already applied)
-    if grep -q "preferred\.width /= 2" "$comp_settings" 2>/dev/null; then
+    # Apply patch (idempotent — check for the replacement comment as sentinel)
+    # The patch replaces /2 divisors in force_wayland block with an Xreal Air comment.
+    if grep -q "Xreal Air SBS" "$comp_settings" 2>/dev/null; then
+        log "Monado patch already applied, skipping"
+    else
         log "Applying Monado window-size patch..."
         cd "$monado_src"
         git apply "$patch" 2>/dev/null || patch -p1 < "$patch"
-    else
-        log "Monado patch already applied, skipping"
     fi
 
     # Build
