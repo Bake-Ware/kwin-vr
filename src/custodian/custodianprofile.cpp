@@ -113,13 +113,14 @@ QList<CustodianProfile> CustodianProfileLoader::loadProfiles(const QString &dire
             if (key == QLatin1String("VR_NAME")) {
                 p.name = value;
             } else if (key == QLatin1String("VR_DETECT_TYPE")) {
-                if (value.compare(QLatin1String("service"), Qt::CaseInsensitive) == 0)
+                const auto v = value.toLower();
+                if (v == QLatin1String("service") || v == QLatin1String("remote"))
                     p.trigger = ProfileTrigger::Service;
-                else if (value.compare(QLatin1String("manual"), Qt::CaseInsensitive) == 0)
+                else if (v == QLatin1String("manual"))
                     p.trigger = ProfileTrigger::Manual;
-                else if (value.compare(QLatin1String("always"), Qt::CaseInsensitive) == 0)
+                else if (v == QLatin1String("always") || v == QLatin1String("fallback"))
                     p.trigger = ProfileTrigger::Always;
-                else
+                else // "display", "local", "edid", or anything else
                     p.trigger = ProfileTrigger::Edid;
             } else if (key == QLatin1String("VR_EDID_NAME")) {
                 p.edidName = value;
@@ -170,6 +171,11 @@ QList<CustodianProfile> CustodianProfileLoader::loadProfiles(const QString &dire
                 p.virtualHeight = value.toInt();
             } else if (key == QLatin1String("VR_DP_FORCE_RETRAIN")) {
                 p.dpForceRetrain = (value == QLatin1String("true") || value == QLatin1String("1"));
+            } else if (key == QLatin1String("VR_AUTOSTART")) {
+                p.autoStart = (value == QLatin1String("true") || value == QLatin1String("1"));
+            } else if (key == QLatin1String("VR_MONADO_ENV")) {
+                // Accumulate — multiple VR_MONADO_ENV lines are allowed
+                p.monadoEnvVars.append(value);
             }
         }
 

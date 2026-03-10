@@ -9,14 +9,19 @@
 #include <QByteArray>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 /**
  * How a custodian profile is triggered.
  *
  * Edid:    The connector EDID matches vendor/name, and the display enters the SBS mode.
+ *          Config alias: VR_DETECT_TYPE=display, VR_DETECT_TYPE=local
  * Service: A named D-Bus service appears on the session bus (e.g. WiVRn).
+ *          Config alias: VR_DETECT_TYPE=service, VR_DETECT_TYPE=remote
  * Manual:  The user initiates VR from the settings UI — no automatic trigger.
- * Always:  Active whenever the custodian is running (flat_monitor fallback).
+ *          Config alias: VR_DETECT_TYPE=manual
+ * Always:  Fallback — always available. Not auto-started unless VR_AUTOSTART=true.
+ *          Config alias: VR_DETECT_TYPE=always, VR_DETECT_TYPE=fallback
  */
 enum class ProfileTrigger {
     Edid,
@@ -75,6 +80,14 @@ struct CustodianProfile
     int virtualHeight = 0;
 
     bool dpForceRetrain = false;
+
+    // Whether to auto-activate VR mode when this profile matches.
+    // Default true for local/remote, false for fallback.
+    bool autoStart = true;
+
+    // Extra environment variables to pass to Monado for this profile.
+    // Parsed from VR_MONADO_ENV, format: "KEY=VALUE" (one pair per field).
+    QStringList monadoEnvVars;
 
     bool isValid() const;
 

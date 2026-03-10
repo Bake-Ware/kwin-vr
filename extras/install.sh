@@ -26,7 +26,6 @@ set -euo pipefail
 ###############################################################################
 
 BUILD_DIR="${1:-$HOME/kwin-vr-build}"
-QT_INSTALL="$BUILD_DIR/qt-install"
 KDE_INSTALL="$BUILD_DIR/kde-install"
 KWIN_INSTALL="$BUILD_DIR/kwin-install"
 XWAYLAND_INSTALL="$BUILD_DIR/xwayland-install"
@@ -36,7 +35,8 @@ EXTRAS_DIR="$REPO_DIR/extras"
 
 # Canonical RPATH for all VR binaries and libraries.
 # Must be RPATH (not RUNPATH) so transitive deps resolve correctly.
-VR_RPATH="$KWIN_INSTALL/usr/lib:$QT_INSTALL/lib:$KDE_INSTALL/lib"
+# Built against system Qt — no custom Qt paths needed.
+VR_RPATH="$KWIN_INSTALL/usr/lib:$KDE_INSTALL/lib"
 
 ###############################################################################
 # Helpers
@@ -52,6 +52,25 @@ die()     { err "$*"; exit 1; }
 need_cmd() { command -v "$1" &>/dev/null || die "Required command not found: $1"; }
 need_dir() { [ -d "$1" ] || die "Required directory not found: $1 — run rebuild-kwin-vr.sh first"; }
 
+# ── Manifest tracking ────────────────────────────────────────────────────────
+# Every installed artifact is recorded so uninstall.sh can cleanly reverse it.
+# Format: TYPE:PATH (one per line)
+#   file:/usr/lib/foo           — sudo rm
+#   dir:/etc/vr-profiles.d      — sudo rmdir (if empty)
+#   symlink:/path/link          — rm
+#   script:/path/script.sh      — rm
+#   systemd-system:/usr/lib/systemd/user/foo.service  — sudo rm + daemon-reload
+#   systemd-user:~/.config/systemd/user/foo.service   — rm + daemon-reload
+#   systemd-enable:foo.service  — systemctl --user disable
+#   systemd-mask:foo.service    — systemctl --user unmask / --global unmask
+#   kwinrc:Plugins/vrEnabled    — kwriteconfig6 --delete
+#   config:~/.config/kwinvr     — rm (only if we created it)
+#   udev:/usr/lib/udev/rules.d/foo.rules — sudo rm + udevadm reload
+MANIFEST="$BUILD_DIR/.install-manifest"
+
+manifest_reset() { : > "$MANIFEST"; }
+manifest_add()   { echo "$1:$2" >> "$MANIFEST"; }
+
 ###############################################################################
 # Step 0: Preflight checks
 ###############################################################################
@@ -64,7 +83,6 @@ preflight() {
     need_cmd systemctl
     need_cmd paru
 
-    need_dir "$QT_INSTALL"
     need_dir "$KWIN_INSTALL"
     need_dir "$KDE_INSTALL"
     need_dir "$REPO_DIR"
@@ -134,6 +152,7 @@ setup_symlink() {
         rm -f "$link"
     fi
     ln -s "$target" "$link"
+    manifest_add symlink "$link"
     log "Symlink: $link → $target"
 }
 
@@ -150,6 +169,7 @@ install_system_files() {
     [ -n "$custodian_src" ] || die "kwin-vr-custodian binary not found in $KWIN_INSTALL or $REPO_DIR/build"
 
     sudo install -Dm755 "$custodian_src" /usr/lib/kwin-vr-custodian
+    manifest_add file /usr/lib/kwin-vr-custodian
     log "Installed: /usr/lib/kwin-vr-custodian"
 
     # ── System-level systemd user service files ───────────────────────────────
@@ -169,6 +189,7 @@ Comment=Plasma desktop with VR-enabled KWin (OpenXR)
 X-KDE-PluginInfo-Version=6.5.5
 Type=Application
 EOF
+    manifest_add file /usr/share/wayland-sessions/plasma-vr.desktop
     log "Installed: /usr/share/wayland-sessions/plasma-vr.desktop"
 
     # ── VR hardware profiles ──────────────────────────────────────────────────
@@ -176,6 +197,8 @@ EOF
     _write_profile_xreal_air
     _write_profile_quest3_wivrn
     _write_profile_samsung_odyssey
+    _write_profile_qwerty_test
+    manifest_add dir /etc/vr-profiles.d
     log "Installed: /etc/vr-profiles.d/*"
 
     # ── Udev rules ────────────────────────────────────────────────────────────
@@ -189,6 +212,7 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", TAG+="ua
 SUBSYSTEM=="usb",    ATTRS{idVendor}=="3318", ATTRS{idProduct}=="0424", TAG+="uaccess"
 EOF
     sudo udevadm control --reload-rules
+    manifest_add udev /usr/lib/udev/rules.d/70-kwin-vr.rules
     log "Installed: /usr/lib/udev/rules.d/70-kwin-vr.rules"
 
     # ── Mask xr-driver at system level ───────────────────────────────────────
@@ -196,6 +220,7 @@ EOF
     # can create hidraw nodes. Monado needs those nodes.
     # We re-bind via startplasma-vr.sh at session start.
     sudo systemctl --global mask xr-driver.service 2>/dev/null || true
+    manifest_add systemd-mask-global xr-driver.service
     log "Masked xr-driver.service globally"
 }
 
@@ -215,6 +240,7 @@ RestartSec=2
 [Install]
 WantedBy=graphical-session.target
 EOF
+    manifest_add systemd-system /usr/lib/systemd/user/kwin-vr-custodian.service
 }
 
 _write_system_service_monado() {
@@ -237,6 +263,7 @@ Environment=XRT_COMPOSITOR_XCB_FULLSCREEN=1
 Environment=XRT_NO_STDIN=1
 Environment=WMR_SLAM=false
 EOF
+    manifest_add systemd-system /usr/lib/systemd/user/monado.service
 }
 
 _write_system_socket_monado() {
@@ -254,13 +281,15 @@ FlushPending=true
 [Install]
 WantedBy=sockets.target
 EOF
+    manifest_add systemd-system /usr/lib/systemd/user/monado.socket
 }
 
 _write_profile_xreal_air() {
     sudo install -Dm644 /dev/stdin /etc/vr-profiles.d/xreal-air-gen1.conf << 'EOF'
 # Xreal Air Gen 1 — SBS glasses via DP-Alt over USB-C
 VR_NAME="Xreal Air Gen 1"
-VR_DETECT_TYPE="display"
+VR_DETECT_TYPE="local"
+VR_AUTOSTART=true
 
 # EDID matching
 VR_EDID_NAME="Air"
@@ -289,12 +318,14 @@ VR_VIRTUAL_WIDTH=1920
 VR_VIRTUAL_HEIGHT=1080
 VR_DP_FORCE_RETRAIN=true
 EOF
+    manifest_add file /etc/vr-profiles.d/xreal-air-gen1.conf
 }
 
 _write_profile_quest3_wivrn() {
     sudo install -Dm644 /dev/stdin /etc/vr-profiles.d/quest3-wivrn.conf << 'EOF'
 VR_NAME="Meta Quest 3 (WiVRn)"
-VR_DETECT_TYPE="service"
+VR_DETECT_TYPE="remote"
+VR_AUTOSTART=true
 VR_DETECT_SERVICE="org.meumeu.wivrn"
 VR_WIDTH=2064
 VR_HEIGHT=2208
@@ -302,12 +333,14 @@ VR_REFRESH=72
 VR_SCALE=1
 VR_OPENXR_RUNTIME="wivrn"
 EOF
+    manifest_add file /etc/vr-profiles.d/quest3-wivrn.conf
 }
 
 _write_profile_samsung_odyssey() {
     sudo install -Dm644 /dev/stdin /etc/vr-profiles.d/samsung-odyssey-plus.conf << 'EOF'
 VR_NAME="Samsung Odyssey+"
-VR_DETECT_TYPE="display"
+VR_DETECT_TYPE="local"
+VR_AUTOSTART=true
 VR_EDID_NAME="ODYSSEY"
 VR_DETECT_USB="045e:0659"
 VR_CONNECTOR_HINT="HDMI-A-1"
@@ -317,6 +350,29 @@ VR_REFRESH=90
 VR_SCALE=1
 VR_OPENXR_RUNTIME="monado"
 EOF
+    manifest_add file /etc/vr-profiles.d/samsung-odyssey-plus.conf
+}
+
+_write_profile_qwerty_test() {
+    sudo install -Dm644 /dev/stdin /etc/vr-profiles.d/zzz-qwerty-test.conf << 'EOF'
+# Fallback test profile — Monado qwerty driver (simulated HMD)
+# Always available, never auto-starts VR mode.
+# Priority: physical hardware > remote hardware > this fallback
+# The "zzz-" prefix ensures this sorts last in profile enumeration.
+VR_NAME="Test Display (Qwerty)"
+VR_DETECT_TYPE="fallback"
+VR_AUTOSTART=false
+VR_WIDTH=1280
+VR_HEIGHT=720
+VR_REFRESH=60
+VR_SCALE=1
+VR_OPENXR_RUNTIME="monado"
+
+# Monado qwerty driver — keyboard/mouse controlled virtual HMD
+# Right-click+drag = head tracking, WASD = move, arrows = rotate
+VR_MONADO_ENV="QWERTY_ENABLE=true"
+EOF
+    manifest_add file /etc/vr-profiles.d/zzz-qwerty-test.conf
 }
 
 ###############################################################################
@@ -398,6 +454,11 @@ write_scripts() {
         "$BUILD_DIR/kwinvr-settings.sh" \
         "$BUILD_DIR/kwin-vr-watcher.sh"
 
+    manifest_add script "$BUILD_DIR/kwin-vr-service-wrapper.sh"
+    manifest_add script "$BUILD_DIR/startplasma-vr.sh"
+    manifest_add script "$BUILD_DIR/kwinvr-settings.sh"
+    manifest_add script "$BUILD_DIR/kwin-vr-watcher.sh"
+
     log "Wrapper scripts written to $BUILD_DIR"
 }
 
@@ -406,22 +467,18 @@ _write_service_wrapper() {
 #!/bin/bash
 # kwin-vr-service-wrapper.sh — KWin environment wrapper
 # Launched by plasma-kwin_wayland.service via systemd override.
-# Sets paths so KWin loads the VR-patched Qt and vr.so plugin.
-# Only this process and its children get the custom environment.
+# Sets paths so KWin loads the VR-built kwin_wayland and vr.so plugin.
+# Built against system Qt — only KWin-specific paths are overridden.
 
 # Custom kwin_wayland first on PATH (symlink → VR build)
 export PATH="$BUILD_DIR:$XWAYLAND_INSTALL/bin:\$PATH"
 
 # Plugin and QML paths — VR build first, then system fallback
-export QT_PLUGIN_PATH="$KWIN_INSTALL/usr/lib/plugins:$QT_INSTALL/plugins:/usr/lib/qt6/plugins\${QT_PLUGIN_PATH:+:\$QT_PLUGIN_PATH}"
-export QML2_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:$QT_INSTALL/qml:/usr/lib/qt6/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
-export QML_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:$QT_INSTALL/qml:/usr/lib/qt6/qml\${QML_IMPORT_PATH:+:\$QML_IMPORT_PATH}"
+export QT_PLUGIN_PATH="$KWIN_INSTALL/usr/lib/plugins:/usr/lib/qt6/plugins\${QT_PLUGIN_PATH:+:\$QT_PLUGIN_PATH}"
+export QML2_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:/usr/lib/qt6/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
+export QML_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:/usr/lib/qt6/qml\${QML_IMPORT_PATH:+:\$QML_IMPORT_PATH}"
 
 export XR_RUNTIME_JSON=/etc/xdg/openxr/1/active_runtime.json
-
-# Qt 6.10.x crashes in QKdeTheme with NULL pointer in QStyleHintsPrivate.
-# Safe for KWin — it manages theming via KDE config directly.
-export QT_QPA_PLATFORMTHEME=generic
 
 # Prevent KWin from picking up stale WAYLAND_DISPLAY/DISPLAY from previous XWayland
 unset WAYLAND_DISPLAY DISPLAY
@@ -515,15 +572,13 @@ EOF
 _write_kwinvr_settings() {
     cat > "$BUILD_DIR/kwinvr-settings.sh" << EOF
 #!/bin/bash
-# kwinvr-settings.sh — Launch VR KCM with correct Qt environment
-# The KCM links against our Qt 6.10.x which can't load inside system
-# systemsettings6 (different Qt minor version, private API mismatch).
+# kwinvr-settings.sh — Launch VR KCM standalone
+# Built against system Qt, so it loads natively in systemsettings6.
+# This wrapper is just a convenience shortcut.
 
-export PATH="$QT_INSTALL/bin:\$PATH"
-export LD_LIBRARY_PATH="$KWIN_INSTALL/usr/lib:$QT_INSTALL/lib:$KDE_INSTALL/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-export QT_PLUGIN_PATH="$KWIN_INSTALL/usr/lib/plugins:$QT_INSTALL/plugins\${QT_PLUGIN_PATH:+:\$QT_PLUGIN_PATH}"
-export QML2_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:$QT_INSTALL/qml:/usr/lib/qt6/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
-export QML_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:$QT_INSTALL/qml:/usr/lib/qt6/qml\${QML_IMPORT_PATH:+:\$QML_IMPORT_PATH}"
+export QT_PLUGIN_PATH="$KWIN_INSTALL/usr/lib/plugins:/usr/lib/qt6/plugins\${QT_PLUGIN_PATH:+:\$QT_PLUGIN_PATH}"
+export QML2_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:/usr/lib/qt6/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
+export QML_IMPORT_PATH="$KWIN_INSTALL/usr/lib/qml:/usr/lib/qt6/qml\${QML_IMPORT_PATH:+:\$QML_IMPORT_PATH}"
 
 exec kcmshell6 kwinvr_kcm "\$@"
 EOF
@@ -575,6 +630,7 @@ setup_user_services() {
     # ── custodian service (user-level enable) ─────────────────────────────────
     # Unit file lives in /usr/lib/systemd/user/ (installed in step 3)
     systemctl --user enable kwin-vr-custodian.service 2>/dev/null || true
+    manifest_add systemd-enable kwin-vr-custodian.service
 
     # ── watcher service ───────────────────────────────────────────────────────
     cat > "$user_systemd/kwin-vr-watcher.service" << EOF
@@ -587,7 +643,7 @@ Type=simple
 ExecStart=$BUILD_DIR/kwin-vr-watcher.sh
 Restart=on-failure
 RestartSec=5
-Environment=PATH=$QT_INSTALL/bin:/usr/bin:/bin
+Environment=PATH=/usr/bin:/bin
 StandardOutput=journal
 StandardError=journal
 
@@ -595,6 +651,8 @@ StandardError=journal
 WantedBy=default.target
 EOF
     systemctl --user enable kwin-vr-watcher.service 2>/dev/null || true
+    manifest_add systemd-user "$user_systemd/kwin-vr-watcher.service"
+    manifest_add systemd-enable kwin-vr-watcher.service
 
     # ── monado service override ───────────────────────────────────────────────
     # Tune Monado for this hardware. Overrides the system-level monado.service.
@@ -611,11 +669,16 @@ Environment="XRT_COMPOSITOR_SCALE_PERCENTAGE=100"
 Restart=no
 EOF
 
+    manifest_add systemd-user "$user_systemd/monado.service.d/override.conf"
+
     # ── monado socket (enabled but not started — socket-activates on demand) ──
     systemctl --user enable monado.socket 2>/dev/null || true
+    manifest_add systemd-enable monado.socket
 
     # ── mask xr-driver for this user ─────────────────────────────────────────
     ln -sf /dev/null "$user_systemd/xr-driver.service" 2>/dev/null || true
+    manifest_add systemd-mask xr-driver.service
+    manifest_add systemd-user "$user_systemd/xr-driver.service"
 
     systemctl --user daemon-reload
     log "User services configured"
@@ -644,6 +707,7 @@ scale=1
 vignetteEnabled=false
 width=1920
 EOF
+        manifest_add config "$cfg"
         log "Created $cfg with defaults"
     else
         # Ensure autoStart=false — must be false or VR tries to start at login
@@ -673,7 +737,7 @@ verify() {
     _check "kwin_wayland binary"       "[ -f '$KWIN_INSTALL/usr/bin/kwin_wayland' ]"
     _check "kwin_wayland symlink"      "[ -L '$BUILD_DIR/kwin_wayland' ]"
     _check "vr.so plugin"              "find '$KWIN_INSTALL' -name vr.so | grep -q ."
-    _check "Qt Quick3D XR library"     "[ -f '$QT_INSTALL/lib/libQt6Quick3DXr.so' ]"
+    _check "Qt Quick3D XR (system)"    "[ -f /usr/lib/libQt6Quick3DXr.so ]"
     _check "kwin-vr-custodian binary"  "[ -x /usr/lib/kwin-vr-custodian ]"
     _check "custodian service file"    "[ -f /usr/lib/systemd/user/kwin-vr-custodian.service ]"
     _check "monado.socket unit"        "[ -f /usr/lib/systemd/user/monado.socket ]"
@@ -715,6 +779,7 @@ main() {
     log "BUILD_DIR: $BUILD_DIR"
     log "USER:      $USER"
 
+    manifest_reset
     preflight
     fix_rpath
     setup_symlink

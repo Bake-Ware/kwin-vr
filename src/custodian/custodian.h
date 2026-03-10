@@ -119,6 +119,10 @@ private:
     // HID init
     void sendHidInit(const CustodianProfile &profile, bool sbsMode);
 
+    // Monado per-profile environment override
+    void applyMonadoEnvOverride(const CustodianProfile &profile);
+    void clearMonadoEnvOverride();
+
     // Notify the kwin-vr plugin (async D-Bus call — does not block)
     void notifyPluginActivate(const QString &profileName, const QString &outputName);
     void notifyPluginDeactivate(const QString &profileName);

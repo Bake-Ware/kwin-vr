@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileSystemWatcher>
+#include <QTextStream>
 #include <QTimer>
 
 #include <unistd.h> // getuid()
@@ -174,6 +175,11 @@ void Custodian::scanConnectors()
             continue;
 
         if (profile->isSbsMode(w, h)) {
+            if (!profile->autoStart) {
+                qCInfo(KWINVRCUSTODIAN) << "Startup: found" << profile->name
+                                        << "in SBS mode but autoStart=false — skipping";
+                continue;
+            }
             qCInfo(KWINVRCUSTODIAN) << "Startup: found" << profile->name
                                     << "already in SBS mode on"
                                     << outputNameFromConnectorPath(connectorPath);
@@ -209,9 +215,15 @@ void Custodian::onDrmConnectorChanged(const QString &connectorPath)
 
     if (profile->isSbsMode(w, h)) {
         if (!m_active) {
-            qCInfo(KWINVRCUSTODIAN) << "SBS mode detected on" << outputName
-                                    << "for profile" << profile->name;
-            activateProfile(*profile, outputName);
+            if (!profile->autoStart) {
+                qCInfo(KWINVRCUSTODIAN) << "SBS mode detected on" << outputName
+                                        << "for profile" << profile->name
+                                        << "but autoStart=false — skipping";
+            } else {
+                qCInfo(KWINVRCUSTODIAN) << "SBS mode detected on" << outputName
+                                        << "for profile" << profile->name;
+                activateProfile(*profile, outputName);
+            }
         }
     } else if (profile->isDesktopMode(w, h)) {
         if (m_active && m_activeOutput == outputName) {
@@ -311,6 +323,11 @@ void Custodian::onRuntimeServiceRegistered(const QString &serviceName)
         if (profile.trigger != ProfileTrigger::Service)
             continue;
         if (profile.serviceName == serviceName && !m_active) {
+            if (!profile.autoStart) {
+                qCInfo(KWINVRCUSTODIAN) << "Service-triggered profile matched:" << profile.name
+                                        << "but autoStart=false — skipping";
+                continue;
+            }
             qCInfo(KWINVRCUSTODIAN) << "Service-triggered profile matched:" << profile.name;
             activateProfile(profile, QString());
             return;
@@ -391,7 +408,10 @@ void Custodian::deactivateActive(const QString &reason)
     if (!profile.hidPayload2D.isEmpty())
         sendHidInit(profile, false /* 2D */);
 
-    // 3. Stop the runtime
+    // 3. Clear any profile-specific Monado env override
+    clearMonadoEnvOverride();
+
+    // 4. Stop the runtime
     // We stop immediately — the plugin handles XR_ERROR_SESSION_LOST gracefully.
     // vrStopped() from the plugin is still accepted for any post-teardown actions.
     stopRuntime(profile);
@@ -425,6 +445,15 @@ void Custodian::startRuntime(const CustodianProfile &profile)
 
     const bool isMonado = (profile.openxrRuntime == QLatin1String("monado"));
 
+    // Apply profile-specific environment variables to Monado via a transient
+    // systemd override. This allows the qwerty test profile to set
+    // QWERTY_ENABLE=true without modifying the base monado.service.
+    if (isMonado && !profile.monadoEnvVars.isEmpty()) {
+        applyMonadoEnvOverride(profile);
+    } else {
+        clearMonadoEnvOverride();
+    }
+
     // For Monado: always use RestartUnit so any running instance (which may
     // have selected "Simulated HMD" if started without glasses) is replaced
     // with a fresh instance that probes the currently-connected hardware.
@@ -445,9 +474,15 @@ void Custodian::startRuntime(const CustodianProfile &profile)
             QStringLiteral("/run/user/") + QString::number(::getuid()));
         const QString socketPath = runtimeDir + QStringLiteral("/monado_comp_ipc");
 
-        // Remove any existing socket (from a stale or just-stopped Monado instance)
-        // so the watcher fires only when the fresh instance creates its socket.
-        QFile::remove(socketPath);
+        // If the socket already exists (from a previous Monado instance or systemd
+        // socket activation), skip the watcher and notify the plugin immediately.
+        // When using systemd socket activation, the socket file is managed by systemd
+        // and must not be deleted — Monado inherits the fd, it doesn't create the file.
+        if (QFile::exists(socketPath)) {
+            qCInfo(KWINVRCUSTODIAN) << "Monado IPC socket already exists — notifying plugin immediately";
+            notifyPluginActivate(profile.name, m_activeOutput);
+            return;
+        }
 
         // Watch the runtime directory for the new socket to appear
         m_monadoSocketWatcher = new QFileSystemWatcher({runtimeDir}, this);
@@ -522,6 +557,60 @@ void Custodian::sendHidInit(const CustodianProfile &profile, bool sbsMode)
 
     m_hidInit->sendCommand(profile.hidVendorId, profile.hidProductId,
                            profile.hidInterface, payload);
+}
+
+// ─── Monado per-profile environment override ──────────────────────────────────
+
+void Custodian::applyMonadoEnvOverride(const CustodianProfile &profile)
+{
+    // Write a transient systemd drop-in that adds profile-specific env vars
+    // to monado.service. This is cleaned up on deactivation or next activation.
+    const QString overrideDir = QDir::homePath()
+        + QStringLiteral("/.config/systemd/user/monado.service.d");
+    const QString overridePath = overrideDir + QStringLiteral("/profile-env.conf");
+
+    QDir().mkpath(overrideDir);
+
+    QFile file(overridePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qCWarning(KWINVRCUSTODIAN) << "Failed to write Monado env override:" << overridePath;
+        return;
+    }
+
+    QTextStream out(&file);
+    out << "[Service]\n";
+    for (const QString &envVar : profile.monadoEnvVars) {
+        out << "Environment=\"" << envVar << "\"\n";
+    }
+    file.close();
+
+    qCInfo(KWINVRCUSTODIAN) << "Applied Monado env override for" << profile.name
+                            << ":" << profile.monadoEnvVars;
+
+    // Reload systemd so it picks up the new override
+    QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService,
+                                                      kSystemdObject,
+                                                      kSystemdManager,
+                                                      QStringLiteral("Reload"));
+    QDBusConnection::sessionBus().call(msg); // synchronous — must complete before RestartUnit
+}
+
+void Custodian::clearMonadoEnvOverride()
+{
+    const QString overridePath = QDir::homePath()
+        + QStringLiteral("/.config/systemd/user/monado.service.d/profile-env.conf");
+
+    if (!QFile::exists(overridePath))
+        return;
+
+    QFile::remove(overridePath);
+    qCInfo(KWINVRCUSTODIAN) << "Cleared Monado env override";
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(kSystemdService,
+                                                      kSystemdObject,
+                                                      kSystemdManager,
+                                                      QStringLiteral("Reload"));
+    QDBusConnection::sessionBus().call(msg);
 }
 
 // ─── Plugin notification ──────────────────────────────────────────────────────
@@ -664,7 +753,7 @@ void Custodian::manualActivate()
         return;
     }
 
-    // Find an Always-trigger (flat_monitor) fallback profile
+    // Find a fallback/always-trigger profile (e.g. qwerty test display)
     for (const CustodianProfile &profile : std::as_const(m_profiles)) {
         if (profile.trigger == ProfileTrigger::Always) {
             activateProfile(profile, QString());
