@@ -719,7 +719,7 @@ void PointerInputRedirection::updatePointerConstraints()
     if (!supportsWarping()) {
         return;
     }
-    const bool canConstrain = m_enableConstraints && focus() == workspace()->activeWindow();
+    const bool canConstrain = m_enableConstraints && focus() == workspace()->activeWindow() && focus()->allowPointerLock();
     const auto cf = s->confinedPointer();
     if (cf) {
         if (cf->isConfined()) {

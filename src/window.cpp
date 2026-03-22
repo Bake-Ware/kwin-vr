@@ -4822,6 +4822,21 @@ void Window::setActivationToken(const QString &token)
     m_activationToken = token;
 }
 
+bool Window::allowPointerLock() const
+{
+    return m_allowPointerLock;
+}
+
+void Window::setAllowPointerLock(bool allowPointerLock)
+{
+    if (m_allowPointerLock == allowPointerLock) {
+        return;
+    }
+    m_allowPointerLock = allowPointerLock;
+    input()->pointer()->updatePointerConstraints();
+    Q_EMIT allowPointerLockChanged();
+}
+
 QString Window::activationToken() const
 {
     return m_activationToken;

@@ -200,6 +200,7 @@ private:
     QAction *m_closeOperation;
     QAction *m_shortcutOperation;
     QAction *m_excludeFromCapture;
+    QAction *m_allowPointerLockOperation;
     /**
      * The window for which the menu is shown.
      */

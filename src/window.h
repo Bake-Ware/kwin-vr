@@ -123,6 +123,11 @@ class KWIN_EXPORT Window : public QObject
     Q_PROPERTY(KWin::RectF clientGeometry READ clientGeometry NOTIFY clientGeometryChanged)
 
     /**
+     * Allow window to lock/constrain a pointer.
+     */
+    Q_PROPERTY(bool allowPointerLock READ allowPointerLock WRITE setAllowPointerLock NOTIFY allowPointerLockChanged)
+
+    /**
      * This property holds the position of the Window's frame geometry.
      */
     Q_PROPERTY(QPointF pos READ pos)
@@ -1430,6 +1435,9 @@ public:
     bool isVr() const;
     void setVr(bool set);
 
+    bool allowPointerLock() const;
+    void setAllowPointerLock(bool allowPointerLock);
+
     void setActivationToken(const QString &token);
     QString activationToken() const;
 
@@ -1556,6 +1564,7 @@ Q_SIGNALS:
     void tagChanged();
     void descriptionChanged();
     void vrChanged();
+    void allowPointerLockChanged();
     void borderRadiusChanged();
     void excludeFromCaptureChanged();
     void decorationPolicyChanged();
@@ -1972,6 +1981,7 @@ protected:
     QString m_tag;
     QString m_description;
     bool m_vr = false;
+    bool m_allowPointerLock = true;
 
     QString m_activationToken;
 };

@@ -88,6 +88,7 @@ UserActionsMenu::UserActionsMenu(QObject *parent)
     , m_closeOperation(nullptr)
     , m_shortcutOperation(nullptr)
     , m_excludeFromCapture(nullptr)
+    , m_allowPointerLockOperation(nullptr)
 {
 }
 
@@ -254,6 +255,12 @@ void UserActionsMenu::init()
     m_excludeFromCapture->setCheckable(true);
     m_excludeFromCapture->setData(Options::ExcludeFromCaptureOp);
 
+    m_allowPointerLockOperation = advancedMenu->addAction(i18n("Allow Pointer &Lock"));
+    m_allowPointerLockOperation->setIcon(QIcon::fromTheme(QStringLiteral("system-lock-screen")));
+    setShortcut(m_allowPointerLockOperation, QStringLiteral("Window Allow Pointer Lock"));
+    m_allowPointerLockOperation->setCheckable(true);
+    m_allowPointerLockOperation->setData(Options::AllowPointerLockOp);
+
     advancedMenu->addSeparator();
 
     m_shortcutOperation = advancedMenu->addAction(i18n("Set Window Short&cut…"));
@@ -341,6 +348,7 @@ void UserActionsMenu::menuAboutToShow()
     m_noBorderOperation->setEnabled(m_window->userCanSetNoBorder());
     m_noBorderOperation->setChecked(m_window->noBorder());
     m_excludeFromCapture->setChecked(m_window->excludeFromCapture());
+    m_allowPointerLockOperation->setChecked(m_window->allowPointerLock());
     m_minimizeOperation->setEnabled(m_window->isMinimizable());
     m_closeOperation->setEnabled(m_window->isCloseable());
     m_shortcutOperation->setEnabled(m_window->rules()->checkShortcut(QString()).isNull());
@@ -1131,6 +1139,9 @@ void Workspace::performWindowOperation(Window *window, Options::WindowOperation 
     case Options::ExcludeFromCaptureOp:
         window->setExcludeFromCapture(!window->excludeFromCapture());
         break;
+    case Options::AllowPointerLockOp:
+        window->setAllowPointerLock(!window->allowPointerLock());
+        break;
     case Options::KeepAboveOp: {
         StackingUpdatesBlocker blocker(this);
         bool was = window->keepAbove();
@@ -1374,6 +1385,13 @@ void Workspace::slotWindowExcludeFromCapture()
 {
     if (USABLE_ACTIVE_WINDOW) {
         performWindowOperation(m_activeWindow, Options::ExcludeFromCaptureOp);
+    }
+}
+
+void Workspace::slotWindowAllowPointerLock()
+{
+    if (USABLE_ACTIVE_WINDOW) {
+        performWindowOperation(m_activeWindow, Options::AllowPointerLockOp);
     }
 }
 
