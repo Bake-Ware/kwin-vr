@@ -229,6 +229,7 @@ public:
 
     bool isPlaceholder() const;
     bool isNonDesktop() const;
+    bool isVirtualOutput() const;
     bool isLeasable() const;
     virtual bool isLeased() const;
     virtual bool isLeasePending() const;
@@ -422,6 +423,7 @@ protected:
         bool internal = false;
         bool placeholder = false;
         bool nonDesktop = false;
+        bool virtualOutput = false;
         QByteArray mstPath;
         std::optional<double> maxPeakBrightness;
         std::optional<double> maxAverageBrightness;

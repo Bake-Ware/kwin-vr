@@ -879,7 +879,7 @@ void Compositor::composite(RenderLoop *renderLoop)
             layer.surfaceDamage |= layer.view->collectDamage();
             layer.surfaceDamage |= layer.view->layer()->deviceRepaints();
             layer.view->layer()->resetRepaints();
-            if (layer.view->layer()->isEnabled() && !layer.directScanout) {
+            if (layer.view->layer()->isEnabled() && !layer.directScanout && !output->isVirtualOutput()) {
                 result &= renderLayer(layer.view, logicalOutput, output, frame, layer.surfaceDamage);
                 if (!result) {
                     qCWarning(KWIN_CORE, "Rendering a layer failed!");

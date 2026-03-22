@@ -34,6 +34,7 @@ DrmVirtualOutput::DrmVirtualOutput(DrmBackend *backend, const QString &name, con
         .model = description,
         .physicalSize = size,
         .capabilities = Capability::CustomModes,
+        .virtualOutput = true,
     });
 
     setState(State{

@@ -525,6 +525,11 @@ bool BackendOutput::isNonDesktop() const
     return m_information.nonDesktop;
 }
 
+bool BackendOutput::isVirtualOutput() const
+{
+    return m_information.virtualOutput;
+}
+
 bool BackendOutput::isLeasable() const
 {
     return m_state.leasable;
