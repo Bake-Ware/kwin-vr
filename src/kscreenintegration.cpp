@@ -40,7 +40,7 @@ QString connectedOutputsHash(const QList<BackendOutput *> &outputs, bool isLidCl
     QStringList hashedOutputs;
     hashedOutputs.reserve(outputs.count());
     for (auto output : std::as_const(outputs)) {
-        if (output->isPlaceholder() || output->isNonDesktop()) {
+        if (output->isPlaceholder() || output->isNonDesktop() || output->isLeased() || output->isLeasePending()) {
             continue;
         }
         if (output->isInternal() && isLidClosed) {
@@ -187,7 +187,7 @@ std::optional<OutputConfiguration> readOutputConfig(const QList<BackendOutput *>
     // default position goes from left to right
     QPoint pos(0, 0);
     for (const auto &output : std::as_const(outputs)) {
-        if (output->isPlaceholder() || output->isNonDesktop()) {
+        if (output->isPlaceholder() || output->isNonDesktop() || output->isLeased() || output->isLeasePending()) {
             continue;
         }
         auto props = cfg.changeSet(output);

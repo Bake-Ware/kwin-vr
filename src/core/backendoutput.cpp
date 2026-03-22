@@ -479,6 +479,9 @@ void BackendOutput::setState(const State &state)
     if (oldState.automaticBrightness != state.automaticBrightness) {
         Q_EMIT automaticBrightnessChanged();
     }
+    if (oldState.leasable != state.leasable) {
+        Q_EMIT leasableChanged();
+    }
     if (oldState.enabled != state.enabled) {
         Q_EMIT enabledChanged();
     }
@@ -520,6 +523,21 @@ bool BackendOutput::isPlaceholder() const
 bool BackendOutput::isNonDesktop() const
 {
     return m_information.nonDesktop;
+}
+
+bool BackendOutput::isLeasable() const
+{
+    return m_state.leasable;
+}
+
+bool BackendOutput::isLeased() const
+{
+    return false;
+}
+
+bool BackendOutput::isLeasePending() const
+{
+    return false;
 }
 
 BackendOutput::RgbRange BackendOutput::rgbRange() const

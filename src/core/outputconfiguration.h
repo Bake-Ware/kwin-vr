@@ -69,6 +69,7 @@ public:
     std::optional<bool> automaticBrightness;
     std::optional<AutoBrightnessCurve> autoBrightnessCurve;
     std::optional<BackendOutput::BrightnessReason> brightnessReason;
+    std::optional<bool> leasable;
 };
 
 class KWIN_EXPORT OutputConfiguration

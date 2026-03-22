@@ -77,6 +77,7 @@ public:
         SharpnessControl = 1 << 14,
         CustomModes = 1 << 15,
         AutomaticBrightness = 1 << 16,
+        Leasing = 1 << 17,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -228,6 +229,9 @@ public:
 
     bool isPlaceholder() const;
     bool isNonDesktop() const;
+    bool isLeasable() const;
+    virtual bool isLeased() const;
+    virtual bool isLeasePending() const;
     OutputTransform panelOrientation() const;
     bool wideColorGamut() const;
     bool highDynamicRange() const;
@@ -400,6 +404,7 @@ Q_SIGNALS:
     void sharpnessChanged();
     void priorityChanged();
     void automaticBrightnessChanged();
+    void leasableChanged();
 
 protected:
     struct Information
@@ -484,6 +489,7 @@ protected:
         bool automaticBrightness = false;
         AutoBrightnessCurve autoBrightnessCurve;
         BrightnessReason lastBrightnessAdjustmentReason = BrightnessReason::ManualAdjustment;
+        bool leasable = false;
     };
 
     void setInformation(const Information &information);

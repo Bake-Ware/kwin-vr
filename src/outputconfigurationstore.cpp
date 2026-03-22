@@ -47,7 +47,7 @@ std::optional<std::pair<OutputConfiguration, OutputConfigurationStore::ConfigTyp
 {
     QList<BackendOutput *> relevantOutputs;
     std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(relevantOutputs), [](BackendOutput *output) {
-        return !output->isNonDesktop() && !output->isPlaceholder();
+        return !output->isNonDesktop() && !output->isPlaceholder() && !output->isLeased() && !output->isLeasePending();
     });
     if (relevantOutputs.isEmpty()) {
         return std::nullopt;
@@ -299,7 +299,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
 {
     QList<BackendOutput *> relevantOutputs;
     std::copy_if(allOutputs.begin(), allOutputs.end(), std::back_inserter(relevantOutputs), [](BackendOutput *output) {
-        return !output->isNonDesktop() && !output->isPlaceholder();
+        return !output->isNonDesktop() && !output->isPlaceholder() && !output->isLeased() && !output->isLeasePending();
     });
     if (relevantOutputs.isEmpty()) {
         return;
@@ -371,6 +371,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
                 .customModes = changeSet->customModes.value_or(output->customModes()),
                 .automaticBrightness = changeSet->automaticBrightness.value_or(output->automaticBrightness()),
                 .autoBrightnessCurve = changeSet->autoBrightnessCurve.value_or(output->autoBrightnessCurve()),
+                .leasable = changeSet->leasable.value_or(output->isLeasable()),
             };
             *outputIt = SetupState{
                 .outputIndex = *outputIndex,
@@ -425,6 +426,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
                 .customModes = output->customModes(),
                 .automaticBrightness = output->automaticBrightness(),
                 .autoBrightnessCurve = output->autoBrightnessCurve(),
+                .leasable = output->isLeasable(),
             };
             *outputIt = SetupState{
                 .outputIndex = *outputIndex,
@@ -498,6 +500,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .customModes = state.customModes,
             .automaticBrightness = state.automaticBrightness,
             .autoBrightnessCurve = state.autoBrightnessCurve,
+            .leasable = state.leasable,
         };
     }
     return ret;
@@ -693,6 +696,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .automaticBrightness = existingData.automaticBrightness.value_or(false),
             // TODO generate a more fitting brightness map per screen?
             .autoBrightnessCurve = existingData.autoBrightnessCurve,
+            .leasable = existingData.leasable.value_or(false),
         };
         if (setupState) {
             priority = std::max(setupState->priority + 1, priority);
@@ -856,7 +860,7 @@ double OutputConfigurationStore::chooseScale(BackendOutput *output, OutputMode *
 void OutputConfigurationStore::registerOutputs(const QList<BackendOutput *> &outputs)
 {
     for (BackendOutput *output : outputs) {
-        if (output->isNonDesktop() || output->isPlaceholder()) {
+        if (output->isNonDesktop() || output->isPlaceholder() || output->isLeased() || output->isLeasePending()) {
             continue;
         }
         auto index = findOutputIndex(output, outputs);
@@ -1145,6 +1149,9 @@ void OutputConfigurationStore::load()
         }
         if (const auto it = data.find("autoBrightnessCurve"); it != data.end() && it->isArray()) {
             state.autoBrightnessCurve = AutoBrightnessCurve::fromArray(it->toArray());
+        }
+        if (const auto it = data.find("leasable"); it != data.end() && it->isBool()) {
+            state.leasable = it->toBool();
         }
         outputDatas.push_back(state);
     }
@@ -1452,6 +1459,9 @@ void OutputConfigurationStore::save()
         }
         if (output.autoBrightnessCurve) {
             o["autoBrightnessCurve"] = output.autoBrightnessCurve->toArray();
+        }
+        if (output.leasable) {
+            o["leasable"] = *output.leasable;
         }
         outputsData.append(o);
     }

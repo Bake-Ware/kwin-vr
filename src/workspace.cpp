@@ -309,6 +309,7 @@ void Workspace::init()
 
     slotOutputBackendOutputsQueried();
     connect(kwinApp()->outputBackend(), &OutputBackend::outputsQueried, this, &Workspace::slotOutputBackendOutputsQueried);
+    connect(kwinApp()->outputBackend(), &OutputBackend::outputLeaseStateChanged, this, &Workspace::slotOutputBackendLeaseStateChanged);
 
     reconfigureTimer.setSingleShot(true);
     m_rearrangeTimer.setSingleShot(true);
@@ -1278,7 +1279,7 @@ LogicalOutput *Workspace::findOutput(LogicalOutput *reference, Direction directi
 
 static bool wantsToManage(const BackendOutput *output)
 {
-    return output->isEnabled() && !output->isNonDesktop();
+    return output->isEnabled() && !output->isNonDesktop() && !output->isLeased() && !output->isLeasePending();
 }
 
 LogicalOutput *Workspace::findOutput(BackendOutput *backendOutput) const
@@ -1297,6 +1298,11 @@ LogicalOutput *Workspace::findOutput(BackendOutput *backendOutput) const
 void Workspace::slotOutputBackendOutputsQueried()
 {
     updateOutputConfiguration();
+    updateOutputs();
+}
+
+void Workspace::slotOutputBackendLeaseStateChanged()
+{
     updateOutputs();
 }
 

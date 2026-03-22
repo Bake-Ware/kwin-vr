@@ -380,7 +380,7 @@ OutputConfigurationError DrmBackend::applyOutputChanges(const OutputConfiguratio
     for (const auto &gpu : m_gpus) {
         const auto outputs = gpu->drmOutputs();
         for (DrmOutput *output : outputs) {
-            if (output->isNonDesktop()) {
+            if (output->isNonDesktop() || output->isLeased() || output->isLeasePending()) {
                 continue;
             }
             if (const auto changeset = config.constChangeSet(output)) {

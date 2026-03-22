@@ -245,6 +245,7 @@ private:
     void registerWindow(Window *window);
     void handleOutputAdded(BackendOutput *output);
     void handleOutputRemoved(BackendOutput *output);
+    void syncOutputDevices();
     void handleOutputEnabled(LogicalOutput *output);
     void handleOutputDisabled(LogicalOutput *output);
 

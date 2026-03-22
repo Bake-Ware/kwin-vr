@@ -95,6 +95,7 @@ private:
         std::optional<QList<CustomModeDefinition>> customModes;
         std::optional<bool> automaticBrightness;
         std::optional<AutoBrightnessCurve> autoBrightnessCurve;
+        std::optional<bool> leasable;
     };
     struct SetupState
     {
