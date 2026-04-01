@@ -646,6 +646,29 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         }
     }
 
+    // disable non-primary planes (cursor, overlay) that were in use on the
+    // leased outputs, so stale content like the cursor doesn't stay on screen
+    if (m_atomicModeSetting) {
+        auto commit = std::make_unique<DrmAtomicCommit>(this);
+        for (DrmOutput *output : outputs) {
+            for (const auto layer : output->pipeline()->layers()) {
+                if (auto plane = layer->plane(); plane && plane != output->pipeline()->crtc()->primaryPlane()) {
+                    qCDebug(KWIN_DRM) << "Disabling non-primary plane" << plane->id() << "on crtc" << output->pipeline()->crtc()->id() << "before lease";
+                    plane->disable(commit.get());
+                }
+            }
+        }
+        if (!commit->commitModeset()) {
+            qCWarning(KWIN_DRM) << "Failed to disable non-primary planes before creating lease:" << strerror(errno);
+        }
+    } else {
+        for (DrmOutput *output : outputs) {
+            if (output->pipeline()->crtc()) {
+                drmModeSetCursor(m_fd, output->pipeline()->crtc()->id(), 0, 0, 0);
+            }
+        }
+    }
+
     uint32_t lesseeId;
     FileDescriptor fd{drmModeCreateLease(m_fd, objects.constData(), objects.count(), 0, &lesseeId)};
     if (!fd.isValid()) {
