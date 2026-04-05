@@ -53,7 +53,7 @@ CustomMaterial {
     }
 
     shadingMode: CustomMaterial.Unshaded
-    cullMode: Material.NoCulling
+    cullMode: Material.BackFaceCulling
     depthDrawMode: Material.AlwaysDepthDraw
 
     vertexShader: "qrc:/qt/qml/org/kde/kwin/vr/shaders/yuv.vert"

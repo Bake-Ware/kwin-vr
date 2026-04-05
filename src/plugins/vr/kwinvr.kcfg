@@ -126,7 +126,7 @@
     </entry>
     <entry name="blend" type="Bool">
       <label>Enable transparent background by default</label>
-      <default>true</default>
+      <default>false</default>
     </entry>
     <entry name="depthBiasMultiplier" type="Double">
       <label>Multiplier for depth bias calculation (affects transparency sorting)</label>
