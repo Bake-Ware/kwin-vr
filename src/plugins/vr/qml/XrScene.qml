@@ -34,6 +34,9 @@ XrView {
         backgroundMode: KWinVRConfig.blend ? SceneEnvironment.Transparent : SceneEnvironment.Color
         depthPrePassEnabled: KWinVRConfig.depthPrePassEnabled
         depthTestEnabled: KWinVRConfig.depthTestEnabled
+        antialiasingMode: SceneEnvironment.NoAA
+        temporalAaEnabled: false
+        aoEnabled: false
     }
 
     xrOrigin: XrOrigin {
