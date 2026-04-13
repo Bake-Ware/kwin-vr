@@ -112,6 +112,7 @@ qt6_add_qml_module(vr
         relativemotionblocker.h relativemotionblocker.cpp
         kwinvrinputremap.h kwinvrinputremap.cpp
         vrheadscrollfilter.h vrheadscrollfilter.cpp
+        vrpointeroffset.h vrpointeroffset.cpp
         vrfollowmode.h vrfollowmode.cpp
         kwintoqquick3dinputbridge.h kwintoqquick3dinputbridge.cpp
         textureprovideritem.h textureprovideritem.cpp

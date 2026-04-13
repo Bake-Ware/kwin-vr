@@ -53,6 +53,22 @@ ColumnLayout {
         KCMUtils.SettingStateBinding {
             configObject: kcm.settings
             settingName: "blockOtherPointerMotion"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "mouseOffsetSensitivity"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "mouseOffsetMaxDegrees"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "gazeReclaimEnabled"
+        },
+        KCMUtils.SettingStateBinding {
+            configObject: kcm.settings
+            settingName: "gazeReclaimThreshold"
         }
     ]
 
@@ -315,5 +331,90 @@ ColumnLayout {
             }
         }
 
+    }
+
+    // Pointer Offset section
+    Controls.Label {
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        text: i18nc("@title:group", "Pointer Offset")
+        font.bold: true
+    }
+
+    Controls.Label {
+        Layout.alignment: Qt.AlignHCenter
+        text: i18nc("@info", "Mouse movement adds angular offset to headgaze ray for fine cursor control")
+        font.italic: true
+        wrapMode: Text.Wrap
+        Layout.fillWidth: true
+        horizontalAlignment: Text.AlignHCenter
+    }
+
+    GridLayout {
+        columns: 2
+        rowSpacing: Kirigami.Units.smallSpacing
+        columnSpacing: Kirigami.Units.smallSpacing
+        Layout.fillWidth: true
+
+        Controls.Label {
+            text: i18nc("@label:slider", "Sensitivity:")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        }
+        ValueSlider {
+            Layout.fillWidth: true
+            label: ""
+            labelWidth: 0
+            from: 0.01; to: 1.0; stepSize: 0.01; decimals: 2
+            Synchronizer on value {
+                sourceObject: kcm.settings
+                sourceProperty: "mouseOffsetSensitivity"
+            }
+        }
+
+        Controls.Label {
+            text: i18nc("@label:slider", "Max offset (°):")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        }
+        ValueSlider {
+            Layout.fillWidth: true
+            label: ""
+            labelWidth: 0
+            from: 1.0; to: 60.0; stepSize: 1; decimals: 0
+            Synchronizer on value {
+                sourceObject: kcm.settings
+                sourceProperty: "mouseOffsetMaxDegrees"
+            }
+        }
+    }
+
+    ColumnLayout {
+        Layout.alignment: Qt.AlignHCenter
+        spacing: Kirigami.Units.smallSpacing
+
+        Controls.CheckBox {
+            text: i18nc("@option:check", "Gaze reclaim (snap back when head moves)")
+            checked: kcm.settings.gazeReclaimEnabled
+            onToggled: kcm.settings.gazeReclaimEnabled = checked
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+            enabled: kcm.settings.gazeReclaimEnabled
+
+            Controls.Label {
+                text: i18nc("@label:slider", "Reclaim threshold:")
+            }
+            ValueSlider {
+                Layout.fillWidth: true
+                label: ""
+                labelWidth: 0
+                from: 0.1; to: 1.0; stepSize: 0.05; decimals: 2
+                Synchronizer on value {
+                    sourceObject: kcm.settings
+                    sourceProperty: "gazeReclaimThreshold"
+                }
+            }
+        }
     }
 }

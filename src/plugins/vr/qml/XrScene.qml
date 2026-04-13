@@ -66,7 +66,50 @@ XrView {
     property KwinVrInputFilter kwinInputFilter
 
     RelativeMotionBlocker {
-        allowedDevice: KWinVRConfig.blockOtherPointerMotion ? kwinInput : null
+        allowedDevice: kwinInput
+    }
+
+    VrPointerOffset {
+        id: pointerOffset
+        enabled: !KWinVRConfig.blockOtherPointerMotion
+        vrDevice: kwinInput
+        sensitivity: KWinVRConfig.mouseOffsetSensitivity
+        maxOffset: KWinVRConfig.mouseOffsetMaxDegrees
+    }
+
+    // Gaze reclaim: snap pointer offset back to center when head moves past threshold
+    QtObject {
+        id: gazeReclaim
+        property quaternion referenceRotation
+        property bool hasReference: false
+    }
+    Connections {
+        target: cam
+        enabled: KWinVRConfig.gazeReclaimEnabled && pointerOffset.enabled
+                 && (pointerOffset.offsetX !== 0 || pointerOffset.offsetY !== 0)
+        function onSceneRotationChanged() {
+            if (!gazeReclaim.hasReference) {
+                gazeReclaim.referenceRotation = cam.sceneRotation
+                gazeReclaim.hasReference = true
+                return
+            }
+            const delta = KwinVrHelpers.getRotationDelta(gazeReclaim.referenceRotation, cam.sceneRotation)
+            const euler = delta.toEulerAngles()
+            const headMoveDeg = Math.sqrt(euler.x * euler.x + euler.y * euler.y)
+            const threshold = KWinVRConfig.gazeReclaimThreshold * KWinVRConfig.mouseOffsetMaxDegrees
+            if (headMoveDeg > threshold) {
+                pointerOffset.reset()
+            }
+        }
+    }
+    Connections {
+        target: pointerOffset
+        function onOffsetChanged() {
+            if (pointerOffset.offsetX === 0 && pointerOffset.offsetY === 0) {
+                gazeReclaim.referenceRotation = cam.sceneRotation
+                gazeReclaim.hasReference = true
+            }
+        }
     }
 
     function radialMenuActivate(pressed: bool): bool {
@@ -181,6 +224,8 @@ XrView {
             Xray {
                 id: pickRay
                 camera: cam
+                pointerOffsetX: pointerOffset.offsetX
+                pointerOffsetY: pointerOffset.offsetY
                 vrRay: VrRay {
                     depthBias: -10000 // should be always visible
                 }

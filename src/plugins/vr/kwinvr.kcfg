@@ -216,6 +216,28 @@
       <label>Block pointer motion from other input sources</label>
       <default>true</default>
     </entry>
+    <entry name="mouseOffsetSensitivity" type="Double">
+      <label>Mouse offset sensitivity (degrees per pixel)</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="mouseOffsetMaxDegrees" type="Double">
+      <label>Maximum mouse offset from center (degrees)</label>
+      <default>20.0</default>
+      <min>1.0</min>
+      <max>60.0</max>
+    </entry>
+    <entry name="gazeReclaimEnabled" type="Bool">
+      <label>Snap cursor back when gaze moves away</label>
+      <default>true</default>
+    </entry>
+    <entry name="gazeReclaimThreshold" type="Double">
+      <label>Gaze reclaim threshold (fraction of max offset)</label>
+      <default>0.8</default>
+      <min>0.1</min>
+      <max>1.0</max>
+    </entry>
     <entry name="threadedRendering" type="Bool">
       <label>Enable threaded rendering</label>
       <default>false</default>

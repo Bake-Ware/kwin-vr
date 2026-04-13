@@ -17,8 +17,10 @@ Model {
     x: KWinVRConfig.headgazePositionX
     y: KWinVRConfig.headgazePositionY
     z: KWinVRConfig.headgazePositionZ
-    eulerRotation.x: KWinVRConfig.headgazeRotationVertical
-    eulerRotation.y: KWinVRConfig.headgazeRotationHorizontal
+    property real pointerOffsetX: 0
+    property real pointerOffsetY: 0
+    eulerRotation.x: KWinVRConfig.headgazeRotationVertical + pointerOffsetY
+    eulerRotation.y: KWinVRConfig.headgazeRotationHorizontal - pointerOffsetX
     property real defaultLength: 300
 
     property color idleColor: KWinVRConfig.headgazeColor
