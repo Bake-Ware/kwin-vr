@@ -23,6 +23,13 @@ ColumnLayout {
         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
     }
 
+    Controls.CheckBox {
+        Layout.alignment: Qt.AlignHCenter
+        text: i18nc("@option:check", "Hide virtual display frame in VR")
+        checked: kcm.settings.hideVirtualDisplay
+        onToggled: kcm.settings.hideVirtualDisplay = checked
+    }
+
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
         settingName: "width"
@@ -46,6 +53,10 @@ ColumnLayout {
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
         settingName: "distance"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hideVirtualDisplay"
     }
 
     // Main display configuration area

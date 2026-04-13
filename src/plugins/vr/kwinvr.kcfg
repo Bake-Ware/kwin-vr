@@ -34,6 +34,10 @@
       <label>Distance from user to display windows</label>
       <default>100</default>
     </entry>
+    <entry name="hideVirtualDisplay" type="Bool">
+      <label>Hide the virtual display frame in VR (windows still use it for sizing)</label>
+      <default>true</default>
+    </entry>
     <entry name="followEnabled" type="Bool">
       <label>Enable follow mode by default</label>
       <default>true</default>
