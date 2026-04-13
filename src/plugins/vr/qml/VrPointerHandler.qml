@@ -130,7 +130,9 @@ QtObject {
     }
 
     readonly property Binding rayInputVRWindowBinding: Binding {
-        bridge3d.pointerPosition: Qt.point(root.picking.lastPick.uvPosition.x, root.picking.lastPick.uvPosition.y)
+        target: bridge3d
+        property: "pointerPosition"
+        value: Qt.point(root.picking.lastPick.uvPosition.x, root.picking.lastPick.uvPosition.y)
         when: root.currentHoveredVRWindow && !root.currentMovingResizingWindow && !root.xray.grabbedObject
     }
 

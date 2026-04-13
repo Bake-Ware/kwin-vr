@@ -29,10 +29,22 @@ QtObject {
     // Ray visibility
     readonly property bool rayVisible: root.xray.enabled && root.xray.currentColor.a > 0
 
-    readonly property Binding vrRayBinding: Binding {
-        root.xray.vrRay.length: root.rayLength
-        root.xray.vrRay.baseColor: root.xray.currentColor
-        root.xray.vrRay.visible: root.rayVisible
+    readonly property Binding vrRayLengthBinding: Binding {
+        target: root.xray.vrRay
+        property: "length"
+        value: root.rayLength
+        when: root.xray.vrRay
+    }
+    readonly property Binding vrRayColorBinding: Binding {
+        target: root.xray.vrRay
+        property: "baseColor"
+        value: root.xray.currentColor
+        when: root.xray.vrRay
+    }
+    readonly property Binding vrRayVisibleBinding: Binding {
+        target: root.xray.vrRay
+        property: "visible"
+        value: root.rayVisible
         when: root.xray.vrRay
     }
 }

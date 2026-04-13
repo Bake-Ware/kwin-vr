@@ -53,7 +53,9 @@ QtObject {
 
     // Attach/detach constraint to pointer handler
     readonly property Binding constraintBinding: Binding {
-        root.pointerHandler.constraint: root.barrierConstraint
+        target: root.pointerHandler
+        property: "constraint"
+        value: root.barrierConstraint
         when: root.barrierEnabled
     }
 

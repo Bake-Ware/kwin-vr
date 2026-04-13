@@ -74,7 +74,9 @@ Node {
 
         /* Copy internal or surfaced window depth (decorations have no depth currently) */
         Binding {
-            root.itemDepth: winLoader.item.itemDepth
+            target: root
+            property: "itemDepth"
+            value: winLoader.item.itemDepth
             when: winLoader.item
         }
     }

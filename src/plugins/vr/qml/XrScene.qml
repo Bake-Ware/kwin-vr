@@ -209,7 +209,9 @@ XrView {
             }
 
             Binding {
-                pickRay.enabled: true
+                target: pickRay
+                property: "enabled"
+                value: true
             }
 
             Connections {
