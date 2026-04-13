@@ -630,12 +630,13 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         return nullptr;
     }
 
-    // allocate crtcs for the outputss
+    // allocate crtcs for the outputs
     for (DrmOutput *output : outputs) {
         output->pipeline()->setEnable(true);
         output->pipeline()->setActive(false);
     }
-    if (testPendingConfiguration() != DrmPipeline::Error::None) {
+    const auto testError = testPendingConfiguration();
+    if (testError != DrmPipeline::Error::None && testError != DrmPipeline::Error::NoPermission) {
         return nullptr;
     }
 
@@ -666,6 +667,15 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
             if (output->pipeline()->crtc()) {
                 drmModeSetCursor(m_fd, output->pipeline()->crtc()->id(), 0, 0, 0);
             }
+        }
+    }
+
+    // Ensure we have DRM master before creating the lease.
+    // On logind-managed sessions, KWin may not hold DRM master directly.
+    if (!drmIsMaster(m_fd)) {
+        qCDebug(KWIN_DRM) << "Not DRM master, attempting to acquire master for lease creation";
+        if (drmSetMaster(m_fd) != 0) {
+            qCWarning(KWIN_DRM) << "Could not acquire DRM master for lease creation:" << strerror(errno);
         }
     }
 

@@ -373,8 +373,50 @@ size_t DrmBackend::gpuCount() const
     return m_gpus.size();
 }
 
+static bool isLeasableOnlyChange(const std::shared_ptr<OutputChangeSet> &changeset)
+{
+    // Return true if the only field set is 'leasable' — no pipeline test needed
+    return changeset->leasable.has_value()
+        && !changeset->mode.has_value()
+        && !changeset->desiredModeSize.has_value()
+        && !changeset->desiredModeRefreshRate.has_value()
+        && !changeset->enabled.has_value()
+        && !changeset->pos.has_value()
+        && !changeset->scale.has_value()
+        && !changeset->transform.has_value()
+        && !changeset->overscan.has_value()
+        && !changeset->rgbRange.has_value()
+        && !changeset->vrrPolicy.has_value()
+        && !changeset->highDynamicRange.has_value()
+        && !changeset->wideColorGamut.has_value()
+        && !changeset->dpmsMode.has_value()
+        && !changeset->maxBitsPerColor.has_value()
+        && !changeset->sharpness.has_value()
+        && !changeset->customModes.has_value();
+}
+
 OutputConfigurationError DrmBackend::applyOutputChanges(const OutputConfiguration &config)
 {
+    // Handle leasable-only changes without triggering atomic modeset tests.
+    // The leasable flag is KWin-internal state and doesn't require hardware reconfiguration.
+    // Atomic modeset tests can fail with EACCES on hybrid GPU setups where logind holds DRM master.
+    bool hasNonLeasableChanges = false;
+    for (const auto &gpu : m_gpus) {
+        const auto outputs = gpu->drmOutputs();
+        for (DrmOutput *output : outputs) {
+            if (const auto changeset = config.constChangeSet(output)) {
+                if (isLeasableOnlyChange(changeset)) {
+                    output->setLeasable(changeset->leasable.value());
+                } else {
+                    hasNonLeasableChanges = true;
+                }
+            }
+        }
+    }
+    if (!hasNonLeasableChanges) {
+        return OutputConfigurationError::None;
+    }
+
     QList<DrmOutput *> toBeEnabled;
     QList<DrmOutput *> toBeDisabled;
     for (const auto &gpu : m_gpus) {
@@ -384,6 +426,9 @@ OutputConfigurationError DrmBackend::applyOutputChanges(const OutputConfiguratio
                 continue;
             }
             if (const auto changeset = config.constChangeSet(output)) {
+                if (isLeasableOnlyChange(changeset)) {
+                    continue; // already handled above
+                }
                 output->queueChanges(changeset);
                 if (changeset->enabled.value_or(output->isEnabled())) {
                     toBeEnabled << output;

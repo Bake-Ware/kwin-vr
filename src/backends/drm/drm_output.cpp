@@ -674,6 +674,13 @@ void DrmOutput::revertQueuedChanges()
     m_pipeline->revertPendingChanges();
 }
 
+void DrmOutput::setLeasable(bool leasable)
+{
+    State next = m_state;
+    next.leasable = leasable;
+    setState(next);
+}
+
 void DrmOutput::setChannelFactors(const QVector3D &rgb)
 {
     if (rgb == m_sRgbChannelFactors) {

@@ -49,6 +49,7 @@ public:
     bool queueChanges(const std::shared_ptr<OutputChangeSet> &properties);
     void applyQueuedChanges(const std::shared_ptr<OutputChangeSet> &properties);
     void revertQueuedChanges();
+    void setLeasable(bool leasable);
 
     bool shouldDisableNonPrimaryPlanes() const;
     bool presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay) override;

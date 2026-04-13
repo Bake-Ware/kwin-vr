@@ -59,10 +59,11 @@ void DrmLeaseManagerV1::removeGpu(DrmGpu *gpu)
 void DrmLeaseManagerV1::handleOutputsQueried()
 {
     for (const auto device : m_leaseDevices) {
-        if (device->hasDrmMaster()) {
-            device->offerAvailableConnectors();
-            device->done();
-        }
+        // Always re-offer connectors after outputs are queried.
+        // On logind-managed sessions, hasDrmMaster() may report false even though
+        // KWin is the active compositor and can create leases.
+        device->offerAvailableConnectors();
+        device->done();
     }
 }
 
@@ -417,8 +418,7 @@ void DrmLeaseRequestV1Interface::wp_drm_lease_request_v1_request_connector(Resou
 bool DrmLeaseRequestV1Interface::tryGrantLease(DrmLeaseV1Interface *lease)
 {
     if (!m_device->hasDrmMaster()) {
-        qCWarning(KWIN_CORE) << "DrmLease: rejecting lease request without drm master";
-        return false;
+        qCWarning(KWIN_CORE) << "DrmLease: no drm master flag, attempting lease anyway (logind session)";
     }
     if (m_invalid) {
         qCWarning(KWIN_CORE) << "DrmLease: rejecting lease request with a withdrawn connector";
