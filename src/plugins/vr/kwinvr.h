@@ -53,8 +53,11 @@ private:
 
     void registerDBusService();
     bool initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString *errorMessage) const;
+    void ensureMonadoRunning();
+    void proceedWithVrActivation();
 
     bool m_active = false;
+    bool m_waitingForMonado = false;
     QQmlApplicationEngine *m_engine = nullptr;
     OpenXRTest m_xrTest;
     KConfigWatcher::Ptr m_watcher;

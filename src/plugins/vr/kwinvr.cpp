@@ -27,7 +27,10 @@
 #include <QDBusConnection>
 #include <QFileInfo>
 #include <QLibrary>
+#include <QProcess>
 #include <QQmlApplicationEngine>
+#include <QStandardPaths>
+#include <QTimer>
 
 #include <openxr/openxr.h>
 
@@ -156,6 +159,90 @@ bool KwinVr::initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString
     return true;
 }
 
+void KwinVr::ensureMonadoRunning()
+{
+    // Check if the OpenXR runtime's IPC socket exists.
+    // For Monado, this is monado_comp_ipc in XDG_RUNTIME_DIR.
+    const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    const QString ipcSocket = runtimeDir + QStringLiteral("/monado_comp_ipc");
+
+    if (QFileInfo::exists(ipcSocket)) {
+        qCDebug(KWINVR) << "OpenXR runtime IPC socket found:" << ipcSocket;
+        proceedWithVrActivation();
+        return;
+    }
+
+    if (m_waitingForMonado) {
+        return; // Already waiting
+    }
+
+    qCDebug(KWINVR) << "OpenXR runtime not running, starting monado.service...";
+
+    // Start the runtime via systemd user service (non-blocking)
+    QProcess::startDetached(QStringLiteral("systemctl"),
+                            {QStringLiteral("--user"), QStringLiteral("start"), QStringLiteral("monado.service")});
+
+    // Poll for the IPC socket to appear
+    m_waitingForMonado = true;
+    auto *timer = new QTimer(this);
+    int *attempts = new int(0);
+    connect(timer, &QTimer::timeout, this, [this, timer, attempts, ipcSocket]() {
+        (*attempts)++;
+        if (QFileInfo::exists(ipcSocket)) {
+            qCDebug(KWINVR) << "OpenXR runtime ready after" << *attempts * 500 << "ms";
+            timer->stop();
+            timer->deleteLater();
+            delete attempts;
+            m_waitingForMonado = false;
+            proceedWithVrActivation();
+        } else if (*attempts >= 30) { // 15 seconds timeout
+            qCWarning(KWINVR) << "Timed out waiting for OpenXR runtime";
+            timer->stop();
+            timer->deleteLater();
+            delete attempts;
+            m_waitingForMonado = false;
+            showNotification(i18n("Failed to Activate VR mode"),
+                             i18n("OpenXR runtime did not start in time"),
+                             KNotification::CloseOnTimeout);
+        }
+    });
+    timer->start(500);
+}
+
+void KwinVr::proceedWithVrActivation()
+{
+    showNotification(i18n("Starting VR mode"),
+                     i18n("Standby"),
+                     KNotification::Persistent);
+
+    m_engine = new QQmlApplicationEngine(this);
+    connect(m_engine, &QObject::destroyed, this, [this] {
+        // Clean everything inside KWin.
+        workspace()->setVrMode(false);
+        KwinVrHelpers::setDmabufFormatFilterForQt(false);
+        const auto windows = workspace()->windows();
+        for (auto window : windows) {
+            window->setVr(false);
+        }
+
+        KwinVrHelpers::setDmabufFormatFilterForQt(false);
+        input()->pointer()->setPositionLimiter(nullptr);
+        workspace()->setPopupBoundsResolver(nullptr);
+
+        m_active = false;
+        Q_EMIT vrActiveChanged();
+    });
+    // m_active will be set to false only when engine is deleted
+    m_active = true;
+    Q_EMIT vrActiveChanged();
+
+    if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
+        m_xrTest.start();
+    } else {
+        start();
+    }
+}
+
 void KwinVr::setVrActive(bool active)
 {
     if (active == m_active) {
@@ -180,38 +267,10 @@ void KwinVr::setVrActive(bool active)
             qCDebug(KWINVR) << "OpenXR loader initialized with runtime JSON:" << runtimeJsonPath;
         }
 
-        showNotification(i18n("Starting VR mode"),
-                         i18n("Standby"),
-                         KNotification::Persistent);
-
-        m_engine = new QQmlApplicationEngine(this);
-        connect(m_engine, &QObject::destroyed, this, [this] {
-            // Clean everything inside KWin.
-            // Doing it here to make sure nothing would change these flags
-            // and we can safely return to 2D mode.
-            workspace()->setVrMode(false);
-            KwinVrHelpers::setDmabufFormatFilterForQt(false);
-            const auto windows = workspace()->windows();
-            for (auto window : windows) {
-                window->setVr(false);
-            }
-
-            KwinVrHelpers::setDmabufFormatFilterForQt(false);
-            input()->pointer()->setPositionLimiter(nullptr);
-            workspace()->setPopupBoundsResolver(nullptr);
-
-            m_active = false;
-            Q_EMIT vrActiveChanged();
-        });
-        // m_active will be set to false only when engine is deleted
-        m_active = true;
-        Q_EMIT vrActiveChanged();
-
-        if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
-            m_xrTest.start();
-        } else {
-            start();
-        }
+        // Ensure the OpenXR runtime is running before proceeding.
+        // This avoids deadlocks from socket-activated startup where
+        // Monado's Wayland roundtrip blocks on KWin while KWin blocks on Monado's IPC.
+        ensureMonadoRunning();
     } else {
         stop();
         closeNotification();

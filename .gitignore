@@ -28,3 +28,8 @@ CMakeLists.txt.user*
 .cache
 .vscode
 .qmlls.ini
+# Packaging artifacts
+*.pkg.tar.zst
+*.pkg.tar.xz
+/pkg/
+/src/build/
