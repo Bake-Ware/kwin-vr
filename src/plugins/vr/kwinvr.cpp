@@ -396,6 +396,29 @@ bool KwinVr::setOutputLeasable(const QString &outputName, bool leasable)
     return false;
 }
 
+void KwinVr::refreshLeases()
+{
+    qCDebug(KWINVR) << "refreshLeases: restarting monado and re-offering leasable outputs";
+
+    // Restart Monado so it gets a fresh Wayland connection to this session
+    QProcess::startDetached(QStringLiteral("systemctl"),
+                            {QStringLiteral("--user"), QStringLiteral("restart"), QStringLiteral("monado.service")});
+
+    // Toggle leasable off then on for all leasable outputs to force re-offer
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    for (BackendOutput *output : outputs) {
+        if (output->isLeasable() && !output->isLeased()) {
+            OutputConfiguration offConfig;
+            offConfig.changeSet(output)->leasable = false;
+            Workspace::self()->applyOutputConfiguration(offConfig);
+
+            OutputConfiguration onConfig;
+            onConfig.changeSet(output)->leasable = true;
+            Workspace::self()->applyOutputConfiguration(onConfig);
+        }
+    }
+}
+
 void KwinVr::registerDBusService()
 {
     // We can still activate the plugin by hotkey,

@@ -44,6 +44,7 @@ public:
     QVariantList leasableOutputs() const;
     Q_INVOKABLE void refreshLeasableOutputs();
     Q_INVOKABLE bool setOutputLeasable(const QString &outputName, bool leasable);
+    Q_INVOKABLE void refreshLeases();
 
 Q_SIGNALS:
     void xrTestChanged();

@@ -36,6 +36,53 @@ ColumnLayout {
         }
     }
 
+    Controls.Button {
+        id: leaseButton
+        Layout.alignment: Qt.AlignHCenter
+        text: i18nc("@action:button", "Lease Selected")
+        icon.name: leaseButton.waiting ? "" : "view-refresh"
+        enabled: {
+            if (leaseButton.waiting)
+                return false
+            for (var i = 0; i < kcm.leasableOutputs.length; i++) {
+                if (kcm.leasableOutputs[i].leasable && !kcm.leasableOutputs[i].leased)
+                    return true
+            }
+            return false
+        }
+        property bool waiting: false
+        contentItem: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+            Controls.BusyIndicator {
+                visible: leaseButton.waiting
+                running: leaseButton.waiting
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+            }
+            Kirigami.Icon {
+                visible: !leaseButton.waiting
+                source: "view-refresh"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+            }
+            Controls.Label {
+                text: leaseButton.waiting ? i18nc("@action:button", "Leasing…") : i18nc("@action:button", "Lease Selected")
+            }
+        }
+        onClicked: {
+            leaseButton.waiting = true
+            kcm.refreshLeases()
+        }
+        Connections {
+            target: kcm
+            function onLeasableOutputsChanged() {
+                if (leaseButton.waiting) {
+                    leaseButton.waiting = false
+                }
+            }
+        }
+    }
+
     RowLayout {
         Layout.alignment: Qt.AlignHCenter
         spacing: 0

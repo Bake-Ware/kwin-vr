@@ -99,9 +99,10 @@ void DrmLeaseDeviceV1Interface::addOutput(DrmAbstractOutput *output)
     }
     m_connectors[drmOutput] = std::make_unique<DrmLeaseConnectorV1Interface>(this, drmOutput);
 
-    if (m_hasDrmMaster) {
-        offerConnector(m_connectors[drmOutput].get());
-    }
+    // Always offer the connector. On logind-managed sessions m_hasDrmMaster
+    // may report false even though KWin can create leases (same rationale as
+    // offerAvailableConnectors / handleOutputsQueried).
+    offerConnector(m_connectors[drmOutput].get());
 }
 
 void DrmLeaseDeviceV1Interface::removeOutput(DrmAbstractOutput *output)

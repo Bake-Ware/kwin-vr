@@ -236,6 +236,14 @@ bool KwinVRKcm::setOutputLeasable(const QString &outputName, bool leasable)
     return reply.arguments().value(0).toBool();
 }
 
+void KwinVRKcm::refreshLeases()
+{
+    auto iface = vrInterface();
+    if (iface->isValid()) {
+        iface->call(QStringLiteral("refreshLeases"));
+    }
+}
+
 } // namespace KWin
 
 #include "kwinvrkcm.moc"
