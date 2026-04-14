@@ -120,6 +120,51 @@ protected:
     bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const override;
 };
 
+class HudWindowFilter : public QSortFilterProxyModel
+{
+    Q_OBJECT
+    Q_PROPERTY(KWin::KwinWindowModel *windowModel READ windowModel WRITE setWindowModel NOTIFY windowModelChanged FINAL)
+    Q_PROPERTY(bool showNotifications READ showNotifications WRITE setShowNotifications NOTIFY showNotificationsChanged FINAL)
+    Q_PROPERTY(bool showOsd READ showOsd WRITE setShowOsd NOTIFY showOsdChanged FINAL)
+    Q_PROPERTY(bool showDock READ showDock WRITE setShowDock NOTIFY showDockChanged FINAL)
+    Q_PROPERTY(bool showAppletPopup READ showAppletPopup WRITE setShowAppletPopup NOTIFY showAppletPopupChanged FINAL)
+    QML_ELEMENT
+public:
+    explicit HudWindowFilter(QObject *parent = nullptr);
+
+    KwinWindowModel *windowModel() const;
+    void setWindowModel(KwinWindowModel *newWindowModel);
+
+    bool showNotifications() const;
+    void setShowNotifications(bool show);
+
+    bool showOsd() const;
+    void setShowOsd(bool show);
+
+    bool showDock() const;
+    void setShowDock(bool show);
+
+    bool showAppletPopup() const;
+    void setShowAppletPopup(bool show);
+
+Q_SIGNALS:
+    void windowModelChanged();
+    void showNotificationsChanged();
+    void showOsdChanged();
+    void showDockChanged();
+    void showAppletPopupChanged();
+
+protected:
+    bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const override;
+
+private:
+    KwinWindowModel *m_windowModel = nullptr;
+    bool m_showNotifications = true;
+    bool m_showOsd = true;
+    bool m_showDock = true;
+    bool m_showAppletPopup = true;
+};
+
 class TransientMenusWindowFilter : public AbstractTransientWindowModelFilter
 {
     Q_OBJECT

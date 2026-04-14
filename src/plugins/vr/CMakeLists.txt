@@ -75,6 +75,7 @@ qt6_add_qml_module(vr
         qml/VrBarrierConstraint.qml
         qml/KwinPseudoOutputMirror.qml
         qml/VrHudPlane.qml
+        qml/VrHudWindow.qml
         qml/Logger.qml
         qml/YuvMaterial.qml
         qml/WindowTextureMaterial.qml

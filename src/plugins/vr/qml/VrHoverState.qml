@@ -15,6 +15,7 @@ QtObject {
     required property Node hoveredObject
 
     // Current hovered objects by type
+    readonly property VrHudWindow currentHoveredVrHudWindow: hoveredObject?.parent as VrHudWindow
     readonly property KwinPseudoOutputMirror currentHoveredKwinPseudoOutputMirror: hoveredObject?.parent as KwinPseudoOutputMirror
     readonly property KwinWindowThumbnail3D currentHoveredKwinWindowThumbnail3D: hoveredObject?.parent as KwinWindowThumbnail3D
     readonly property KwinWindowThumbnailXrItem currentHoveredKwinWindowThumbnailXrItem: hoveredObject?.parent as KwinWindowThumbnailXrItem
@@ -31,6 +32,17 @@ QtObject {
     // Picking state - what window type is being hovered (independent of moving/resizing)
     readonly property StateGroup pickingState: StateGroup {
         states: [
+            State {
+                name: "hudWindow"
+                when: !!root.currentHoveredVrHudWindow?.client
+                PropertyChanges {
+                    root.activePickHandler: ({
+                        target: root.currentHoveredVrHudWindow,
+                        client: root.currentHoveredVrHudWindow.client,
+                        geometry: root.currentHoveredVrHudWindow.client.frameGeometry
+                    })
+                }
+            },
             State {
                 name: "pseudoOutput"
                 when: !!root.currentHoveredKwinPseudoOutputMirror?.output

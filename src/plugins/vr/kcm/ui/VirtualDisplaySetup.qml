@@ -84,6 +84,22 @@ ColumnLayout {
     }
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
+        settingName: "hudShowNotifications"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudShowOsd"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudShowDock"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "hudShowAppletPopup"
+    }
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
         settingName: "debugDisplayEnabled"
     }
     KCMUtils.SettingStateBinding {
@@ -378,6 +394,33 @@ ColumnLayout {
         text: i18nc("@option:check", "Show HUD calibration plane")
         checked: kcm.settings.hudEnabled
         onToggled: { kcm.settings.hudEnabled = checked; hudChanged() }
+    }
+
+    // HUD overlay window toggles
+    RowLayout {
+        Layout.alignment: Qt.AlignHCenter
+        spacing: Kirigami.Units.largeSpacing * 2
+
+        Controls.CheckBox {
+            text: i18nc("@option:check", "Notifications")
+            checked: kcm.settings.hudShowNotifications
+            onToggled: { kcm.settings.hudShowNotifications = checked; hudChanged() }
+        }
+        Controls.CheckBox {
+            text: i18nc("@option:check", "OSD (volume, etc.)")
+            checked: kcm.settings.hudShowOsd
+            onToggled: { kcm.settings.hudShowOsd = checked; hudChanged() }
+        }
+        Controls.CheckBox {
+            text: i18nc("@option:check", "Dock / Panel")
+            checked: kcm.settings.hudShowDock
+            onToggled: { kcm.settings.hudShowDock = checked; hudChanged() }
+        }
+        Controls.CheckBox {
+            text: i18nc("@option:check", "Start Menu / Applets")
+            checked: kcm.settings.hudShowAppletPopup
+            onToggled: { kcm.settings.hudShowAppletPopup = checked; hudChanged() }
+        }
     }
 
     ColumnLayout {

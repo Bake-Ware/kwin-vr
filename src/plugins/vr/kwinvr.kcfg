@@ -72,6 +72,22 @@
       <min>0.0</min>
       <max>6.0</max>
     </entry>
+    <entry name="hudShowNotifications" type="Bool">
+      <label>Show notification windows on HUD</label>
+      <default>true</default>
+    </entry>
+    <entry name="hudShowOsd" type="Bool">
+      <label>Show OSD windows (volume, keyboard layout) on HUD</label>
+      <default>true</default>
+    </entry>
+    <entry name="hudShowDock" type="Bool">
+      <label>Show dock/panel windows on HUD</label>
+      <default>true</default>
+    </entry>
+    <entry name="hudShowAppletPopup" type="Bool">
+      <label>Show applet popups (start menu, system tray) on HUD</label>
+      <default>true</default>
+    </entry>
     <entry name="debugDisplayEnabled" type="Bool">
       <label>Show debug pick info overlay in VR</label>
       <default>false</default>
@@ -272,7 +288,7 @@
     </entry>
     <entry name="mouseOffsetMaxDegrees" type="Double">
       <label>Maximum mouse offset from center (degrees)</label>
-      <default>20.0</default>
+      <default>50.0</default>
       <min>1.0</min>
       <max>60.0</max>
     </entry>
