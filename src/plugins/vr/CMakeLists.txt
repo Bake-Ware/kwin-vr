@@ -74,6 +74,7 @@ qt6_add_qml_module(vr
         qml/VrPointerConstraint.qml
         qml/VrBarrierConstraint.qml
         qml/KwinPseudoOutputMirror.qml
+        qml/VrHudPlane.qml
         qml/Logger.qml
         qml/YuvMaterial.qml
         qml/WindowTextureMaterial.qml
@@ -116,6 +117,7 @@ qt6_add_qml_module(vr
         vrfollowmode.h vrfollowmode.cpp
         kwintoqquick3dinputbridge.h kwintoqquick3dinputbridge.cpp
         textureprovideritem.h textureprovideritem.cpp
+        curvedplanegeometry.h curvedplanegeometry.cpp
         kwinvrconfigwrapper.h
 
     RESOURCES

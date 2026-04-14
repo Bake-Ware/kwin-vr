@@ -38,6 +38,50 @@
       <label>Hide the virtual display frame in VR (windows still use it for sizing)</label>
       <default>true</default>
     </entry>
+    <entry name="hudEnabled" type="Bool">
+      <label>Show HUD test plane in VR (camera-pinned calibration surface)</label>
+      <default>false</default>
+    </entry>
+    <entry name="hudDistanceFraction" type="Int">
+      <label>HUD distance as percentage of workspace distance</label>
+      <default>70</default>
+      <min>10</min>
+      <max>100</max>
+    </entry>
+    <entry name="hudVerticalAngle" type="Int">
+      <label>HUD vertical angle below center (degrees)</label>
+      <default>12</default>
+      <min>-45</min>
+      <max>45</max>
+    </entry>
+    <entry name="hudScaleH" type="Double">
+      <label>HUD surface horizontal scale</label>
+      <default>0.8</default>
+      <min>0.1</min>
+      <max>3.0</max>
+    </entry>
+    <entry name="hudScaleV" type="Double">
+      <label>HUD surface vertical scale</label>
+      <default>0.8</default>
+      <min>0.1</min>
+      <max>3.0</max>
+    </entry>
+    <entry name="hudCurvature" type="Double">
+      <label>HUD surface curvature</label>
+      <default>0.0</default>
+      <min>0.0</min>
+      <max>6.0</max>
+    </entry>
+    <entry name="debugDisplayEnabled" type="Bool">
+      <label>Show debug pick info overlay in VR</label>
+      <default>false</default>
+    </entry>
+    <entry name="debugDisplayCorner" type="Int">
+      <label>Corner for debug display (0=TL, 1=TR, 2=BL, 3=BR)</label>
+      <default>2</default>
+      <min>0</min>
+      <max>3</max>
+    </entry>
     <entry name="followEnabled" type="Bool">
       <label>Enable follow mode by default</label>
       <default>true</default>

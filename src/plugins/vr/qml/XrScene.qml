@@ -221,6 +221,17 @@ XrView {
                 position: Qt.vector3d(0, 5, -(xrView.distance - 20))
             }
 
+            /* HUD surface — grid + debug snap to this plane */
+            Loader3D {
+                active: KWinVRConfig.hudEnabled || KWinVRConfig.debugDisplayEnabled
+                sourceComponent: VrHudPlane {
+                    ppu: xrView.ppu
+                    displayWidth: KWinVRConfig.width * KWinVRConfig.scale
+                    displayHeight: KWinVRConfig.height * KWinVRConfig.scale
+                    lastPick: focusTracking.lastPick
+                }
+            }
+
             Xray {
                 id: pickRay
                 camera: cam
@@ -385,36 +396,17 @@ XrView {
                 model: OutputModel {}
                 delegate: KwinPseudoOutputMirror {
                     id: pseudoOutput
+                    readonly property bool isVirtualHidden: output.name === ("Virtual-" + kvs.params.name) && KWinVRConfig.hideVirtualDisplay
+                    // Remove from scene graph entirely when hidden
+                    parent: isVirtualHidden ? null : outputMirrorRepeater
                     ppu: allWindows.ppu
-                    property bool isHiddenVirtualDisplay: output.name === ("Virtual-" + kvs.params.name) && KWinVRConfig.hideVirtualDisplay
-                    visible: !isHiddenVirtualDisplay
-                    property bool _registered: false
-                    onIsHiddenVirtualDisplayChanged: {
-                        if (isHiddenVirtualDisplay) {
-                            if (_registered) {
-                                spaceAllocator.unregisterObject(pseudoOutput)
-                                followMode.unregisterObject(pseudoOutput)
-                                _registered = false
-                            }
-                            position = Qt.vector3d(0, 9999, 0)
-                        } else {
-                            _doRegister()
-                        }
-                    }
-                    function _doRegister() {
+                    Component.onCompleted: {
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
                         position = localPosition
                         KwinVrHelpers.turnToFaceKeepRoll(pseudoOutput, spaceAllocator.viewpoint)
                         spaceAllocator.registerObject(pseudoOutput)
                         followMode.registerObject(pseudoOutput)
-                        _registered = true
-                    }
-                    Component.onCompleted: {
-                        if (!isHiddenVirtualDisplay)
-                            _doRegister()
-                        else
-                            position = Qt.vector3d(0, 9999, 0)
                     }
                 }
                 function findPseudoOutputByOutput(output: QtObject): KwinPseudoOutputMirror {
@@ -488,14 +480,8 @@ XrView {
                             when: !kwinAppWindow.client.vr
                             PropertyChanges {
                                 kwinAppWindow {
-                                    parent: {
-                                        const po = outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
-                                        return (po && po.visible) ? po : allWindowsGrabHandle
-                                    }
-                                    grabHandle: {
-                                        const po = outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
-                                        return (po && po.visible) ? po : kwinAppWindow
-                                    }
+                                    parent: outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
+                                    grabHandle: kwinAppWindow.parent
                                     position: kwinAppWindow.centerOffset(
                                                   kwinAppWindow.client.frameGeometry,
                                                   kwinAppWindow.client.output.geometry,
@@ -506,13 +492,7 @@ XrView {
                                 restoreEntryValues: false
                             }
                             StateChangeScript {
-                                script: {
-                                    const po = outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
-                                    if (po && po.visible)
-                                        followMode.unregisterObject(kwinAppWindow)
-                                    else
-                                        followMode.registerObject(kwinAppWindow)
-                                }
+                                script: followMode.unregisterObject(kwinAppWindow)
                             }
                         }
                     ]

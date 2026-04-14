@@ -43,8 +43,6 @@ Node {
         property rect outputGeometry: root.output.geometry
         property Node grabHandle: root
         property zMargins itemDepth: ({top: 0.2, bottom: 0})
-        pickable: root.visible
-        frameColor: "#0816d0"
         frameWidth: frame.outputGeometry.width
         frameHeight: frame.outputGeometry.height
     }
