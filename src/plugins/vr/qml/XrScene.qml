@@ -214,21 +214,48 @@ XrView {
 
             DirectionalLight {}
 
-            /* Draw OSD windows in front of user */
-            VrOsdWindows {
-                windowModel: applicationWindowsRepeater.windowDataModel
-                ppu: xrView.ppu
-                position: Qt.vector3d(0, 5, -(xrView.distance - 20))
-            }
+            /* HUD surface — grid + debug + overlay windows */
+            Node {
+                id: hudNode
 
-            /* HUD surface — grid + debug snap to this plane */
-            Loader3D {
-                active: KWinVRConfig.hudEnabled || KWinVRConfig.debugDisplayEnabled
-                sourceComponent: VrHudPlane {
-                    ppu: xrView.ppu
-                    displayWidth: KWinVRConfig.width * KWinVRConfig.scale
-                    displayHeight: KWinVRConfig.height * KWinVRConfig.scale
-                    lastPick: focusTracking.lastPick
+                readonly property int dw: KWinVRConfig.width * KWinVRConfig.scale
+                readonly property int dh: KWinVRConfig.height * KWinVRConfig.scale
+                readonly property real surfaceW: dw / xrView.ppu * KWinVRConfig.hudScaleH
+                readonly property real surfaceH: dh / xrView.ppu * KWinVRConfig.hudScaleV
+                readonly property real hudDistance: KWinVRConfig.distance * KWinVRConfig.hudDistanceFraction / 100.0
+                readonly property real hudY: -(hudDistance * Math.tan(KWinVRConfig.hudVerticalAngle * Math.PI / 180.0))
+
+                position: Qt.vector3d(0, hudY, -hudDistance)
+
+                /* Grid + debug overlay (only when enabled) */
+                Loader3D {
+                    active: KWinVRConfig.hudEnabled || KWinVRConfig.debugDisplayEnabled
+                    sourceComponent: VrHudPlane {
+                        ppu: xrView.ppu
+                        displayWidth: hudNode.dw
+                        displayHeight: hudNode.dh
+                        lastPick: focusTracking.lastPick
+                    }
+                }
+
+                /* Overlay windows (dock, notifications, OSD, applets) pinned to HUD */
+                Repeater3D {
+                    id: hudWindowsRepeater
+                    model: HudWindowFilter {
+                        windowModel: applicationWindowsRepeater.windowDataModel
+                        showNotifications: KWinVRConfig.hudShowNotifications
+                        showOsd: KWinVRConfig.hudShowOsd
+                        showDock: KWinVRConfig.hudShowDock
+                        showAppletPopup: KWinVRConfig.hudShowAppletPopup
+                    }
+                    delegate: VrHudWindow {
+                        required property QtObject window
+                        client: window
+                        ppu: xrView.ppu
+                        hudSurfaceW: hudNode.surfaceW
+                        hudSurfaceH: hudNode.surfaceH
+                        hudCurvature: KWinVRConfig.hudCurvature
+                    }
                 }
             }
 

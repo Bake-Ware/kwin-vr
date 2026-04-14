@@ -31,12 +31,6 @@ Node {
     readonly property real surfaceW: displayWidth / ppu * KWinVRConfig.hudScaleH
     readonly property real surfaceH: displayHeight / ppu * KWinVRConfig.hudScaleV
 
-    // Derived from config
-    readonly property real hudDistance: KWinVRConfig.distance * KWinVRConfig.hudDistanceFraction / 100.0
-    readonly property real hudY: -(hudDistance * Math.tan(KWinVRConfig.hudVerticalAngle * Math.PI / 180.0))
-
-    position: Qt.vector3d(0, hudY, -hudDistance)
-
     Model {
         geometry: CurvedPlaneGeometry {
             width: root.surfaceW

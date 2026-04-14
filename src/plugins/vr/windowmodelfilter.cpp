@@ -112,8 +112,16 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
-    if (window->windowType() == WindowType::OnScreenDisplay) {
+    switch (window->windowType()) {
+    case WindowType::OnScreenDisplay:
+    case WindowType::Notification:
+    case WindowType::CriticalNotification:
+    case WindowType::Dock:
+    case WindowType::Tooltip:
+    case WindowType::AppletPopup:
         return false;
+    default:
+        break;
     }
 
     // Qt maintenance window had isTransient() == true, but transientFor() == nullptr
@@ -263,6 +271,147 @@ void AbstractTransientWindowModelFilter::setWindowModel(KwinWindowModel *newWind
     m_windowModel = newWindowModel;
     setSourceModel(m_windowModel);
     Q_EMIT windowModelChanged();
+}
+
+HudWindowFilter::HudWindowFilter(QObject *parent)
+    : QSortFilterProxyModel{parent}
+{
+}
+
+bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
+{
+    if (!m_windowModel) {
+        return false;
+    }
+
+    const QModelIndex index = m_windowModel->index(source_row, 0, source_parent);
+    if (!index.isValid()) {
+        return false;
+    }
+
+    const QVariant data = index.data();
+    if (!data.isValid()) {
+        return false;
+    }
+
+    Window *window = qvariant_cast<Window *>(data);
+    if (!window || !window->isClient()) {
+        return false;
+    }
+
+    // Direct type match
+    switch (window->windowType()) {
+    case WindowType::Notification:
+    case WindowType::CriticalNotification:
+        return m_showNotifications;
+    case WindowType::OnScreenDisplay:
+        return m_showOsd;
+    case WindowType::Dock:
+    case WindowType::Tooltip:
+        return m_showDock;
+    case WindowType::AppletPopup:
+        return m_showAppletPopup;
+    default:
+        break;
+    }
+
+    // Walk the transient chain to find if any ancestor is a HUD window.
+    // Handles submenus, flyouts, and tooltips that are children of HUD windows.
+    Window *ancestor = window->transientFor();
+    for (int depth = 0; ancestor && depth < 10; ++depth) {
+        switch (ancestor->windowType()) {
+        case WindowType::Dock:
+        case WindowType::Tooltip:
+            return m_showDock;
+        case WindowType::Notification:
+        case WindowType::CriticalNotification:
+            return m_showNotifications;
+        case WindowType::AppletPopup:
+            return m_showAppletPopup;
+        case WindowType::OnScreenDisplay:
+            return m_showOsd;
+        default:
+            break;
+        }
+        ancestor = ancestor->transientFor();
+    }
+
+    return false;
+}
+
+KwinWindowModel *HudWindowFilter::windowModel() const
+{
+    return m_windowModel;
+}
+
+void HudWindowFilter::setWindowModel(KwinWindowModel *newWindowModel)
+{
+    if (m_windowModel == newWindowModel) {
+        return;
+    }
+    m_windowModel = newWindowModel;
+    setSourceModel(m_windowModel);
+    Q_EMIT windowModelChanged();
+}
+
+bool HudWindowFilter::showNotifications() const
+{
+    return m_showNotifications;
+}
+
+void HudWindowFilter::setShowNotifications(bool show)
+{
+    if (m_showNotifications == show) {
+        return;
+    }
+    m_showNotifications = show;
+    Q_EMIT showNotificationsChanged();
+    invalidateFilter();
+}
+
+bool HudWindowFilter::showOsd() const
+{
+    return m_showOsd;
+}
+
+void HudWindowFilter::setShowOsd(bool show)
+{
+    if (m_showOsd == show) {
+        return;
+    }
+    m_showOsd = show;
+    Q_EMIT showOsdChanged();
+    invalidateFilter();
+}
+
+bool HudWindowFilter::showDock() const
+{
+    return m_showDock;
+}
+
+void HudWindowFilter::setShowDock(bool show)
+{
+    if (m_showDock == show) {
+        return;
+    }
+    m_showDock = show;
+    Q_EMIT showDockChanged();
+    invalidateFilter();
+}
+
+bool HudWindowFilter::showAppletPopup() const
+{
+    return m_showAppletPopup;
+}
+
+void HudWindowFilter::setShowAppletPopup(bool show)
+{
+    if (m_showAppletPopup == show) {
+        return;
+    }
+    m_showAppletPopup = show;
+    Q_EMIT showAppletPopupChanged();
+    invalidateFilter();
 }
 
 TransientNormalWindowFilter::TransientNormalWindowFilter(QObject *parent)
