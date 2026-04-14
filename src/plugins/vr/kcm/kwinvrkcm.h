@@ -45,6 +45,8 @@ public:
     Q_INVOKABLE void refreshLeasableOutputs();
     Q_INVOKABLE bool setOutputLeasable(const QString &outputName, bool leasable);
     Q_INVOKABLE void refreshLeases();
+    Q_INVOKABLE bool isAutoLeaseOutput(const QString &name) const;
+    Q_INVOKABLE void setAutoLeaseOutput(const QString &name, bool autoLease);
 
 Q_SIGNALS:
     void xrTestChanged();

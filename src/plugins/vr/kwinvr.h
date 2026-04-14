@@ -56,9 +56,13 @@ private:
     bool initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString *errorMessage) const;
     void ensureMonadoRunning();
     void proceedWithVrActivation();
+    void tryAutoLease();
+    void checkAutoStartVr();
 
     bool m_active = false;
     bool m_waitingForMonado = false;
+    bool m_autoLeaseTriggered = false;
+    bool m_autoStartPending = false;
     QQmlApplicationEngine *m_engine = nullptr;
     OpenXRTest m_xrTest;
     KConfigWatcher::Ptr m_watcher;

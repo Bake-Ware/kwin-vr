@@ -244,6 +244,23 @@ void KwinVRKcm::refreshLeases()
     }
 }
 
+bool KwinVRKcm::isAutoLeaseOutput(const QString &name) const
+{
+    return m_data->settings()->autoLeaseOutputs().contains(name);
+}
+
+void KwinVRKcm::setAutoLeaseOutput(const QString &name, bool autoLease)
+{
+    QStringList list = m_data->settings()->autoLeaseOutputs();
+    if (autoLease && !list.contains(name)) {
+        list.append(name);
+    } else if (!autoLease) {
+        list.removeAll(name);
+    }
+    m_data->settings()->setAutoLeaseOutputs(list);
+    settingsChanged();
+}
+
 } // namespace KWin
 
 #include "kwinvrkcm.moc"

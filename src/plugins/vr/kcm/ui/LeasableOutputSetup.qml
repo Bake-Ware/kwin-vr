@@ -83,34 +83,52 @@ ColumnLayout {
         }
     }
 
-    RowLayout {
+    ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
-        spacing: 0
+        spacing: Kirigami.Units.smallSpacing
 
-        ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
+        Repeater {
+            id: repeater
+            model: kcm.leasableOutputs
 
-            Repeater {
-                id: repeater
-                model: kcm.leasableOutputs
+            RowLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                Controls.CheckBox {
-                    Layout.alignment: Qt.AlignRight
-                    checked: modelData.leasable
+                Controls.ComboBox {
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                    model: [
+                        i18nc("@item:inlistbox output lease mode", "Disabled"),
+                        i18nc("@item:inlistbox output lease mode", "Manual"),
+                        i18nc("@item:inlistbox output lease mode", "Auto")
+                    ]
                     enabled: !modelData.leased
-                    onToggled: kcm.setOutputLeasable(modelData.name, checked)
+                    currentIndex: {
+                        var autoOutputs = kcm.settings.autoLeaseOutputs
+                        if (autoOutputs && autoOutputs.indexOf(modelData.name) >= 0)
+                            return 2
+                        if (modelData.leasable)
+                            return 1
+                        return 0
+                    }
+                    onActivated: function(index) {
+                        switch (index) {
+                        case 0:
+                            kcm.setOutputLeasable(modelData.name, false)
+                            kcm.setAutoLeaseOutput(modelData.name, false)
+                            break
+                        case 1:
+                            kcm.setOutputLeasable(modelData.name, true)
+                            kcm.setAutoLeaseOutput(modelData.name, false)
+                            break
+                        case 2:
+                            kcm.setOutputLeasable(modelData.name, true)
+                            kcm.setAutoLeaseOutput(modelData.name, true)
+                            break
+                        }
+                    }
                 }
-            }
-        }
-
-        ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            Repeater {
-                model: kcm.leasableOutputs
 
                 Controls.Label {
-                    Layout.alignment: Qt.AlignLeft
                     opacity: modelData.leased ? 0.6 : 1.0
                     text: {
                         var parts = [];

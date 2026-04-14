@@ -51,6 +51,12 @@ KwinVr::KwinVr()
     connect(kwinApp()->outputBackend(), &OutputBackend::outputsQueried, this, &KwinVr::leasableOutputsChanged);
     connect(kwinApp()->outputBackend(), &OutputBackend::outputLeaseStateChanged, this, &KwinVr::leasableOutputsChanged);
 
+    // Auto-lease configured outputs once they become available
+    connect(kwinApp()->outputBackend(), &OutputBackend::outputsQueried, this, &KwinVr::tryAutoLease);
+    connect(kwinApp()->outputBackend(), &OutputBackend::outputLeaseStateChanged, this, &KwinVr::checkAutoStartVr);
+    // Outputs may already be available if plugin loaded after initial enumeration
+    QTimer::singleShot(0, this, &KwinVr::tryAutoLease);
+
     auto cycleAction = new QAction(this);
     connect(cycleAction, &QAction::triggered, this, &KwinVr::onActivateVr);
     cycleAction->setObjectName(QStringLiteral("Activate VR Mode"));
@@ -415,6 +421,92 @@ void KwinVr::refreshLeases()
             OutputConfiguration onConfig;
             onConfig.changeSet(output)->leasable = true;
             Workspace::self()->applyOutputConfiguration(onConfig);
+        }
+    }
+}
+
+void KwinVr::tryAutoLease()
+{
+    if (m_autoLeaseTriggered || m_active) {
+        return;
+    }
+
+    auto config = KWinVRConfigWrapper::instance();
+    const QStringList autoOutputs = config->autoLeaseOutputs();
+    if (autoOutputs.isEmpty()) {
+        return;
+    }
+
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    if (outputs.isEmpty()) {
+        return;
+    }
+
+    bool anyConfigured = false;
+
+    for (const QString &name : autoOutputs) {
+        for (BackendOutput *output : outputs) {
+            if (output->name() == name
+                && (output->capabilities() & BackendOutput::Capability::Leasing)
+                && !output->isNonDesktop()) {
+                // Only auto-lease when the display is in SBS mode (double-wide resolution)
+                const int width = output->modeSize().width();
+                if (width < 3840) {
+                    qCDebug(KWINVR) << "Auto-lease: skipping" << name
+                                    << "- not in SBS mode (width=" << width << ")";
+                    break;
+                }
+                anyConfigured = true;
+                if (!output->isLeasable()) {
+                    setOutputLeasable(name, true);
+                }
+                break;
+            }
+        }
+    }
+
+    if (!anyConfigured) {
+        qCDebug(KWINVR) << "Auto-lease: no outputs in SBS mode for:" << autoOutputs;
+        return;
+    }
+
+    // Only set the flag once we've actually committed to leasing
+    m_autoLeaseTriggered = true;
+
+    qCDebug(KWINVR) << "Auto-lease: leasing configured outputs:" << autoOutputs;
+
+    if (config->autostartVr()) {
+        m_autoStartPending = true;
+    }
+
+    // Defer refreshLeases out of the signal handler — it toggles output state
+    // which emits outputLeaseStateChanged synchronously.
+    QTimer::singleShot(0, this, &KwinVr::refreshLeases);
+}
+
+void KwinVr::checkAutoStartVr()
+{
+    if (!m_autoStartPending || m_active) {
+        return;
+    }
+
+    auto config = KWinVRConfigWrapper::instance();
+    const QStringList autoOutputs = config->autoLeaseOutputs();
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+
+    for (const QString &name : autoOutputs) {
+        for (BackendOutput *output : outputs) {
+            if (output->name() == name && (output->isLeased() || output->isLeasePending())) {
+                qCDebug(KWINVR) << "Auto-start: output" << name << "leased, starting VR mode";
+                m_autoStartPending = false;
+                // Give KWin time to finish output reconfiguration after lease grant
+                QTimer::singleShot(3000, this, [this] {
+                    if (!m_active) {
+                        setVrActive(true);
+                    }
+                });
+                return;
+            }
         }
     }
 }

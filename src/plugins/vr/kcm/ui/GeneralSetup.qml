@@ -30,6 +30,11 @@ Item {
 
     KCMUtils.SettingStateBinding {
         configObject: kcm.settings
+        settingName: "autostartVr"
+    }
+
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
         settingName: "windowMode"
     }
 
@@ -51,12 +56,26 @@ Item {
             font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
         }
 
-        // Launch VR button
-        Controls.Button {
+        // Launch VR button + auto-start checkbox
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            text: kcm.vrActive ? i18nc("@action:button", "Stop VR Mode") : i18nc("@action:button", "Activate VR Mode")
-            icon.name: kcm.vrActive ? "media-playback-stop" : "video-display"
-            onClicked: kcm.vrActive = !kcm.vrActive
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.Button {
+                text: kcm.vrActive ? i18nc("@action:button", "Stop VR Mode") : i18nc("@action:button", "Activate VR Mode")
+                icon.name: kcm.vrActive ? "media-playback-stop" : "video-display"
+                onClicked: kcm.vrActive = !kcm.vrActive
+            }
+
+            Controls.CheckBox {
+                id: tAutostartVr
+                text: i18nc("@option:check", "Auto-start")
+                checked: kcm.settings.autostartVr
+            }
+
+            Kirigami.ContextualHelpButton {
+                toolTipText: xi18nc("@info:tooltip", "Automatically start VR mode when auto-leased displays are ready.<nl/><nl/>Mark displays for auto-lease in the Display Leasing section below, then enable this to skip the manual lease-and-start steps on every KWin restart.")
+            }
         }
 
         // OpenXR Test settings
@@ -184,6 +203,12 @@ Item {
         property: "openXrRuntimeJson"
         value: tOpenXrRuntimeJson.editText.trim()
         when: root.openXrRuntimeInitialized
+    }
+
+    Binding {
+        target: kcm.settings
+        property: "autostartVr"
+        value: tAutostartVr.checked
     }
 
 }

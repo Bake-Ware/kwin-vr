@@ -294,6 +294,14 @@
       <label>Enable multiview rendering</label>
       <default>false</default>
     </entry>
+    <entry name="autoLeaseOutputs" type="StringList">
+      <label>Output names to automatically lease on startup</label>
+      <default></default>
+    </entry>
+    <entry name="autostartVr" type="Bool">
+      <label>Automatically start VR mode after auto-leased outputs are leased</label>
+      <default>false</default>
+    </entry>
   </group>
 
   <group name="InputMapping">
