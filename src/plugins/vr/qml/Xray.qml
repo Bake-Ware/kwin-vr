@@ -81,6 +81,17 @@ Model {
         root.grabbedObjectPose.position = root.grabbedObjectPose.position.plus(Qt.vector3d(0,0, value))
     }
 
+    function grabMoveClamped(value: real, minDist: real, maxDist: real): void {
+        const pos = root.grabbedObjectPose.position
+        const newPos = pos.plus(Qt.vector3d(0, 0, value))
+        // Distance is the length of the relative position vector
+        const newDist = newPos.length()
+        if (newDist < minDist || newDist > maxDist) {
+            return
+        }
+        root.grabbedObjectPose.position = newPos
+    }
+
     function grabbedObjectDistance(): real {
         const pose = root.grabbedObjectPose
         const distance = pose?.position.length() ?? 0

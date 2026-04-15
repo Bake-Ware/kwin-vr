@@ -132,6 +132,24 @@ void KwinVrHelpers::windowMove(Window *window, const QPointF &topLeft)
     }
 }
 
+void KwinVrHelpers::windowResize(Window *window, qreal dw, qreal dh)
+{
+    if (!window) {
+        return;
+    }
+    const auto geo = window->frameGeometry();
+    const QSizeF newSize(qMax(1.0, geo.width() + dw), qMax(1.0, geo.height() + dh));
+    window->resize(newSize);
+}
+
+QSizeF KwinVrHelpers::windowSize(Window *window)
+{
+    if (!window) {
+        return QSizeF();
+    }
+    return window->frameGeometry().size();
+}
+
 bool KwinVrHelpers::keyMatch(int key, int modifiers, const QString &binding)
 {
     if (binding.isEmpty() || binding == "none") {

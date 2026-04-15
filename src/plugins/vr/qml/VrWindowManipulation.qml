@@ -182,7 +182,7 @@ QtObject {
         for(var pickResult of allPicks) {
             const obj = pickResult.objectHit ?? root.picking.getHoveredNodeFromItem(pickResult.itemHit)
             if(!obj) {
-                return null
+                continue
             }
 
             const pseudoOutput = (obj as VrScreenFrame)?.parent as KwinPseudoOutputMirror
@@ -231,10 +231,25 @@ QtObject {
         }
     }
 
+    // Resolves the KWin client from either currentMovingResizingWindow or the
+    // grabbed object.  Returns null when neither is a KwinApplicationWindow.
+    function resolveGrabbedClient(): QtObject {
+        if (root.currentMovingResizingWindow)
+            return root.currentMovingResizingWindow.client ?? null
+
+        const appWin = root.xray.grabbedObject as KwinApplicationWindow
+        return appWin ? (appWin.client ?? null) : null
+    }
+
     readonly property Connections lookForScreenToPut: Connections {
         target: root.picking
-        enabled: xray.grabbedObject && root.currentMovingResizingWindow
+        enabled: xray.grabbedObject !== null
         function onLastAllPicksChanged(): void {
+            const window = root.resolveGrabbedClient()
+            if (!window || !window.vr) {
+                return
+            }
+
             const ret = root.rayPickPseudoOutput()
             if (!ret) {
                 return
@@ -246,7 +261,6 @@ QtObject {
             // We need to move pointer in 2D world where we will land our window
             root.kwinInput.pointerPosition = pseudoOutput.uvToGlobal2DCoordinates(pick.uvPosition)
 
-            const window = currentMovingResizingWindow.client
             KWinC.Workspace.sendClientToScreen(window, pseudoOutput.output)
 
             xray.release()

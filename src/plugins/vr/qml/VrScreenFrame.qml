@@ -12,6 +12,7 @@ import QtQuick3D
 Model {
     id: root
     source: "#Rectangle"
+    pickable: true
 
     property real ppu: 20
     property real frameWidth: 200

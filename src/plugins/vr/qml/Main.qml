@@ -104,7 +104,18 @@ Item {
                         }
                     }
         onWheel: (event) => {
-                     // Wheel events are always accepted :(
+                     const dy = event.angleDelta.y
+                     if (dy === 0)
+                         return
+                     const direction = dy > 0 ? 1.0 : -1.0
+                     const step = direction * KWinVRConfig.grabResizeSensitivity
+                     if (event.modifiers & Qt.ShiftModifier) {
+                         xrView.resizeGrabbed(step, 0)
+                     } else if (event.modifiers & Qt.ControlModifier) {
+                         xrView.resizeGrabbed(0, step)
+                     } else {
+                         xrView.scrollGrab(dy)
+                     }
                  }
     }
 
@@ -112,6 +123,26 @@ Item {
         id: xrView
         kwinInput: kwinInput
         kwinInputFilter: kwinInputFIlter
+    }
+
+    // Pinch-to-resize: track cumulative scale and apply per-update deltas
+    QtObject {
+        id: pinchState
+        property real lastScale: 1.0
+    }
+    Connections {
+        target: kwinInputFIlter
+        function onPinchStarted(fingerCount) {
+            pinchState.lastScale = 1.0
+        }
+        function onPinchUpdated(scale, angleDelta) {
+            // scale is cumulative from gesture start; compute incremental ratio
+            if (pinchState.lastScale > 0.001) {
+                const ratio = scale / pinchState.lastScale
+                xrView.pinchResizeGrabbed(ratio)
+            }
+            pinchState.lastScale = scale
+        }
     }
 
     Connections {

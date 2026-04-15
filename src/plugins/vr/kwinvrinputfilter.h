@@ -35,6 +35,10 @@ Q_SIGNALS:
     void eventsTargetChanged();
     void activeChanged();
     void pointerInhibitDelayChanged();
+    void pinchStarted(int fingerCount);
+    void pinchUpdated(qreal scale, qreal angleDelta);
+    void pinchEnded();
+    void pinchCancelled();
 
 private:
     void resetEventsTarget();

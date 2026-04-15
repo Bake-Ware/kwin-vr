@@ -23,8 +23,13 @@ public:
     bool pointerButton(PointerButtonEvent *event) override;
     bool pointerAxis(PointerAxisEvent *event) override;
     bool pointerMotion(PointerMotionEvent *event) override;
+    bool pinchGestureBegin(PointerPinchGestureBeginEvent *event) override;
+    bool pinchGestureUpdate(PointerPinchGestureUpdateEvent *event) override;
+    bool pinchGestureEnd(PointerPinchGestureEndEvent *event) override;
+    bool pinchGestureCancelled(PointerPinchGestureCancelEvent *event) override;
 
     QObject *m_eventsTarget = nullptr;
+    KwinVrInputFilter *m_owner = nullptr;
     Qt::MouseButtons m_pressedButtons;
     std::chrono::microseconds m_lastPress{0};
     std::chrono::microseconds m_pointerInhibitDelay{100000};
@@ -117,10 +122,47 @@ bool VrInputFilter::pointerMotion(PointerMotionEvent *event)
     return false;
 }
 
+bool VrInputFilter::pinchGestureBegin(PointerPinchGestureBeginEvent *event)
+{
+    if (!m_owner) {
+        return false;
+    }
+    Q_EMIT m_owner->pinchStarted(event->fingerCount);
+    return true;
+}
+
+bool VrInputFilter::pinchGestureUpdate(PointerPinchGestureUpdateEvent *event)
+{
+    if (!m_owner) {
+        return false;
+    }
+    Q_EMIT m_owner->pinchUpdated(event->scale, event->angleDelta);
+    return true;
+}
+
+bool VrInputFilter::pinchGestureEnd(PointerPinchGestureEndEvent * /*event*/)
+{
+    if (!m_owner) {
+        return false;
+    }
+    Q_EMIT m_owner->pinchEnded();
+    return true;
+}
+
+bool VrInputFilter::pinchGestureCancelled(PointerPinchGestureCancelEvent * /*event*/)
+{
+    if (!m_owner) {
+        return false;
+    }
+    Q_EMIT m_owner->pinchCancelled();
+    return true;
+}
+
 KwinVrInputFilter::KwinVrInputFilter(QObject *parent)
     : QObject(parent)
 {
     m_filter = new VrInputFilter(InputFilterOrder::Effects);
+    static_cast<VrInputFilter *>(m_filter)->m_owner = this;
 }
 
 KwinVrInputFilter::~KwinVrInputFilter()

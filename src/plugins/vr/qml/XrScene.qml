@@ -158,6 +158,48 @@ XrView {
             pickRay.grab(grabAll ? allWindowsGrabHandle : focusTracking.hoveredGrabHandle)
     }
 
+    function grabMoveClamped(value: real, minDist: real, maxDist: real): void {
+        pickRay.grabMoveClamped(value, minDist, maxDist)
+    }
+
+    // Scroll-to-depth for grabbed detached VR windows.
+    // Each scroll step applies one sensitivity unit in the sign direction.
+    function scrollGrab(delta: real): void {
+        if (!pickRay.grabbedObject)
+            return
+        const appWin = pickRay.grabbedObject as KwinApplicationWindow
+        if (!appWin || !appWin.client || !appWin.client.vr)
+            return
+        const direction = delta > 0 ? 1.0 : -1.0
+        pickRay.grabMoveClamped(
+            direction * KWinVRConfig.grabScrollSensitivity,
+            KWinVRConfig.grabScrollMinDistance,
+            KWinVRConfig.grabScrollMaxDistance)
+    }
+
+    // Resize grabbed VR window. dw/dh are in pixels.
+    function resizeGrabbed(dw: real, dh: real): void {
+        if (!pickRay.grabbedObject)
+            return
+        const appWin = pickRay.grabbedObject as KwinApplicationWindow
+        if (!appWin || !appWin.client || !appWin.client.vr)
+            return
+        KwinVrHelpers.windowResize(appWin.client, dw, dh)
+    }
+
+    // Uniform scale resize for pinch gestures. scale is multiplicative (1.0 = no change).
+    function pinchResizeGrabbed(scale: real): void {
+        if (!pickRay.grabbedObject)
+            return
+        const appWin = pickRay.grabbedObject as KwinApplicationWindow
+        if (!appWin || !appWin.client || !appWin.client.vr)
+            return
+        const sz = KwinVrHelpers.windowSize(appWin.client)
+        const dw = sz.width * (scale - 1.0)
+        const dh = sz.height * (scale - 1.0)
+        KwinVrHelpers.windowResize(appWin.client, dw, dh)
+    }
+
     property alias desktopOrDockHovered: focusTracking.desktopOrDockHovered
     function grabDesktop(): bool {
         if (!desktopOrDockHovered) {
@@ -420,6 +462,8 @@ XrView {
 
             Repeater3D {
                 id: outputMirrorRepeater
+                // Map of output → pseudomirror, survives parent:null hiding
+                property var outputMap: ({})
                 model: OutputModel {}
                 delegate: KwinPseudoOutputMirror {
                     id: pseudoOutput
@@ -428,6 +472,7 @@ XrView {
                     parent: isVirtualHidden ? null : outputMirrorRepeater
                     ppu: allWindows.ppu
                     Component.onCompleted: {
+                        outputMirrorRepeater.outputMap[output.name] = pseudoOutput
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
                         position = localPosition
@@ -435,8 +480,17 @@ XrView {
                         spaceAllocator.registerObject(pseudoOutput)
                         followMode.registerObject(pseudoOutput)
                     }
+                    Component.onDestruction: {
+                        delete outputMirrorRepeater.outputMap[output.name]
+                    }
                 }
                 function findPseudoOutputByOutput(output: QtObject): KwinPseudoOutputMirror {
+                    // Check the map first — works even when pseudomirror is hidden (parent: null)
+                    const mapped = outputMap[output.name]
+                    if (mapped) {
+                        return mapped
+                    }
+                    // Fallback: iterate children for non-mapped entries
                     for(const child of this.children) {
                         const pseudoMirror = child as KwinPseudoOutputMirror
                         if(pseudoMirror && pseudoMirror.output === output) {

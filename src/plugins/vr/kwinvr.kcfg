@@ -177,6 +177,30 @@
       <default>4.0</default>
       <min>0.0</min>
     </entry>
+    <entry name="grabScrollSensitivity" type="Double">
+      <label>Distance per scroll notch when scrolling a grabbed VR window (cm)</label>
+      <default>3.0</default>
+      <min>0.5</min>
+      <max>20.0</max>
+    </entry>
+    <entry name="grabScrollMinDistance" type="Double">
+      <label>Minimum distance for scroll-to-depth on grabbed VR windows (cm)</label>
+      <default>10.0</default>
+      <min>1.0</min>
+      <max>100.0</max>
+    </entry>
+    <entry name="grabScrollMaxDistance" type="Double">
+      <label>Maximum distance for scroll-to-depth on grabbed VR windows (cm)</label>
+      <default>500.0</default>
+      <min>50.0</min>
+      <max>2000.0</max>
+    </entry>
+    <entry name="grabResizeSensitivity" type="Double">
+      <label>Pixels to resize per scroll notch or pinch step on grabbed VR windows</label>
+      <default>40.0</default>
+      <min>5.0</min>
+      <max>200.0</max>
+    </entry>
     <entry name="blend" type="Bool">
       <label>Enable transparent background by default</label>
       <default>true</default>
