@@ -36,18 +36,18 @@ source=()
 sha256sums=()
 
 build() {
-  cmake -B build -S "$startdir" \
+  cmake -B "$startdir/build" -S "$startdir" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INSTALL_LIBEXECDIR=lib \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF \
     -DKWIN_BUILD_VR=ON \
     -DCMAKE_DISABLE_FIND_PACKAGE_KF6DocTools=TRUE
-  cmake --build build -j$(nproc)
+  cmake --build "$startdir/build" -j$(nproc)
 }
 
 package() {
-  DESTDIR="$pkgdir" cmake --install build
+  DESTDIR="$pkgdir" cmake --install "$startdir/build"
   # KWin wayland needs CAP_SYS_NICE for realtime scheduling
   setcap CAP_SYS_NICE=+ep "$pkgdir/usr/bin/kwin_wayland"
 }
