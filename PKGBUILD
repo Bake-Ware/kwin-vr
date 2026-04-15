@@ -3,7 +3,7 @@ pkgname=kwin
 pkgver=6.6.3
 pkgrel=1
 pkgdesc='KDE Window Manager with VR support (custom build)'
-arch=(x86_64)
+arch=(x86_64 aarch64)
 license=(LGPL-2.0-or-later)
 url='https://kde.org/plasma-desktop/'
 
@@ -41,7 +41,8 @@ build() {
     -DCMAKE_INSTALL_LIBEXECDIR=lib \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF \
-    -DKWIN_BUILD_VR=ON
+    -DKWIN_BUILD_VR=ON \
+    -DCMAKE_DISABLE_FIND_PACKAGE_KF6DocTools=TRUE
   cmake --build build -j$(nproc)
 }
 
