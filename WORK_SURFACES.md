@@ -1,915 +1,534 @@
-# Work Surfaces -- Developer Guide & Feature Document
+# Work Surfaces -- Developer Guide
 
-**Branch:** `feature/work_surfaces`
+**Branch:** `6.6.3_vr_bake`
 **Last updated:** 2026-04-16
+**Feature commit:** `efd102d5a9` (work surfaces with UV-projection onto curved primitives)
 
-> **Heads up:** This file predates the wireframe + UV-projection overhaul
-> (2026-04-16). Sections 4c (shape components), 4e (`WorkSurfaceFace`), 6
-> (open questions) and 7 (lessons) still describe the cyan-face-rect era.
-> Current behavior and the phased refactor that got us here are in
-> `WORK_SURFACES_OVERHAUL.md`. Overhaul highlights:
-> - `wsFaceRect` and translucent `#Cylinder` / `#Sphere` reference meshes
->   are gone. Each primitive renders as a true geometry wireframe (edges
->   drawn as thin cylinders via `WsEdge.qml`).
-> - Wireframes reveal only while a window is being dragged anywhere, plus
->   surfaces hosting zero windows stay wireframe-visible so they remain
->   discoverable.
-> - Snapped windows deform to the primitive via `CylinderBodyGeometry` /
->   `SpherePatchGeometry`; flat faces use tilted `#Rectangle` as before.
-> - Region descriptors live on `WorkSurfaceFace` (`regionKind`, `regionRadius`,
->   curve params) and drive both the curved mesh swap in `KwinWaylandSurface3D`
->   and placement/rotation math in `WorkSurfaceFace.relayout`.
-> - Drag preview: `previewFace` on `KwinApplicationWindow` is bumped by
->   `VrWindowManipulation` while the ray hovers a region so the user sees the
->   deformed ghost; release commits, drag-off reverts.
-> - Sphere is a single forward-facing patch (was 6); face counts are otherwise
->   unchanged.
+History: this document was rewritten after the wireframe + UV-projection
+overhaul landed. The old cyan-facerect architecture is dead. The
+phase-by-phase plan that drove the rewrite is preserved in
+`WORK_SURFACES_OVERHAUL.md`.
 
 ---
 
 ## 1. Feature Overview
 
-### What Work Surfaces Are
+Work Surfaces are 3D primitives placed in VR space that act as window
+containers. Instead of windows floating freely, users drag them onto a
+primitive's region and the window UV-projects onto the shape:
 
-Work Surfaces are spatial 3D primitives placed in the KWin-VR environment that act
-as window containers. Instead of windows floating freely in VR space, users can
-organize them onto the faces of geometric shapes -- planes, cubes, cylinders,
-pyramids, and spheres. Each face of a primitive can host multiple windows, arranged
-automatically by a configurable layout engine.
+- **Plane, Cube, Pyramid** -- flat regions, window tilts to match face normal.
+- **Cylinder** -- body region bends the window into an arc on the cylinder
+  surface; caps stay flat.
+- **Sphere** -- window deforms into a spherical cap on the front.
 
-Think of them as virtual desks, walls, and workstations you build around yourself
-in VR space.
+Primitives render as **geometry wireframes** only. They are hidden while
+inactive (hosting at least one window) and revealed whenever:
 
-### Why They Exist
+1. Any VR window is being dragged anywhere in the scene.
+2. The primitive itself hosts zero windows.
 
-Free-floating VR windows become disorganized quickly. Work surfaces bring
-structure without sacrificing the flexibility of 3D space. The concept maps to
-physical-world metaphors: a flat monitor becomes a Plane, a corner desk becomes a
-Cube, a surround workstation becomes a Cylinder. The design also supports more
-exotic shapes (Pyramid, Sphere) for creative workflows and experimentation.
+Snapped windows stay visible regardless of wireframe state -- they are the
+primitive's "skin." Scaling the primitive rescales the wireframe but
+**not** the windows; windows keep their world size and occupy a smaller
+fraction of the region's UV.
 
-### User-Facing Concept
+### User flow
 
-From the user's perspective:
-
-1. Open the radial menu (middle-click in empty space)
-2. Click **Surface** to open the shape submenu
-3. Pick a shape (Plane, Cube, Cylinder, Pyramid, Sphere)
-4. The shape appears in VR space with translucent wireframe faces
-5. Drag windows onto faces to snap them in place
-6. Windows auto-arrange on each face using the active layout mode
-7. Surfaces persist across VR sessions
+1. Middle-click in empty space -> radial menu.
+2. `Surface -> Plane / Cube / Cylinder / Pyramid / Sphere`.
+3. Primitive appears, placed by `SpaceAllocator3D`, oriented to face the user.
+4. Drag any VR window. All primitive wireframes reveal.
+5. Ray a region -> window shows a **deformed ghost preview** on it.
+6. Release -> snap commits (window reparents to face, UV-projects).
+7. To adjust the primitive: middle-click a hosted window -> `Edit Surface`
+   -> `TransformGizmo3D` attaches to the primitive.
+8. To switch layout: middle-click the primitive itself -> `Layout` submenu.
 
 ---
 
 ## 2. Architecture
 
-### Component Diagram
-
 ```
-                        XrScene.qml
-                            |
-            +---------------+----------------+
-            |               |                |
-    outputMirrorRepeater  appWindowRepeater  workSurfaceRepeater
-            |               |                |
-  KwinPseudoOutputMirror  KwinAppWindow    Node (inline delegate)
-                            |                |
-                       3 states:         Loader3D
-                       - "screen"            |
-                       - "vr"          Shape Component
-                       - "surface"     (wsPlane/wsCube/
-                                        wsCylinder/wsPyramid/
-                                        wsSphere)
-                                             |
-                                       wsFaceRect (pickable face)
-```
-
-### Data Flow: Menu to Rendered Shape
-
-```
-RadialMenu.qml          (user clicks "Surface > Plane")
-    |
-    | onActionTriggered("addPlane")
-    v
-XrScene.qml              (action handler calls xrView.addWorkSurface)
-    |
-    | workSurfaceModel.addSurface(WorkSurfaceShape.Plane)
-    v
-WorkSurfaceModel (C++)   (creates WorkSurfaceData, emits rowsInserted)
-    |
-    | QAbstractListModel signal
-    v
-Repeater3D               (instantiates inline Node delegate)
-    |
-    | Component.onCompleted: spaceAllocator places it, saves transform
-    v
-Loader3D                  (switches sourceComponent by shapeType)
-    |
-    v
-Shape Component           (e.g. wsPlane: Node containing wsFaceRect instances)
-    |
-    v
-wsFaceRect                (pickable Model with wireframe texture)
+                          XrScene.qml
+                               |
+       +-----------------------+-----------------------+
+       |                       |                       |
+  outputMirror             appWindow              workSurface
+    Repeater3D             Repeater3D              Repeater3D
+       |                       |                       |
+KwinPseudoOutputMirror   KwinApplicationWindow    inline Node delegate
+                               |                       |
+                          states: screen /           Loader3D
+                          vr / surface               (shape Component by type)
+                               |                       |
+                          attachedFace,         wsPlane / wsCube /
+                          previewFace,          wsCylinder / wsPyramid /
+                          regionKind,           wsSphere
+                          regionRadius                 |
+                               |                       |
+                          KwinWaylandSurface3D   WsEdge edges (wireframe) +
+                          (Model: swap geometry  WorkSurfaceFace[] (pickable
+                          based on regionKind)   proxies + layout host)
 ```
 
-### The `required property` Lesson
+### Key invariants
 
-**Critical lesson learned during development:** When a `Repeater3D` delegate is
-an external QML component (e.g., `WorkSurface3D.qml`), the delegate and the
-component file must agree exactly on `required property` declarations. If the
-component also declares properties with the same names as model roles, QML silently
-shadows the model-injected values, causing blank/default data.
-
-**The solution adopted:** The delegate is defined **inline** in `XrScene.qml` as a
-plain `Node` with `required property` declarations that match the model roles
-exactly. The external `WorkSurface3D.qml` file exists but is NOT used as the
-delegate. Shape-specific content is loaded via a `Loader3D` that switches on
-`shapeType`, keeping the delegate lightweight and avoiding property shadowing.
-
-The external `WorkSurface3D.qml` still exists as a self-contained component with
-its own shape definitions and wireframe face component. It could be used if the
-`required property` issue is resolved in a future Qt version, or if the delegate
-is refactored to explicitly bind properties rather than relying on automatic model
-injection.
+- The grabHandle chain ends at `KwinApplicationWindow`. Anything below reads
+  region curve params off the grab handle dynamically, so the window tree
+  does not need prop-drilling through every intermediate component.
+- `WorkSurfaceFace.attachedWindows` is the single source of truth for which
+  windows are on a face.
+- `WorkSurface` delegate's `hostedWindowCount` is maintained by face callbacks
+  (`noteFaceHostedChanged`) -- no polling.
+- Snap commit flows through the existing `VrWindowManipulation` grab-release
+  path. Preview is a transient property on the grabbed window.
 
 ---
 
 ## 3. C++ Components
 
-### 3a. WorkSurfaceModel
+### 3.1 WorkSurfaceModel (`worksurfacemodel.{h,cpp}`)
 
-**Files:** `worksurfacemodel.h`, `worksurfacemodel.cpp`
+`QAbstractListModel` owning the list of work surfaces. JSON-persisted to
+`~/.config/kwinvr-worksurfaces.json`, debounced at 500ms.
 
-A `QAbstractListModel` that owns the list of work surface instances.
+Roles (QML names in parens):
 
-#### Roles
+| Role           | Name                | Type          |
+|----------------|---------------------|---------------|
+| SurfaceIdRole  | `surfaceId`         | QString (UUID)|
+| ShapeTypeRole  | `shapeType`         | int enum      |
+| PositionRole   | `surfacePosition`   | QVector3D     |
+| RotationRole   | `surfaceRotation`   | QQuaternion   |
+| ScaleRole      | `surfaceScale`      | QVector3D     |
+| FacesRole      | `surfaceFaces`      | QVariantList  |
 
-| Role enum        | Role name (QML)     | Type         | Description                   |
-|------------------|----------------------|--------------|-------------------------------|
-| SurfaceIdRole    | `surfaceId`          | QString      | UUID, unique per surface      |
-| ShapeTypeRole    | `shapeType`          | int          | WorkSurfaceShape::Type enum   |
-| PositionRole     | `surfacePosition`    | QVector3D    | World-space position          |
-| RotationRole     | `surfaceRotation`    | QQuaternion  | World-space rotation          |
-| ScaleRole        | `surfaceScale`       | QVector3D    | Scale vector                  |
-| FacesRole        | `surfaceFaces`       | QVariantList | List of WorkSurfaceFaceData   |
-
-Note: The position/rotation/scale role names are prefixed with `surface` to
-avoid collisions with built-in Node properties in QML delegates.
-
-#### CRUD API
+Invokable API:
 
 ```cpp
 Q_INVOKABLE QString addSurface(int shapeType);
 Q_INVOKABLE void removeSurface(const QString &id);
 Q_INVOKABLE void duplicateSurface(const QString &id);
-Q_INVOKABLE void updateTransform(const QString &id, const QVector3D &position,
-                                 const QQuaternion &rotation, const QVector3D &scale);
-Q_INVOKABLE void setFaceLayoutMode(const QString &id, int faceIndex, int layoutMode);
+Q_INVOKABLE void updateTransform(const QString &id, const QVector3D &pos,
+                                 const QQuaternion &rot, const QVector3D &scale);
+Q_INVOKABLE void setFaceLayoutMode(const QString &id, int faceIndex, int mode);
 ```
 
-- `addSurface`: Creates a new surface with a generated UUID. Initializes the
-  correct number of `WorkSurfaceFaceData` entries based on shape type. Returns
-  the new ID.
-- `duplicateSurface`: Deep-copies a surface with a new ID, offset by
-  `(10, 0, 0)` world units so it appears next to the original.
-- `updateTransform`: Called from QML when a surface is moved/rotated/scaled.
-  Emits `dataChanged` for the transform roles.
+Face counts per shape are declared in `WorkSurfaceData::faceCountForShape`:
 
-#### Persistence
+| Shape    | Faces | Regions                                   |
+|----------|-------|-------------------------------------------|
+| Plane    | 1     | 1 flat                                    |
+| Cube     | 6     | 6 flat (front/back/left/right/top/bottom) |
+| Cylinder | 3     | 1 cylinder body + 2 flat caps             |
+| Pyramid  | 5     | 4 flat slants + 1 flat base               |
+| Sphere   | 1     | 1 spherical patch (front cap)             |
 
-- **File:** `~/.config/kwinvr-worksurfaces.json`
-- **Format:**
+Sphere was 6 patches pre-overhaul; collapsed to 1 for v1.
 
-```json
-{
-    "version": 1,
-    "surfaces": [
-        {
-            "id": "uuid-string",
-            "shapeType": 0,
-            "position": { "x": 0, "y": 0, "z": -80 },
-            "rotation": { "w": 1, "x": 0, "y": 0, "z": 0 },
-            "scale": { "x": 1, "y": 1, "z": 1 },
-            "faces": [
-                { "layoutMode": 0 }
-            ]
-        }
-    ]
-}
-```
+Note: `wsLog()` writes to `/tmp/kwinvr-worksurface.log` to bypass journald
+rate-limiting. Gate or remove before release merge.
 
-- **Load:** On construction, reads the JSON file and populates `m_surfaces` via
-  `beginResetModel`/`endResetModel`.
-- **Save:** Debounced via a 500ms single-shot `QTimer`. Every mutation calls
-  `scheduleSave()`. Destructor force-saves if the timer is active.
-- **Path creation:** `QDir().mkpath()` ensures the config directory exists.
+### 3.2 Region enums (`worksurfacemodel.h`)
 
-#### Debug Logging
-
-The model uses a file-based logger (`wsLog()`) that writes to
-`/tmp/kwinvr-worksurface.log`. This bypasses journald rate limiting, which was
-found to silently drop `console.log` and `qCDebug` messages during rapid
-model operations. See Section 7 for details.
-
-#### Shape Enum
+Three QML-exposed namespaces:
 
 ```cpp
-namespace WorkSurfaceShape {
-    enum Type { Plane, Cube, Cylinder, Pyramid, Sphere };
-}
+namespace WorkSurfaceShape  { enum Type { Plane, Cube, Cylinder, Pyramid, Sphere }; }
+namespace WorkSurfaceLayout { enum Mode { Masonry, Grid, Stack, Freeform, Cover }; }
+namespace WorkSurfaceRegion { enum Kind { FlatRect, CylinderBody, SpherePatch }; }
 ```
 
-Exposed to QML as `WorkSurfaceShape.Plane`, etc. via `Q_NAMESPACE` + `QML_ELEMENT`.
+Accessed in QML as `WorkSurfaceShape.Cube`, `WorkSurfaceLayout.Stack`,
+`WorkSurfaceRegion.CylinderBody`.
 
-#### Face Count per Shape
+### 3.3 WorkSurfaceLayoutEngine (`worksurfacelayout.{h,cpp}`)
 
-| Shape    | Face count | Faces                                      |
-|----------|------------|--------------------------------------------|
-| Plane    | 1          | Single forward-facing                      |
-| Cube     | 6          | Front, back, left, right, top, bottom      |
-| Cylinder | 3          | Body (front-facing wrap) + 2 caps          |
-| Pyramid  | 5          | 4 slanted sides + base                     |
-| Sphere   | 6          | 6 patches (cube-sphere projection)         |
+`QML_SINGLETON`. Pure function: `computeLayout(mode, faceSize, windowSizes, activeIndex)`
+returns `QVariantList<LayoutSlot>`.
 
-### 3b. WorkSurfaceLayoutEngine
-
-**Files:** `worksurfacelayout.h`, `worksurfacelayout.cpp`
-
-A `QML_SINGLETON` that computes window positions within a rectangular face region.
-
-#### API
+`LayoutSlot`:
 
 ```cpp
-Q_INVOKABLE QVariantList computeLayout(int layoutMode, const QSizeF &faceSize,
-                                       const QVariantList &windowSizes,
-                                       int activeIndex = 0);
+struct LayoutSlot { QRectF rect; int zOrder; qreal scale; };
 ```
 
-Takes `QVariantList` of `QSizeF` for cross-QML/C++ compatibility. Returns a
-`QVariantList` of `LayoutSlot` gadgets.
+Modes:
 
-#### LayoutSlot Gadget
+| Mode     | Behavior                                                              |
+|----------|-----------------------------------------------------------------------|
+| Masonry  | Pack into columns, shortest-column-first. Aspect-preserve scale.      |
+| Grid     | Equal cells, auto rows x cols from sqrt.                              |
+| Stack    | All at center, `activeIndex` on top. On curved regions: onion radial. |
+| Freeform | Center placement, no scaling.                                         |
+| Cover    | Active fills region, others hidden (rect=0).                          |
 
-```cpp
-struct LayoutSlot {
-    QRectF rect;    // Position and size within the face
-    int zOrder;     // Depth ordering
-    qreal scale;    // Scale factor applied to the window
-};
-```
+The engine always returns slots in unrolled (flat) face coordinates. Curved
+region placement happens in `WorkSurfaceFace.relayout` which maps the flat
+slot to an arc / sphere position + rotation.
 
-Exposed to QML as a value type via `QML_VALUE_TYPE(layoutSlot)` +
-`QML_STRUCTURED_VALUE`.
+### 3.4 Curved geometry classes
 
-#### Layout Modes
+All three extend `QQuick3DGeometry` with UV-mapped vertex buffers sized in
+world units. They are `QML_ELEMENT`s so shape components and
+`KwinWaylandSurface3D` can instantiate them inline.
 
-| Mode     | Enum value | Behavior                                                   |
-|----------|------------|------------------------------------------------------------|
-| Masonry  | 0          | Pack into columns, shortest-column-first. Aspect-preserving scale to fit column width. |
-| Grid     | 1          | Equal-cell grid (auto rows x cols from sqrt). Windows centered in cells. |
-| Stack    | 2          | All windows centered, `activeIndex` on top (zOrder = n). 90% face fill. |
-| Freeform | 3          | Windows placed at center, no scaling. Position is initial only. |
-| Cover    | 4          | Active window fills face. All others hidden (rect = 0, scale = 0). |
+**`CurvedPlaneGeometry`** (pre-existing, pre-overhaul):
+Horizontal arc bend. Properties: `width`, `height`, `curvature` (radians),
+`segments`.
 
-The layout mode enum is:
+**`CylinderBodyGeometry`** (new):
+Vertical arc slice on a cylinder. Properties: `radius`, `arcAngle`,
+`height`, `segments`. At `arcAngle=0` reduces to a flat strip; at `2pi`
+wraps full circumference. Vertices at `(r*sin(theta), y, r*cos(theta))` with
+outward normals. UVs run `0..1` across the arc (u) and top-to-bottom (v).
 
-```cpp
-namespace WorkSurfaceLayout {
-    enum Mode { Masonry, Grid, Stack, Freeform, Cover };
-}
-```
+**`SpherePatchGeometry`** (new):
+Rectangular patch on a sphere. Properties: `radius`, `widthAngle`,
+`heightAngle` (both radians), `columns`, `rows`. Centered on `+Z`:
+`(r*cos(phi)*sin(theta), r*sin(phi), r*cos(phi)*cos(theta))`. Normals radiate
+from origin.
+
+**Design note:** each geometry's origin is the radial center of its curve, so
+a Model sitting at its parent region's origin with these geometries
+produces a mesh that wraps the parent primitive. This is why the sphere
+`WorkSurfaceFace` sits at the primitive root (0,0,0) and not at (0,0,r).
 
 ---
 
 ## 4. QML Components
 
-### 4a. Radial Menu Submenu System
+### 4.1 `WsEdge.qml`
 
-**Files:** `RadialMenu.qml`, `RadialMenuNode.qml`
+Thin `#Cylinder` Model drawn between two endpoints, used to build primitive
+wireframes. Key properties: `edgeFrom`, `edgeTo`, `thickness`, `edgeColor`.
+Rotation is computed via `KwinVrHelpers.rotationBetweenVectors(Qt.vector3d(0,1,0), delta)`.
 
-The radial menu was refactored from a flat 5-button design to support nested
-submenus via a menu stack.
+Used in `XrScene.qml`'s shape Components. Each shape Component declares a
+`wireframeVisible` bool; each edge binds `visible` to it. The
+`workSurface` delegate Binds `wireframeVisible` to
+`xrView.anyWindowDragging || hostedWindowCount === 0`.
 
-#### Menu Item Format
+### 4.2 `WorkSurfaceFace.qml`
 
-```javascript
-menuItems: [
-    { label: "Park Ray",  action: "parkRay" },
-    { label: "Follow",    action: "follow",  enabled: someToggleState },
-    { label: "Surface",   submenu: [
-        { label: "Plane",    action: "addPlane" },
-        { label: "Cube",     action: "addCube" },
-        // ...
-    ]}
-]
-```
+Per-region host. Exposes:
 
-Each item is a JS object with:
-- `label`: Display text
-- `action`: String identifier fired via `actionTriggered(string action)` signal
-- `enabled`: Optional boolean, shows toggle state (red border when true)
-- `submenu`: Optional array of child items. When present, clicking navigates into the submenu instead of firing an action.
+- **Face dimensions:** `faceWidth`, `faceHeight` (world units) -- flat extent
+  even for curved regions (arc length for cylinder body, `r * angle` for
+  sphere patch). Drives layout engine input.
+- **Region descriptor:** `regionKind` (enum), `regionRadius`,
+  `regionArcAngle`, `regionPatchWidthAngle`, `regionPatchHeightAngle`.
+- **Windowing:** `attachedWindows` (list of KwinApplicationWindow),
+  `activeIndex`, `layoutMode`.
+- **Pickable proxy:** invisible `#Rectangle` Model, alpha 0, `depthDrawMode: NeverDepthDraw`.
+  Exists only to receive ray-pick hits during drag. The visible representation
+  is the primitive's wireframe.
 
-#### Menu Stack
+Core functions:
 
-```javascript
-property var menuStack: []  // Stack of {items, parentLabel}
-readonly property var currentItems: menuStack.length > 0
-    ? menuStack[menuStack.length - 1].items
-    : menuItems
-```
+- `attachWindow(appWin)` -- adds to list, sets `appWin.attachedFace = self`,
+  reparents the window to this face, notifies the delegate via
+  `_delegate.noteFaceHostedChanged(+1)`, calls `relayout`.
+- `detachWindow(appWin)` -- inverse.
+- `relayout()` -- calls the layout engine, then for each window:
+  - **FlatRect:** `position = (cx, cy, 0)`, `rotation = identity`.
+  - **CylinderBody:** `theta = cx / r`, `position = (0, cy, 0)` plus onion Z
+    offset in Stack mode, `rotation = rotationBetweenVectors((0,0,1), (sin(theta),0,cos(theta)))`.
+    The window's own curved mesh then bulges to radius r.
+  - **SpherePatch:** `phi = cy / r`, `theta = cx / (r * cos(phi))`,
+    `position` is the origin plus radial onion offset, `rotation = rotationBetweenVectors((0,0,1), dir)`.
 
-- `pushSubmenu(items, parentLabel)`: Pushes a new level onto the stack.
-- `popSubmenu()`: Pops back to the parent level.
-- Center button shows `"<"` when in a submenu (back navigation) and acts as
-  close button at root level.
-- `menuStack` is reset to `[]` on close animation completion.
+### 4.3 Shape Components (inline in `XrScene.qml`)
 
-#### Signal Chain
+Five `Component` blocks instantiated by a `Loader3D` inside the
+`workSurfaceRepeater` delegate. Each Component:
 
-```
-RadialMenu.onActionTriggered(action)
-    -> RadialMenuNode.onActionTriggered(action)  [alias passthrough]
-        -> XrScene radialMenuLoader delegate onActionTriggered handler
-```
+1. Declares `property bool wireframeVisible: true`.
+2. Draws the primitive's edges as `WsEdge` instances bound to
+   `wireframeVisible`.
+3. Places one or more `WorkSurfaceFace` children with the appropriate
+   `regionKind` and curve parameters.
 
-The `RadialMenuNode` wraps `RadialMenu` inside a `VRWindow` (2D-in-3D rendering
-via texture compositing) and aliases all signals through.
+Specifics:
 
-#### Legacy Compatibility
+- **wsPlane** -- 4 rectangle edges, one `WorkSurfaceFace` 60x40.
+- **wsCube** -- 12 edges (top + bottom squares + 4 vertical posts), 6 faces
+  (front/back 60x40, left/right 60x40, top/bottom 60x60). Cube extent
+  60x40x60.
+- **wsCylinder** -- top + bottom circles (24 segments each) + 8 vertical
+  spines. Body face `faceWidth = 2*pi*30`, `faceHeight = 40`,
+  `regionKind = CylinderBody`, `regionRadius = 30`. Two flat caps at y=+/-20.
+- **wsPyramid** -- base square (4 edges) + 4 slant edges to apex at y=30.
+  4 slant faces 42x24 (FlatRect) + 1 base 60x60.
+- **wsSphere** -- 12 longitude meridians (24 segments each) + 5 latitude
+  rings at +/-60, +/-30, 0 degrees. Single face at primitive origin:
+  `regionKind = SpherePatch`, `regionRadius = 30`,
+  `regionPatchWidthAngle = 120deg`, `regionPatchHeightAngle = 80deg`.
 
-The old `buttonClicked(int index)` and `buttonLabels`/`buttonEnabled` list
-properties are preserved. The repeater model falls back to `buttonLabels.length`
-when `currentCount` is 0.
+### 4.4 `KwinWaylandSurface3D.qml` -- curve swap
 
-### 4b. XrScene Delegate Structure (Inline Node)
-
-**File:** `XrScene.qml`, lines 667-706
-
-The work surface Repeater3D uses an inline delegate rather than an external component:
-
-```qml
-Repeater3D {
-    id: workSurfaceRepeater
-    model: WorkSurfaceModel { id: workSurfaceModel }
-    delegate: Node {
-        id: workSurface
-        required property int index
-        required property string surfaceId
-        required property int shapeType
-
-        property size itemSize: Qt.size(60, 40)
-        property Node grabHandle: workSurface
-        property bool _initialized: false
-
-        Loader3D {
-            id: wsShapeLoader
-            sourceComponent: {
-                switch (workSurface.shapeType) {
-                case 0: return wsPlane
-                case 1: return wsCube
-                case 2: return wsCylinder
-                case 3: return wsPyramid
-                case 4: return wsSphere
-                default: return wsPlane
-                }
-            }
-        }
-
-        Component.onCompleted: {
-            // SpaceAllocator places it, then persist initial transform
-            const globalPos = spaceAllocator.findFreePosition(...)
-            workSurface.position = ...
-            KwinVrHelpers.turnToFaceKeepRoll(workSurface, spaceAllocator.viewpoint)
-            workSurfaceModel.updateTransform(surfaceId, ...)
-            spaceAllocator.registerObject(workSurface)
-            followMode.registerObject(workSurface)
-        }
-    }
-}
-```
-
-Key points:
-- `required property` declarations match model role names exactly.
-- `_initialized` flag guards against premature transform persistence.
-- The delegate is a child of `allWindowsGrabHandle`, same as output mirrors
-  and application windows. This means it participates in the follow mode and
-  grab-all operations.
-
-### 4c. Shape Components
-
-**File:** `XrScene.qml`, lines 710-815
-
-Five shape components are defined as `Component` blocks inside `allWindowsGrabHandle`,
-shared by all delegate instances via `Loader3D.sourceComponent`.
-
-All shapes use a shared `wsFaceRect` component for their pickable faces:
+The window Model either renders as a flat `#Rectangle` scaled to surface
+size, or swaps to a procedurally-generated curved mesh. Selection by region:
 
 ```qml
-Component {
-    id: wsFaceRect
-    Model {
-        property real faceW: 60
-        property real faceH: 40
-        property Node grabHandle: null
-        source: "#Rectangle"
-        pickable: true
-        scale: Qt.vector3d(faceW / 100, faceH / 100, 0.001)
-        materials: PrincipledMaterial {
-            baseColorMap: Texture {
-                sourceItem: Rectangle {
-                    // Wireframe appearance: translucent cyan fill,
-                    // corner markers, center crosshair
-                }
-            }
-            alphaMode: PrincipledMaterial.Blend
-            lighting: PrincipledMaterial.NoLighting
-            depthDrawMode: Material.OpaqueOnlyDepthDraw
-        }
-        depthBias: 50
+source: root.regionKind === WorkSurfaceRegion.FlatRect ? "#Rectangle" : ""
+geometry: {
+    switch (root.regionKind) {
+    case WorkSurfaceRegion.CylinderBody: return _cylGeom
+    case WorkSurfaceRegion.SpherePatch:  return _sphGeom
+    default: return null
     }
 }
+scale: root.regionKind === WorkSurfaceRegion.FlatRect
+       ? Qt.vector3d(surfWorldWidth/100, surfWorldHeight/100, 0.01)
+       : Qt.vector3d(1, 1, 1)
 ```
 
-#### wsPlane
-- 1 face, forward-facing, 60x40 world units.
+`regionKind` and `regionRadius` are read from `model.grabHandle` dynamically
+(KwinApplicationWindow surfaces them). Each surface computes its own curve
+from its own `surfaceSize / ppu` world dimensions. Curve arc/angle =
+`surfWorldWidth / regionRadius`, clamped to avoid self-overlap.
 
-#### wsCube
-- 6 faces arranged as a box.
-- Front/back at z=+/-30, left/right at x=+/-30, top/bottom at y=+/-20.
-- Side faces are 60x40. Top/bottom faces are 60x60.
+**Current limit:** subsurfaces (popups, menus) curve per-subsurface using
+their OWN local origin as the curve center. They look right individually
+but misalign with the parent arc. Acceptable for v1 -- popups are small.
 
-#### wsCylinder
-- A visual `#Cylinder` Model (translucent white) for shape reference.
-- 1 body face (188x40 -- unrolled circumference) facing forward.
-- 2 cap faces (60x60) at y=+/-20, rotated to face up/down.
+### 4.5 `KwinApplicationWindow` state machine
 
-#### wsPyramid
-- 4 slanted faces at calculated angles.
-- Slant angle: `atan2(40, 30)` degrees from vertical.
-- Slanted face size: 42x24. Base face: 60x60.
+Three states (mutually exclusive, defined in the XrScene delegate):
 
-#### wsSphere
-- A visual `#Sphere` Model (translucent white, scaled to r=30).
-- 6 patch faces (36x36 each) positioned at +/-30 on each axis.
-- Cube-sphere projection layout (one face per axis direction).
+| State     | When                                      | Parent               |
+|-----------|-------------------------------------------|----------------------|
+| `screen`  | `!client.vr`                              | pseudo output mirror |
+| `vr`      | `client.vr && attachedFace === null`      | allWindowsGrabHandle |
+| `surface` | `client.vr && attachedFace !== null`      | attachedFace         |
 
-### 4d. WorkSurface3D.qml -- Standalone Component (Not Currently Used as Delegate)
-
-**File:** `WorkSurface3D.qml`
-
-A self-contained work surface component that includes:
-- Its own `wireframeFace` Component (equivalent to `wsFaceRect` in XrScene)
-- Shape components (`planeComponent`, `cubeComponent`, `cylinderComponent`,
-  `pyramidComponent`, `sphereComponent`)
-- Transform persistence via `onPositionChanged`/`onRotationChanged`/`onScaleChanged`
-- Properties: `surfaceId`, `shapeType`, `ppu`, `selected`, `baseFaceWidth`,
-  `baseFaceHeight`, `surfaceModel`, `_initialized`
-
-This file is registered in CMakeLists.txt and compiles into the QML module.
-It is NOT used as the Repeater3D delegate due to the `required property`
-shadowing issue (see Section 7). It serves as:
-1. Reference implementation for what a complete work surface component looks like
-2. Potential future delegate if the property injection issue is resolved
-3. Usable independently if surfaces are ever created outside of a Repeater3D
-
-### 4e. WorkSurfaceFace.qml -- Designed But Not Yet Integrated
-
-**File:** `WorkSurfaceFace.qml`
-
-A per-face window container modeled after `KwinPseudoOutputMirror`. Features:
-
-- **Pickable face surface** with wireframe material that changes color when
-  windows are attached (cyan -> green).
-- **ZStacker** for window depth ordering (uses `stackingOrder` property).
-- **Window management API:**
-  - `attachWindow(appWin)`: Adds to `attachedWindows`, sets `appWin.attachedFace`,
-    calls `relayout()`.
-  - `detachWindow(appWin)`: Removes from list, clears `attachedFace`, adjusts
-    `activeIndex`, calls `relayout()`.
-  - `relayout()`: Collects window sizes, calls
-    `layoutEngine.computeLayout(layoutMode, faceSize, windowSizes, activeIndex)`,
-    then positions each window.
-  - `cycleActiveIndex(delta)`: For Stack/Cover modes, cycles through windows.
-- **UV coordinate conversion:** `uvToLocalPosition(coords)` maps ray pick UV
-  (0-1) to local 3D coordinates on the face.
-
-**Integration status:** This component exists and compiles but is not yet wired
-into the shape components. The current shapes use the simpler `wsFaceRect`
-component (pickable rectangles without window hosting logic). Integrating
-`WorkSurfaceFace` requires replacing `wsFaceRect` loaders inside each shape
-component with `WorkSurfaceFace` instances.
-
-### 4f. TransformGizmo3D.qml -- Designed But Not Yet Integrated
-
-**File:** `TransformGizmo3D.qml`
-
-A 3D manipulation widget with:
-
-- **Translation arrows:** Cylinder + cone along each axis (X=red, Y=green, Z=blue).
-  All parts are pickable with a `handleId` property.
-- **Rotation rings:** Flattened sphere approximations for each rotation plane.
-  Semi-transparent (0.4 opacity).
-- **Scale handles:** Small cubes at axis endpoints + center cube for uniform scale.
-- **Action buttons:** Delete (red circle with "X") and Duplicate (blue circle
-  with "+"), implemented as `VRWindow` items (2D-in-3D).
-- **Interaction API:**
-  - `beginDrag(handleId, rayPos)`: Saves initial state.
-  - `updateDrag(rayPos)`: Applies delta to target node's position or scale.
-  - `endDrag()`: Clears active handle.
-  - `isGizmoHandle(obj)`: Checks if a picked object is a gizmo part.
-
-**Integration status:** The gizmo component exists and compiles, but:
-- It is not instantiated in XrScene when a surface is selected.
-- The `VrFocusControl`/`VrPicking` system does not yet route picks on gizmo
-  handles to the gizmo's drag methods.
-- Rotation dragging is noted as "more complex" and is not yet implemented
-  (the `updateDrag` method has a comment placeholder for it).
-
-### 4g. VrWindowManipulation Extensions
-
-**File:** `VrWindowManipulation.qml`
-
-Extended with work surface integration:
-
-#### rayPickWorkSurfaceFace()
-
-Walks the ray pick results and traverses parent chains looking for a
-`WorkSurfaceFace` instance. Returns `{ face, pick }` or `null`.
-
-```javascript
-function rayPickWorkSurfaceFace(): var {
-    const allPicks = root.picking.lastAllPicks
-    for (var pickResult of allPicks) {
-        let node = pickResult.objectHit ?? root.picking.getHoveredNodeFromItem(pickResult.itemHit)
-        while (node) {
-            if (node instanceof WorkSurfaceFace) {
-                return { face: node, pick: pickResult }
-            }
-            node = node.parent
-        }
-    }
-    return null
-}
-```
-
-#### detachWindowFromSurface(appWin)
-
-Calls `face.detachWindow(appWin)` when a window attached to a surface face is
-grabbed for moving.
-
-#### lookForScreenToPut Connection (Extended)
-
-After checking for pseudo output hits, the connection now also checks for work
-surface face hits:
-
-```javascript
-const surfaceHit = root.rayPickWorkSurfaceFace()
-if (surfaceHit) {
-    surfaceHit.face.attachWindow(appWin)
-    xray.release()
-    return  // Window stays vr=true, just reparented to face
-}
-```
-
-#### movingResizingWindowWatcher (Extended)
-
-When a VR window starts moving, if it has an `attachedFace`, it is first
-detached from the surface before being grabbed by the ray.
-
-### 4h. KwinApplicationWindow "surface" State
-
-**File:** `XrScene.qml`, lines 610-622
-
-A third state was added to the application window delegate's state machine:
+Surface state takes precedence (listed first). Region props chain:
 
 ```qml
-State {
-    name: "surface"
-    when: kwinAppWindow.client.vr && kwinAppWindow.attachedFace !== null
-    PropertyChanges {
-        kwinAppWindow {
-            parent: kwinAppWindow.attachedFace
-            grabHandle: kwinAppWindow
-            rotation: Qt.quaternion(1, 0, 0, 0)
-            zOffsetGlobal: 0
-        }
-    }
-    StateChangeScript {
-        script: followMode.unregisterObject(kwinAppWindow)
-    }
-}
+property WorkSurfaceFace attachedFace: null   // hard attachment
+property WorkSurfaceFace previewFace:  null   // transient during drag
+
+readonly property var _regionSource: attachedFace ?? previewFace
+readonly property int regionKind:     _regionSource?.regionKind   ?? WorkSurfaceRegion.FlatRect
+readonly property real regionRadius:  _regionSource?.regionRadius ?? 30
 ```
 
-The `surface` state takes priority over `vr` because both share `client.vr === true`
-but the `surface` state additionally requires `attachedFace !== null`. This is
-ordered first in the `states` array.
+`_regionSource` makes the preview deform reuse the same curve swap path as a
+hard attachment. On release, `attachedFace` takes over seamlessly.
+
+### 4.6 `VrWindowManipulation.qml` -- drag / preview / snap
+
+Three relevant connections, all grab-scoped:
+
+- **`lookForScreenToPut`** -- on every pick-set update while grabbing:
+  1. Try pseudo-output (full-screen hand-back).
+  2. Else `rayPickWorkSurfaceFace()` walks pick parents for a
+     `WorkSurfaceFace`.
+  3. If found, set `_pendingSnapFace`, `_pendingSnapAppWin`, toggle the
+     face's `hovered` flag, and set `appWin.previewFace = face` so the window
+     deforms live.
+  4. If not, `_clearPendingPreview()` resets everything.
+
+- **`snapOnRelease`** -- when the grab ends:
+  1. If pending, `previewFace` is cleared (attachedFace about to take over)
+     and `attachWindow(appWin)` commits.
+  2. Otherwise clear preview and bail.
+
+- **`movingResizingWindowWatcher`** -- when a VR window starts moving,
+  if it has `attachedFace` it is first detached via `detachWindowFromSurface`
+  before the grab takes over.
+
+### 4.7 `TransformGizmo3D.qml` + radial integration
+
+Gizmo shows when `xrView.selectedNode` is set. Picks on gizmo handles route
+to its `beginDrag` / `updateDrag` / `endDrag`. Wiring lives in XrScene
+(`onPickHandlePressed` / `onPickHandleReleased` around lines 380-404).
+
+Selection entry points via radial menu (`XrScene.qml` action handler):
+
+| Action         | Selects                                   |
+|----------------|-------------------------------------------|
+| `transform`    | `radialMenuTargetNode` (any scene node)   |
+| `editSurface`  | Parent work surface of hosted window      |
+| `confirmGizmo` | Deselect / commit                         |
+
+`editSurface` is offered only when the radial target is a window whose
+`attachedFace !== null`. It walks `attachedFace.parent` up to the
+`isWorkSurface` delegate Node and makes it the selection target.
+
+### 4.8 Layout mode sub-radial
+
+When the radial target `.isWorkSurface`, the menu adds a `Layout` submenu
+(Masonry / Grid / Stack / Freeform / Cover). Selecting a mode:
+
+1. Writes the mode to every face via `workSurfaceModel.setFaceLayoutMode`.
+2. Walks the delegate's tree, sets `layoutMode` on each `WorkSurfaceFace`,
+   and calls `relayout()`.
+
+Per-face targeting (e.g. Masonry on cube-front, Stack on cube-top) is not
+wired yet. Current behavior is "apply to all."
 
 ---
 
-## 5. Current Status -- What Works
+## 5. Persistence
 
-### Radial Menu
+File: `~/.config/kwinvr-worksurfaces.json`. Example:
 
-- [x] Submenu system with `menuItems` + `menuStack` navigation
-- [x] "Surface" button in root menu opens shape submenu
-- [x] Back button (center, shows "<") returns to root menu
-- [x] `actionTriggered(string action)` signal chain from RadialMenu through
-      RadialMenuNode to XrScene handler
-- [x] Dynamic button count and angular spacing per menu level
-- [x] All 5 shape actions dispatch to `xrView.addWorkSurface()`
+```json
+{
+  "version": 1,
+  "surfaces": [
+    {
+      "id": "uuid-string",
+      "shapeType": 0,
+      "position": { "x": 0, "y": 0, "z": -80 },
+      "rotation": { "w": 1, "x": 0, "y": 0, "z": 0 },
+      "scale":    { "x": 1, "y": 1, "z": 1 },
+      "faces":    [ { "layoutMode": 0 } ]
+    }
+  ]
+}
+```
 
-### Model CRUD + Persistence
+- Loaded at `WorkSurfaceModel` construction.
+- Save debounced 500ms after any mutation; destructor force-flushes.
+- On load, `fromJson` pads / trims the `faces` list to match
+  `faceCountForShape(shapeType)`.
 
-- [x] `addSurface()` creates entries with correct face counts
-- [x] `removeSurface()` and `duplicateSurface()` implemented
-- [x] `updateTransform()` persists position/rotation/scale changes
-- [x] `setFaceLayoutMode()` updates per-face layout config
-- [x] JSON save/load with 500ms debounce
-- [x] Face count auto-correction on load (pads or trims to expected count)
-
-### Scene Integration
-
-- [x] `Repeater3D` with inline `Node` delegate driven by `WorkSurfaceModel`
-- [x] `SpaceAllocator3D` placement of new surfaces at free positions
-- [x] `turnToFaceKeepRoll` orients surfaces toward the camera on creation
-- [x] Registration with `spaceAllocator` and `followMode`
-- [x] Follow mode and grab-all inclusion (surfaces move with `allWindowsGrabHandle`)
-
-### Shape Rendering
-
-- [x] All 5 shape components (`wsPlane`, `wsCube`, `wsCylinder`, `wsPyramid`, `wsSphere`)
-      defined with appropriate geometry
-- [x] Wireframe face rendering with translucent cyan fill, corner markers, and
-      center crosshair
-- [x] Cylinder and sphere include translucent visual reference meshes
-- [x] `Loader3D` switch selects the correct shape component by `shapeType` enum
-
-### Build System
-
-- [x] `worksurfacemodel.h/.cpp` and `worksurfacelayout.h/.cpp` in `SOURCES`
-- [x] `WorkSurface3D.qml`, `WorkSurfaceFace.qml`, `TransformGizmo3D.qml` in `QML_FILES`
+**Known bug (pre-overhaul, still open):** the delegate's
+`Component.onCompleted` unconditionally calls
+`spaceAllocator.findFreePosition` and overwrites the persisted position.
+Fix outlined in `WORK_SURFACES_OVERHAUL.md` Section 7. Not yet applied.
 
 ---
 
-## 6. Open Questions / Testing Needed
+## 6. Data Flow Examples
 
-### Are all 5 shapes rendering correctly with proper geometry?
+### Create surface
 
-**Unknown.** The shape components are defined but have not been verified visually
-in a running VR session. Specific concerns:
-
-- Pyramid slant angles -- the trigonometry (`atan2(40, 30)`) may produce faces
-  that don't meet at the apex cleanly. The face positions
-  (`Qt.vector3d(0, 10, 15)` etc.) are approximations.
-- Cylinder body face -- it's a flat 188-unit-wide rectangle facing forward.
-  It does NOT wrap around the cylinder. This is a flat approximation of the
-  unrolled surface. For actual curved face hosting, integration with
-  `CurvedPlaneGeometry` (which exists in the codebase) would be needed.
-- Sphere patches -- the 6 flat faces at 30-unit offsets will have visible gaps
-  where the sphere surface curves away from them. The `fs = r * 1.2` sizing
-  provides some overlap.
-
-### Does window snapping to surfaces work?
-
-**Partially wired, not functional end-to-end.** The code path is:
-
-1. VrWindowManipulation.lookForScreenToPut calls `rayPickWorkSurfaceFace()` -- **exists**
-2. `rayPickWorkSurfaceFace()` walks picks looking for `WorkSurfaceFace` instances -- **exists**
-3. But the current shapes use `wsFaceRect` (a plain `Model`), NOT `WorkSurfaceFace` -- **gap**
-
-The `instanceof WorkSurfaceFace` check will never match because no
-`WorkSurfaceFace` instances exist in the scene. The window snapping pipeline is
-complete in code but disconnected at the component level.
-
-### Does the transform gizmo work?
-
-**No.** TransformGizmo3D.qml is defined but never instantiated. There is:
-- No selection mechanism that shows the gizmo when a surface is clicked
-- No wiring from the ray pick system to the gizmo's `beginDrag`/`updateDrag`/`endDrag`
-- Rotation drag is not implemented (only translation and scale)
-
-### WorkSurfaceFace integration status
-
-**Not integrated.** WorkSurfaceFace.qml exists as a complete component with:
-- Window attach/detach
-- Layout engine calls
-- ZStacker
-- UV coordinate mapping
-- Color change when windows are present
-
-But it is not used by any shape component. The shapes use the simpler `wsFaceRect`
-component instead.
-
-### Layout engine integration status
-
-**C++ complete, QML disconnected.** The layout engine:
-- Compiles and is registered as a QML singleton
-- Implements all 5 layout algorithms
-- Returns properly structured `LayoutSlot` gadgets
-
-But `WorkSurfaceFace.relayout()` (which calls the engine) is never executed
-because `WorkSurfaceFace` is not instantiated in the scene.
-
-### Persistence across VR sessions
-
-**Partially working.** The model loads saved surfaces on construction and the
-Repeater3D will recreate delegates. However:
-- Saved transforms (position/rotation/scale) are loaded into the model but the
-  delegate's `Component.onCompleted` always calls `spaceAllocator.findFreePosition()`
-  for placement, ignoring the persisted position. The loaded position roles
-  (`surfacePosition`, `surfaceRotation`, `surfaceScale`) are available on the
-  model but not bound to the delegate's Node position.
-- The delegate immediately overwrites the persisted transform with the allocator's
-  position via `updateTransform()`.
-
-**This means persistence saves correctly but restores are overwritten on load.**
-
-### Missing Pieces for Full Feature
-
-1. **WorkSurfaceFace integration** into shape components (replace `wsFaceRect` with
-   `WorkSurfaceFace`)
-2. **Transform gizmo** instantiation and interaction wiring
-3. **Position restore** from persisted data (skip allocator for loaded surfaces)
-4. **Selection system** (clicking a surface selects it, shows gizmo)
-5. **Rotation gizmo drag** implementation
-6. **Curved face geometry** for cylinder body (use `CurvedPlaneGeometry`)
-
----
-
-## 7. Known Issues & Lessons Learned
-
-### The Required Property Shadowing Bug
-
-**Problem:** When using an external QML component as a `Repeater3D` delegate,
-if that component declares properties with the same names as model roles,
-the component's own property declarations shadow the model-injected values.
-The delegate receives default/empty values instead of the model data.
-
-**Example of the bug:**
-
-```qml
-// WorkSurface3D.qml
-Node {
-    property string surfaceId: ""    // <-- This shadows the model's surfaceId role
-    property int shapeType: 0        // <-- This shadows the model's shapeType role
-}
-
-// XrScene.qml
-Repeater3D {
-    model: WorkSurfaceModel {}
-    delegate: WorkSurface3D {}       // surfaceId and shapeType stay at defaults!
-}
+```
+RadialMenu.onActionTriggered("addCube")
+  -> XrScene.addWorkSurface(WorkSurfaceShape.Cube)
+  -> WorkSurfaceModel.addSurface(1)
+  -> beginInsertRows / endInsertRows
+  -> Repeater3D instantiates inline Node delegate
+  -> Loader3D loads wsCube Component
+  -> Component.onCompleted: spaceAllocator.findFreePosition
+  -> workSurfaceModel.updateTransform
 ```
 
-**Root cause:** Qt Quick's `required property` injection from a model into a
-delegate only works correctly when the properties are declared with `required`
-in the delegate's root scope. If the component also has non-required properties
-with the same names, the component's own default values take precedence.
+### Snap window
 
-**Solution:** Use an inline delegate in XrScene.qml with `required property`
-declarations:
-
-```qml
-delegate: Node {
-    required property int index
-    required property string surfaceId
-    required property int shapeType
-    // These ARE properly injected by the model
-}
+```
+User grabs window (xray.grabbedObject = appWin)
+  -> VrPicking emits lastAllPicksChanged each frame
+  -> VrWindowManipulation.lookForScreenToPut
+     -> rayPickWorkSurfaceFace -> face
+     -> appWin.previewFace = face
+        -> _regionSource changes
+        -> regionKind / regionRadius change
+        -> KwinWaylandSurface3D Model swaps #Rectangle -> curved geometry
+User releases
+  -> xray.grabbedObject = null
+  -> snapOnRelease
+     -> appWin.previewFace = null
+     -> face.attachWindow(appWin)
+        -> appWin.attachedFace = face
+        -> appWin reparents (state: "vr" -> "surface")
+        -> delegate.hostedWindowCount++
+        -> relayout()
 ```
 
-### Journald Rate Limiting Hiding QML console.log
+### Wireframe reveal
 
-**Problem:** During rapid model operations (adding surfaces, multiple
-`dataChanged` emissions), `console.log` and `qCDebug` output was silently
-dropped. Logs appeared to stop, making it look like code wasn't executing.
-
-**Root cause:** systemd-journald has a default rate limit
-(`RateLimitIntervalSec=30s, RateLimitBurst=10000`). When KWin-VR produces
-burst logging during model operations, journald drops messages without warning.
-
-**Solution:** The model uses a file-based logger (`wsLog()`) that writes directly
-to `/tmp/kwinvr-worksurface.log`:
-
-```cpp
-static void wsLog(const QString &msg) {
-    QFile f(QStringLiteral("/tmp/kwinvr-worksurface.log"));
-    if (f.open(QIODevice::Append | QIODevice::Text)) {
-        f.write(QDateTime::currentDateTime().toString(Qt::ISODateWithMs).toUtf8());
-        f.write(" ");
-        f.write(msg.toUtf8());
-        f.write("\n");
-    }
-}
 ```
-
-This should be removed or gated behind a debug flag before merging to main.
-
-### Position Persistence Timing (Component.onCompleted Ordering)
-
-**Problem:** The delegate's `Component.onCompleted` handler runs after the
-delegate is created but before the model's persisted position data can be
-applied. The handler calls `spaceAllocator.findFreePosition()` unconditionally,
-which overwrites any previously saved position.
-
-**Solution needed:** Check whether the model has a non-zero saved position for
-this surface. If so, restore it instead of asking the allocator for a new one.
-Something like:
-
-```qml
-Component.onCompleted: {
-    // Check if model has a saved position
-    const savedPos = workSurfaceModel.data(
-        workSurfaceModel.index(index, 0),
-        WorkSurfaceModel.PositionRole
-    )
-    if (savedPos && savedPos.length() > 0.01) {
-        workSurface.position = workSurfaceRepeater.mapPositionFromScene(savedPos)
-        // Restore saved rotation/scale too
-    } else {
-        // New surface: use allocator
-        const globalPos = spaceAllocator.findFreePosition(...)
-        workSurface.position = workSurfaceRepeater.mapPositionFromScene(globalPos)
-        KwinVrHelpers.turnToFaceKeepRoll(workSurface, spaceAllocator.viewpoint)
-    }
-    workSurface._initialized = true
-    spaceAllocator.registerObject(workSurface)
-    followMode.registerObject(workSurface)
-}
+xray.grabbedObject changes
+  -> xrView.anyWindowDragging = (grabbedObject !== null)
+  -> workSurface.wireframeVisible recomputes
+  -> Binding pushes into wsShapeLoader.item.wireframeVisible
+  -> each WsEdge in the shape Component toggles visible
 ```
 
 ---
 
-## 8. Next Steps
+## 7. Known Limits / v2 Work
 
-### Priority 1: Make Window Snapping Work
-
-This is the core value proposition. Without window snapping, surfaces are
-decorative geometry.
-
-1. **Replace `wsFaceRect` with `WorkSurfaceFace`** in the shape components
-   (or at least in `wsPlane` as a first test). Each `Loader3D` for a face
-   needs to load a `WorkSurfaceFace` instance instead of a `wsFaceRect` Model.
-2. **Pass required properties** to `WorkSurfaceFace`: `faceWidth`, `faceHeight`,
-   `ppu`, `layoutMode`, and a reference to the `WorkSurfaceLayoutEngine` singleton.
-3. **Test the snap pipeline:** Grab a VR window, drag it toward a face, verify
-   that `rayPickWorkSurfaceFace()` detects the face, and the window reparents
-   and layouts.
-
-### Priority 2: Fix Position Persistence
-
-1. **Add restore logic** to the delegate's `Component.onCompleted` as described
-   in Section 7.
-2. **Test round-trip:** Add a surface, move it, restart VR, verify it appears at
-   the saved position.
-
-### Priority 3: Selection + Transform Gizmo
-
-1. **Add selection detection** in `VrFocusControl` or `VrPicking`: clicking on a
-   work surface face (non-window area) should call `xrView.selectWorkSurface()`.
-2. **Instantiate TransformGizmo3D** as a child of the selected surface, bind
-   `targetNode` to the surface Node.
-3. **Wire gizmo interaction** through the pick system: detect picks on gizmo
-   handles, call `beginDrag`/`updateDrag`/`endDrag`.
-4. **Implement rotation dragging** in the gizmo (currently only translation and
-   scale are implemented).
-
-### Priority 4: Layout Mode Switching
-
-1. **Add UI** to switch layout modes per face (context menu on right-click, or a
-   button on the face, or a gizmo widget).
-2. **Call `workSurfaceModel.setFaceLayoutMode()`** when the user switches.
-3. **Test each layout mode** with multiple windows on a single face.
-
-### Priority 5: Polish
-
-- Remove `wsLog()` debug logging or gate behind a build flag
-- Handle edge cases: window resize while attached, surface deletion with
-  attached windows
-- Add visual feedback for hover/drop targets when dragging a window near a face
-- Consider curved face geometry for cylinder body using `CurvedPlaneGeometry`
-- Test all shapes thoroughly for visual correctness
-- Clean up the unused legacy `buttonClicked(int index)` path in the radial menu
+1. **Subsurface alignment on curved regions.** Each subsurface curves about
+   its own local origin. Floats slightly off the primary arc. Fix: compute
+   curve in the parent window's coordinate space per-subsurface.
+2. **Primitive scale vs window world size.** User spec: scaling the
+   primitive should NOT scale the windows. Currently windows inherit
+   primitive scale via the parent chain. Fix: apply inverse scale on
+   `KwinApplicationWindow` in `surface` state once scale changes become
+   common.
+3. **Cylinder body pickable proxy** is a flat `188x40` rect at the cylinder
+   axis. Works for typical ray angles but will miss side-on picks. Replace
+   with a cylinder-shaped invisible proxy Model.
+4. **Sphere is 1 region.** Planned: ray-hit picks a dynamic patch around the
+   hit point rather than the fixed front cap.
+5. **Position persistence overwrite.** See WORK_SURFACES_OVERHAUL.md §7.
+6. **Per-face layout targeting.** Layout radial applies to all faces;
+   should target the face under the ray invoke point.
+7. **Gizmo rotation drag** placeholder -- translation + scale work; rotation
+   handle dragging is a TODO inside `TransformGizmo3D.updateDrag`.
+8. **`wsLog()` debug file** -- must be gated or removed before release.
 
 ---
 
-## Appendix: File Reference
+## 8. File Reference
 
-| File | Role |
-|------|------|
-| `src/plugins/vr/worksurfacemodel.h` | C++ model header -- enums, data structs, model class |
-| `src/plugins/vr/worksurfacemodel.cpp` | C++ model impl -- CRUD, persistence, JSON serialization |
-| `src/plugins/vr/worksurfacelayout.h` | C++ layout engine header -- LayoutSlot, engine class |
-| `src/plugins/vr/worksurfacelayout.cpp` | C++ layout engine impl -- 5 layout algorithms |
-| `src/plugins/vr/qml/XrScene.qml` | Main scene -- delegate, shape components, menu handler |
-| `src/plugins/vr/qml/WorkSurface3D.qml` | Standalone surface component (not used as delegate) |
-| `src/plugins/vr/qml/WorkSurfaceFace.qml` | Face component with window hosting (not yet integrated) |
-| `src/plugins/vr/qml/TransformGizmo3D.qml` | 3D gizmo component (not yet integrated) |
-| `src/plugins/vr/qml/RadialMenu.qml` | Radial menu with submenu stack |
-| `src/plugins/vr/qml/RadialMenuNode.qml` | 3D wrapper for RadialMenu |
-| `src/plugins/vr/qml/VrWindowManipulation.qml` | Window move/snap/detach logic |
-| `src/plugins/vr/CMakeLists.txt` | Build system -- all files registered |
-| `~/.config/kwinvr-worksurfaces.json` | Persistence file (runtime) |
-| `/tmp/kwinvr-worksurface.log` | Debug log (runtime, temporary) |
+| File                                                         | Role                                                     |
+|--------------------------------------------------------------|----------------------------------------------------------|
+| `src/plugins/vr/worksurfacemodel.{h,cpp}`                    | Model, persistence, shape/layout/region enums            |
+| `src/plugins/vr/worksurfacelayout.{h,cpp}`                   | LayoutSlot + 5-mode layout engine                        |
+| `src/plugins/vr/curvedplanegeometry.{h,cpp}`                 | Horizontal arc mesh (pre-existing)                       |
+| `src/plugins/vr/cylinderbodygeometry.{h,cpp}`                | Vertical cylinder arc slice mesh                         |
+| `src/plugins/vr/spherepatchgeometry.{h,cpp}`                 | Rectangular sphere patch mesh                            |
+| `src/plugins/vr/qml/XrScene.qml`                             | Scene wiring: delegate, shape Components, radial handler |
+| `src/plugins/vr/qml/WorkSurfaceFace.qml`                     | Region host: attach / relayout / curve placement         |
+| `src/plugins/vr/qml/WsEdge.qml`                              | Cylinder-between-points wireframe helper                 |
+| `src/plugins/vr/qml/KwinWaylandSurface3D.qml`                | Window Model with flat / curved geometry swap            |
+| `src/plugins/vr/qml/VrWindowManipulation.qml`                | Grab / preview / snap pipeline                           |
+| `src/plugins/vr/qml/TransformGizmo3D.qml`                    | Gizmo component (selection target editing)               |
+| `src/plugins/vr/qml/RadialMenu.qml` + `RadialMenuNode.qml`   | Radial UI with submenu stack                             |
+| `src/plugins/vr/qml/WorkSurface3D.qml`                       | Standalone surface component (not currently used)        |
+| `~/.config/kwinvr-worksurfaces.json`                         | Persistence file                                         |
+| `/tmp/kwinvr-worksurface.log`                                | Debug log (temporary, gate before release)               |
+| `WORK_SURFACES_OVERHAUL.md`                                  | Phased rewrite plan + historical reference               |
+
+---
+
+## 9. Extending
+
+### Add a new primitive shape
+
+1. Add enum value to `WorkSurfaceShape::Type` in `worksurfacemodel.h`.
+2. Add face count to `WorkSurfaceData::faceCountForShape`.
+3. Add a new `Component` block in `XrScene.qml` following the wsCube pattern:
+   wireframe edges (via `WsEdge`) + `WorkSurfaceFace` children with region
+   descriptors.
+4. Extend the `Loader3D.sourceComponent` switch in the delegate.
+5. Add a menu entry under `Surface` in the radial menu.
+6. For curved regions: declare `regionKind`, `regionRadius`, curve angles on
+   the face and let the existing `KwinWaylandSurface3D` geometry swap + the
+   `relayout` placement math handle the rest.
+
+### Add a new region kind
+
+1. Add enum value to `WorkSurfaceRegion::Kind`.
+2. Write a new `QQuick3DGeometry` subclass alongside the existing three.
+3. Register in `CMakeLists.txt` SOURCES.
+4. Extend the `geometry:` switch in `KwinWaylandSurface3D.qml`.
+5. Extend the `relayout()` branches in `WorkSurfaceFace.qml` with position
+   + rotation math for the new kind.
+
+### Add a new layout mode
+
+1. Add enum value to `WorkSurfaceLayout::Mode`.
+2. Implement a `layoutX(faceSize, windowSizes, ...)` method in
+   `worksurfacelayout.cpp` that returns a `QList<LayoutSlot>` in unrolled
+   face coordinates.
+3. Add the case to `WorkSurfaceLayoutEngine::computeLayout`.
+4. Add a menu entry to the Layout submenu in `XrScene.qml`.
