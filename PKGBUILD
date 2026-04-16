@@ -3,7 +3,7 @@ pkgname=kwin
 pkgver=6.6.3
 pkgrel=1
 pkgdesc='KDE Window Manager with VR support (custom build)'
-arch=(x86_64)
+arch=(x86_64 aarch64)
 license=(LGPL-2.0-or-later)
 url='https://kde.org/plasma-desktop/'
 
@@ -36,17 +36,18 @@ source=()
 sha256sums=()
 
 build() {
-  cmake -B build -S "$startdir" \
+  cmake -B "$startdir/build" -S "$startdir" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INSTALL_LIBEXECDIR=lib \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF \
-    -DKWIN_BUILD_VR=ON
-  cmake --build build -j$(nproc)
+    -DKWIN_BUILD_VR=ON \
+    -DCMAKE_DISABLE_FIND_PACKAGE_KF6DocTools=TRUE
+  cmake --build "$startdir/build" -j$(nproc)
 }
 
 package() {
-  DESTDIR="$pkgdir" cmake --install build
+  DESTDIR="$pkgdir" cmake --install "$startdir/build"
   # KWin wayland needs CAP_SYS_NICE for realtime scheduling
   setcap CAP_SYS_NICE=+ep "$pkgdir/usr/bin/kwin_wayland"
 }
