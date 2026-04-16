@@ -68,13 +68,51 @@ Item {
         acceptedButtons: Qt.AllButtons
 
         property bool desktopGrabbed: false
+        property bool emptySpaceGrabbed: false
+        property bool bothClicked: false
+        property bool gizmoDragActive: false
+        property int heldButtons: 0
+        property real lastLeftPressMs: 0
+        property real lastRightPressMs: 0
         onPressed: (event) => {
+                       mouseArea.heldButtons |= event.button
+                       if (event.button === Qt.LeftButton) mouseArea.lastLeftPressMs = Date.now()
+                       else if (event.button === Qt.RightButton) mouseArea.lastRightPressMs = Date.now()
+
+                       /* Super+Click = select/deselect object (gizmo) */
+                       if (event.modifiers & Qt.MetaModifier && !(event.modifiers & Qt.ControlModifier)) {
+                           xrView.selectObjectAtCursor()
+                           bothClicked = true
+                           return;
+                       }
+
+                       /* Both-click detection: L+R held within 400ms → open radial menu */
+                       if ((mouseArea.heldButtons & Qt.LeftButton)
+                           && (mouseArea.heldButtons & Qt.RightButton)
+                           && Math.abs(mouseArea.lastLeftPressMs - mouseArea.lastRightPressMs) < 400) {
+                           if (emptySpaceGrabbed || desktopGrabbed) {
+                               xrView.release()
+                               emptySpaceGrabbed = false
+                               desktopGrabbed = false
+                           }
+                           bothClicked = true
+                           xrView.openRadialMenuAtCursor()
+                           return;
+                       }
+
                        /* Release grabbed object on any button press */
                        if(xrView.release()) {
                             /* Nedd to send key press further for kwin to release thw window */
                            if(xrView.currentMovingResizingWindow) {
                                event.accepted = false
                            }
+                           emptySpaceGrabbed = false
+                           return;
+                       }
+
+                       /* Gizmo handle click — highest priority when gizmo is visible */
+                       if (xrView.tryGizmoHandlePress()) {
+                           gizmoDragActive = true
                            return;
                        }
 
@@ -85,7 +123,21 @@ Item {
                            }
                        }
 
-                       /* Activate/close radial menu if click on empty space */
+                       /* Grab work surface if clicking on one */
+                       if(xrView.trySelectWorkSurface()) {
+                           return;
+                       }
+
+                       /* Clicking elsewhere deselects any work surface */
+                       xrView.selectedSurfaceId = ""
+
+                       /* Left-click+hold on empty space = grab all */
+                       if(event.button === Qt.LeftButton && xrView.grabAllIfEmptySpace()) {
+                           emptySpaceGrabbed = true
+                           return;
+                       }
+
+                       /* Activate/close radial menu if click on a hovered object */
                        if(xrView.radialMenuActivate(true)) {
                            return;
                        }
@@ -93,9 +145,38 @@ Item {
                        event.accepted = false
                    }
         onReleased: (event) => {
+                        mouseArea.heldButtons &= ~event.button
+
+                        /* Gizmo drag end first — never let bothClicked swallow it
+                         * (VR pipeline can drop releases leaving bothClicked stale) */
+                        if (gizmoDragActive) {
+                            xrView.endGizmoDrag()
+                            gizmoDragActive = false
+                            if (mouseArea.heldButtons === 0)
+                                bothClicked = false
+                            return;
+                        }
+
+                        if (bothClicked) {
+                            if (mouseArea.heldButtons === 0)
+                                bothClicked = false
+                            return;
+                        }
+
                         if(desktopGrabbed) {
                             xrView.grab(false)
                             desktopGrabbed = false
+                            return;
+                        }
+
+                        if(emptySpaceGrabbed) {
+                            xrView.release()
+                            emptySpaceGrabbed = false
+                            return;
+                        }
+
+                        /* Don't open radial menu if a surface was just selected */
+                        if(xrView.selectedSurfaceId !== "") {
                             return;
                         }
 

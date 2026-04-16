@@ -28,7 +28,7 @@ Rectangle {
             event.accepted = true
         }
     }
-    
+
     Component.onDestruction: {
         // Release focus explicitly to prevent a crash in QQuickWindowPrivate::polishItems
         // which can occur when a focused item is destroyed while being rendered in VR.
@@ -36,7 +36,7 @@ Rectangle {
     }
 
     Timer {
-        // Request focus after a short delay because calling forceActiveFocus() 
+        // Request focus after a short delay because calling forceActiveFocus()
         // in Component.onCompleted is too early and often fails to grab focus.
         interval: 50
         running: true
@@ -55,11 +55,30 @@ Rectangle {
         }
     }
 
-    property list<string> buttonLabels: ["Button 1", "Button 2", "Button 3", "Button 4", "Button 5"]
-    property list<bool> buttonEnabled: [false, false, false, false, false]
-    signal buttonClicked(int index)
+    // ========================================================================
+    // Menu model — supports nested submenus via a stack
+    // ========================================================================
+
+    // Each menu item: { label: string, enabled: bool (optional, for toggle state) }
+    // A submenu item: { label: string, submenu: [items...] }
+    // The action logic lives in the signal handler (XrScene), not here.
+    property var menuItems: []
+    property var menuStack: []  // Stack of {items, parentLabel} for submenu navigation
+
+    // The currently displayed items (top of stack or root)
+    readonly property var currentItems: menuStack.length > 0 ? menuStack[menuStack.length - 1].items : menuItems
+    readonly property int currentCount: currentItems ? currentItems.length : 0
+    readonly property bool inSubmenu: menuStack.length > 0
+
+    // Signals
+    signal actionTriggered(string action)
     signal centerButtonClicked()
     signal closed()
+
+    // Legacy compatibility — still used by RadialMenuNode aliases
+    property list<string> buttonLabels: []
+    property list<bool> buttonEnabled: []
+    signal buttonClicked(int index)
 
     property real startWidth: 120
     property real startHeight: 120
@@ -69,6 +88,22 @@ Rectangle {
         closing = true
         wa.restart()
         ha.restart()
+    }
+
+    // Push a submenu onto the stack
+    function pushSubmenu(items, parentLabel) {
+        const stack = menuStack.slice()
+        stack.push({ items: items, parentLabel: parentLabel })
+        menuStack = stack
+    }
+
+    // Pop back to parent menu
+    function popSubmenu() {
+        if (menuStack.length > 0) {
+            const stack = menuStack.slice()
+            stack.pop()
+            menuStack = stack
+        }
     }
 
     Item {
@@ -86,6 +121,7 @@ Rectangle {
             onRunningChanged: {
                 if(!running && root.closing) {
                     root.closing = false
+                    root.menuStack = []  // Reset submenu stack on close
                     root.closed()
                 }
             }
@@ -99,13 +135,22 @@ Rectangle {
         }
 
         Repeater {
-            model: 5
+            model: root.currentCount > 0 ? root.currentCount : (root.buttonLabels.length > 0 ? root.buttonLabels.length : 5)
 
             Item {
                 id: buttonContainer
                 width: parent.width
                 height: parent.height
-                rotation: index * 72 - 90
+
+                // Dynamic angle spacing based on button count
+                property int buttonCount: root.currentCount > 0 ? root.currentCount : (root.buttonLabels.length > 0 ? root.buttonLabels.length : 5)
+                rotation: index * (360 / buttonCount) - 90
+
+                // Resolve the current menu item for this button
+                property var menuItem: root.currentCount > 0 && root.currentItems[index] ? root.currentItems[index] : null
+                property string itemLabel: menuItem ? (menuItem.label || "") : (root.buttonLabels[index] || ("Button " + (index + 1)))
+                property bool itemEnabled: menuItem ? (menuItem.enabled || false) : (root.buttonEnabled[index] || false)
+                property bool hasSubmenu: menuItem ? (menuItem.submenu !== undefined && menuItem.submenu !== null) : false
 
                 Rectangle {
                     id: button
@@ -118,9 +163,10 @@ Rectangle {
                     radius: 12
                     property color startColor: "#4a9eff"
                     property color endColor: "#2d5a8f"
+                    property color submenuColor: "#3d7abf"
 
-                    color: buttonMouse.containsMouse ? startColor : endColor
-                    border.color: root.buttonEnabled[index] ? "#ff4444" : "#5ab8ff"
+                    color: buttonMouse.containsMouse ? startColor : (buttonContainer.hasSubmenu ? submenuColor : endColor)
+                    border.color: buttonContainer.itemEnabled ? "#ff4444" : (buttonContainer.hasSubmenu ? "#ffa500" : "#5ab8ff")
                     border.width: 2
                     Behavior on border.color { ColorAnimation { duration: 200 } }
 
@@ -139,7 +185,7 @@ Rectangle {
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.buttonLabels[index]
+                        text: buttonContainer.itemLabel + (buttonContainer.hasSubmenu ? " >" : "")
                         color: "white"
                         font.pixelSize: 14
                         font.bold: true
@@ -150,31 +196,63 @@ Rectangle {
                         id: buttonMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: root.buttonClicked(index)
+                        onClicked: {
+                            console.log("RadialMenu click: index=", index,
+                                        "label=", buttonContainer.itemLabel,
+                                        "hasSubmenu=", buttonContainer.hasSubmenu,
+                                        "menuItem=", JSON.stringify(buttonContainer.menuItem),
+                                        "currentCount=", root.currentCount)
+                            if (buttonContainer.hasSubmenu) {
+                                // Navigate into submenu
+                                root.pushSubmenu(buttonContainer.menuItem.submenu, buttonContainer.itemLabel)
+                            } else if (buttonContainer.menuItem && buttonContainer.menuItem.action) {
+                                // Fire action
+                                root.actionTriggered(buttonContainer.menuItem.action)
+                            } else {
+                                // Legacy: fire index-based signal
+                                root.buttonClicked(index)
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Center circle
+        // Center circle — acts as close/back button
         Rectangle {
             anchors.centerIn: parent
             width: 60
             height: 60
             radius: 30
-            border.color: "#5ab8ff"
+            border.color: root.inSubmenu ? "#ffa500" : "#5ab8ff"
             border.width: 2
 
-            property color startColor: "#85fd0000"
-            property color endColor: "#000018ff"
+            property color startColor: root.inSubmenu ? "#85ff8800" : "#85fd0000"
+            property color endColor: root.inSubmenu ? "#002200ff" : "#000018ff"
             color: centerButtonMouse.containsMouse ? startColor : endColor
 
             Behavior on color { ColorAnimation { duration: 200 } }
+
+            Text {
+                anchors.centerIn: parent
+                text: root.inSubmenu ? "<" : ""
+                color: "white"
+                font.pixelSize: 20
+                font.bold: true
+                visible: root.inSubmenu
+            }
+
             MouseArea {
                 id: centerButtonMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: centerButtonClicked()
+                onClicked: {
+                    if (root.inSubmenu) {
+                        root.popSubmenu()
+                    } else {
+                        centerButtonClicked()
+                    }
+                }
             }
         }
     }

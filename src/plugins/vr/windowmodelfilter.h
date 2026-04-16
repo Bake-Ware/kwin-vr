@@ -128,6 +128,7 @@ class HudWindowFilter : public QSortFilterProxyModel
     Q_PROPERTY(bool showOsd READ showOsd WRITE setShowOsd NOTIFY showOsdChanged FINAL)
     Q_PROPERTY(bool showDock READ showDock WRITE setShowDock NOTIFY showDockChanged FINAL)
     Q_PROPERTY(bool showAppletPopup READ showAppletPopup WRITE setShowAppletPopup NOTIFY showAppletPopupChanged FINAL)
+    Q_PROPERTY(bool showDialog READ showDialog WRITE setShowDialog NOTIFY showDialogChanged FINAL)
     QML_ELEMENT
 public:
     explicit HudWindowFilter(QObject *parent = nullptr);
@@ -147,12 +148,16 @@ public:
     bool showAppletPopup() const;
     void setShowAppletPopup(bool show);
 
+    bool showDialog() const;
+    void setShowDialog(bool show);
+
 Q_SIGNALS:
     void windowModelChanged();
     void showNotificationsChanged();
     void showOsdChanged();
     void showDockChanged();
     void showAppletPopupChanged();
+    void showDialogChanged();
 
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const override;
@@ -163,6 +168,7 @@ private:
     bool m_showOsd = true;
     bool m_showDock = true;
     bool m_showAppletPopup = true;
+    bool m_showDialog = true;
 };
 
 class TransientMenusWindowFilter : public AbstractTransientWindowModelFilter

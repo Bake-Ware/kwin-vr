@@ -129,6 +129,39 @@ Node {
         sourceComponent: kws.uvTexture ? yuvMaterial : rgbMaterial
     }
 
+    // Curved geometry for work-surface-attached windows. The grab handle
+    // (typically the owning KwinApplicationWindow) carries regionKind and
+    // regionRadius so each surface in the window tree can pick the right mesh.
+    readonly property int regionKind: (model.grabHandle && model.grabHandle.regionKind !== undefined)
+                                      ? model.grabHandle.regionKind
+                                      : WorkSurfaceRegion.FlatRect
+    readonly property real regionRadius: (model.grabHandle && model.grabHandle.regionRadius !== undefined)
+                                         ? model.grabHandle.regionRadius
+                                         : 30
+
+    readonly property real _surfWorldWidth: root.surfaceSize.width / Math.max(root.ppu, 0.0001)
+    readonly property real _surfWorldHeight: root.surfaceSize.height / Math.max(root.ppu, 0.0001)
+
+    CylinderBodyGeometry {
+        id: _cylGeom
+        radius: root.regionRadius
+        arcAngle: Math.min(2 * Math.PI,
+                           root._surfWorldWidth / Math.max(root.regionRadius, 0.001))
+        height: root._surfWorldHeight
+        segments: 32
+    }
+
+    SpherePatchGeometry {
+        id: _sphGeom
+        radius: root.regionRadius
+        widthAngle: Math.min(Math.PI,
+                             root._surfWorldWidth / Math.max(root.regionRadius, 0.001))
+        heightAngle: Math.min(Math.PI,
+                              root._surfWorldHeight / Math.max(root.regionRadius, 0.001))
+        columns: 24
+        rows: 16
+    }
+
     Model {
         id: model
         property Node grabHandle: root
@@ -157,12 +190,22 @@ Node {
 
         readonly property var onPick: useGeometryPick ? onPickReal : onPickAlways
 
-        source: "#Rectangle"
-        // materials: kws.uvTexture ? yuvMaterial : rgbMaterial
+        // Flat regions keep the stock #Rectangle mesh (scaled to surface size).
+        // Curved regions swap in a procedural mesh with world-unit vertices.
+        source: root.regionKind === WorkSurfaceRegion.FlatRect ? "#Rectangle" : ""
+        geometry: {
+            switch (root.regionKind) {
+            case WorkSurfaceRegion.CylinderBody: return _cylGeom
+            case WorkSurfaceRegion.SpherePatch: return _sphGeom
+            default: return null
+            }
+        }
         materials: materialLoader.item
 
-        scale: Qt.vector3d(root.surfaceSize.width/100/root.ppu,
-                           root.surfaceSize.height/100/root.ppu,
-                           0.01)
+        scale: root.regionKind === WorkSurfaceRegion.FlatRect
+               ? Qt.vector3d(root.surfaceSize.width / 100 / root.ppu,
+                             root.surfaceSize.height / 100 / root.ppu,
+                             0.01)
+               : Qt.vector3d(1, 1, 1)
     }
 }

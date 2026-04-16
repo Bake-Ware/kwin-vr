@@ -36,6 +36,10 @@ QtObject {
     // Keeps initial maximization mode when we started moving a window
     property int maximizationMode: 0
 
+    // Pending work surface snap — set while dragging, consumed on release
+    property var _pendingSnapFace: null
+    property var _pendingSnapAppWin: null
+
     readonly property VrBarrierConstraint barrierConstraint: VrBarrierConstraint {
         bounds: root.currentMovingResizingWindow?.client?.output?.geometry ?? Qt.rect(0, 0, 0, 0)
         margin: root.windowDetachMargin
@@ -71,6 +75,11 @@ QtObject {
                     const appWin = root.currentMovingResizingWindow.grabHandle as KwinApplicationWindow
                     if(!appWin || root.xray.grabbedObject === appWin) {
                         return
+                    }
+
+                    // Detach from work surface if attached
+                    if (appWin.attachedFace) {
+                        root.detachWindowFromSurface(appWin)
                     }
 
                     if (root.xray.grabbedObject) {
@@ -196,6 +205,36 @@ QtObject {
         return null
     }
 
+    // Find a WorkSurfaceFace in the ray pick results
+    function rayPickWorkSurfaceFace(): var {
+        const allPicks = root.picking.lastAllPicks
+        for (var pickResult of allPicks) {
+            const obj = pickResult.objectHit ?? root.picking.getHoveredNodeFromItem(pickResult.itemHit)
+            if (!obj) {
+                continue
+            }
+
+            // Walk up the parent chain to find a WorkSurfaceFace
+            let node = obj
+            while (node) {
+                if (node instanceof WorkSurfaceFace) {
+                    return { face: node, pick: pickResult }
+                }
+                node = node.parent
+            }
+        }
+        return null
+    }
+
+    // Detach a window from a work surface face when grabbed
+    function detachWindowFromSurface(appWin): void {
+        if (!appWin || !appWin.attachedFace) {
+            return
+        }
+        const face = appWin.attachedFace
+        face.detachWindow(appWin)
+    }
+
     function detachWindowToVR(): void {
         const appWin =  root.currentMovingResizingWindow?.parent?.parent as KwinApplicationWindow
         if (!appWin)
@@ -241,6 +280,35 @@ QtObject {
         return appWin ? (appWin.client ?? null) : null
     }
 
+    function _clearPendingPreview(): void {
+        if (root._pendingSnapFace) {
+            root._pendingSnapFace.hovered = false
+        }
+        if (root._pendingSnapAppWin && root._pendingSnapAppWin.previewFace !== undefined) {
+            root._pendingSnapAppWin.previewFace = null
+        }
+    }
+
+    // Snap to work surface face when grab is released over one
+    readonly property Connections snapOnRelease: Connections {
+        target: root.xray
+        function onGrabbedObjectChanged(): void {
+            if (!root.xray.grabbedObject && root._pendingSnapFace && root._pendingSnapAppWin) {
+                // Clear preview before attaching — attachedFace takes over as the
+                // region source for the curve swap, so the deformation is seamless.
+                root._pendingSnapFace.hovered = false
+                if (root._pendingSnapAppWin.previewFace !== undefined) {
+                    root._pendingSnapAppWin.previewFace = null
+                }
+                root._pendingSnapFace.attachWindow(root._pendingSnapAppWin)
+            } else if (!root.xray.grabbedObject) {
+                root._clearPendingPreview()
+            }
+            root._pendingSnapFace = null
+            root._pendingSnapAppWin = null
+        }
+    }
+
     readonly property Connections lookForScreenToPut: Connections {
         target: root.picking
         enabled: xray.grabbedObject !== null
@@ -250,21 +318,42 @@ QtObject {
                 return
             }
 
+            // Check for pseudo output first
             const ret = root.rayPickPseudoOutput()
-            if (!ret) {
+            if (ret) {
+                const pseudoOutput = ret.pseudoOutput
+                const pick = ret.pick
+
+                // We need to move pointer in 2D world where we will land our window
+                root.kwinInput.pointerPosition = pseudoOutput.uvToGlobal2DCoordinates(pick.uvPosition)
+
+                KWinC.Workspace.sendClientToScreen(window, pseudoOutput.output)
+
+                xray.release()
+                window.vr = false
                 return
             }
 
-            const pseudoOutput = ret.pseudoOutput
-            const pick = ret.pick
-
-            // We need to move pointer in 2D world where we will land our window
-            root.kwinInput.pointerPosition = pseudoOutput.uvToGlobal2DCoordinates(pick.uvPosition)
-
-            KWinC.Workspace.sendClientToScreen(window, pseudoOutput.output)
-
-            xray.release()
-            window.vr = false
+            // Track work surface face for snap-on-release, and show the deformed
+            // preview while the ray hovers a region.
+            const surfaceHit = root.rayPickWorkSurfaceFace()
+            if (surfaceHit) {
+                const appWin = root.xray.grabbedObject as KwinApplicationWindow
+                if (appWin) {
+                    if (root._pendingSnapFace && root._pendingSnapFace !== surfaceHit.face) {
+                        root._pendingSnapFace.hovered = false
+                    }
+                    root._pendingSnapFace = surfaceHit.face
+                    root._pendingSnapAppWin = appWin
+                    surfaceHit.face.hovered = true
+                    if (appWin.previewFace !== undefined)
+                        appWin.previewFace = surfaceHit.face
+                }
+            } else {
+                root._clearPendingPreview()
+                root._pendingSnapFace = null
+                root._pendingSnapAppWin = null
+            }
         }
     }
 }

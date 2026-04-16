@@ -15,7 +15,9 @@ Node {
 
     property alias buttonLabels: radialMenu.buttonLabels
     property alias buttonEnabled: radialMenu.buttonEnabled
+    property alias menuItems: radialMenu.menuItems
     signal buttonClicked(int index)
+    signal actionTriggered(string action)
     signal centerButtonClicked()
     signal closed()
 
@@ -33,6 +35,7 @@ Node {
             property Node parent3d: wrv
             id: radialMenu
             onButtonClicked: (index) => root.buttonClicked(index)
+            onActionTriggered: (action) => root.actionTriggered(action)
             onCenterButtonClicked: root.centerButtonClicked()
             onClosed: root.closed()
         }

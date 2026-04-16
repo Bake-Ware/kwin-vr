@@ -119,9 +119,17 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
     case WindowType::Dock:
     case WindowType::Tooltip:
     case WindowType::AppletPopup:
+    case WindowType::Dialog:
+    case WindowType::Splash:
         return false;
     default:
         break;
+    }
+
+    // Exclude logout greeter from primary view
+    const QString resClass = window->resourceClass();
+    if (resClass.contains("ksmserver") || resClass.contains("logout")) {
+        return false;
     }
 
     // Qt maintenance window had isTransient() == true, but transientFor() == nullptr
@@ -311,8 +319,17 @@ bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source
         return m_showDock;
     case WindowType::AppletPopup:
         return m_showAppletPopup;
+    case WindowType::Dialog:
+    case WindowType::Splash:
+        return m_showDialog;
     default:
         break;
+    }
+
+    // Catch logout/shutdown greeter by resource class regardless of type
+    const QString resourceClass = window->resourceClass();
+    if (resourceClass.contains("ksmserver") || resourceClass.contains("logout")) {
+        return m_showDialog;
     }
 
     // Walk the transient chain to find if any ancestor is a HUD window.
@@ -330,6 +347,8 @@ bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source
             return m_showAppletPopup;
         case WindowType::OnScreenDisplay:
             return m_showOsd;
+        case WindowType::Dialog:
+            return m_showDialog;
         default:
             break;
         }
@@ -411,6 +430,21 @@ void HudWindowFilter::setShowAppletPopup(bool show)
     }
     m_showAppletPopup = show;
     Q_EMIT showAppletPopupChanged();
+    invalidateFilter();
+}
+
+bool HudWindowFilter::showDialog() const
+{
+    return m_showDialog;
+}
+
+void HudWindowFilter::setShowDialog(bool show)
+{
+    if (m_showDialog == show) {
+        return;
+    }
+    m_showDialog = show;
+    Q_EMIT showDialogChanged();
     invalidateFilter();
 }
 
