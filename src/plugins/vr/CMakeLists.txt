@@ -82,9 +82,6 @@ qt6_add_qml_module(vr
 
         qml/KwinShadowModel.qml
 
-        qml/WorkSurface3D.qml
-        qml/WorkSurfaceFace.qml
-        qml/WsEdge.qml
         qml/TransformGizmo3D.qml
 
     SOURCES
@@ -124,10 +121,6 @@ qt6_add_qml_module(vr
         kwintoqquick3dinputbridge.h kwintoqquick3dinputbridge.cpp
         textureprovideritem.h textureprovideritem.cpp
         curvedplanegeometry.h curvedplanegeometry.cpp
-        cylinderbodygeometry.h cylinderbodygeometry.cpp
-        spherepatchgeometry.h spherepatchgeometry.cpp
-        worksurfacemodel.h worksurfacemodel.cpp
-        worksurfacelayout.h worksurfacelayout.cpp
         kwinvrconfigwrapper.h
 
     RESOURCES

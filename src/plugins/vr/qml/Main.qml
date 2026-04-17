@@ -153,14 +153,6 @@ Item {
                            }
                        }
 
-                       /* Grab work surface if clicking on one */
-                       if(xrView.trySelectWorkSurface()) {
-                           return;
-                       }
-
-                       /* Clicking elsewhere deselects any work surface */
-                       xrView.selectedSurfaceId = ""
-
                        /* Left-click+hold on empty space = grab all */
                        if(event.button === Qt.LeftButton && xrView.grabAllIfEmptySpace()) {
                            emptySpaceGrabbed = true
@@ -217,11 +209,6 @@ Item {
                         if(desktopGrabbed) {
                             xrView.grab(false)
                             desktopGrabbed = false
-                            return;
-                        }
-
-                        /* Don't open radial menu if a surface was just selected */
-                        if(xrView.selectedSurfaceId !== "") {
                             return;
                         }
 
