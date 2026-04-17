@@ -74,6 +74,12 @@ public:
     Q_INVOKABLE void registerObject(QQuick3DNode *node);
     Q_INVOKABLE void unregisterObject(QQuick3DNode *node);
 
+    // Force-pan to center `node`. Takes an explicit camera (the normal
+    // `camera` binding gets null'd during hover/grab/menu, which would
+    // otherwise suppress the pan). The override stays locked on `node`
+    // until stop-FOV is reached or `node` is destroyed.
+    Q_INVOKABLE void focusOn(QQuick3DNode *node, QQuick3DNode *camera);
+
 Q_SIGNALS:
     void cameraChanged();
     void rotationTargetChanged();
@@ -99,6 +105,13 @@ private:
     QQuick3DNode *m_camera = nullptr;
     QQuick3DNode *m_rotationTarget = nullptr;
     QList<QQuick3DNode *> m_trackedNodes;
+    // When set, onFrame pans toward this node instead of the angularly-closest
+    // tracked node. Cleared once the node reaches the stop-FOV.
+    QQuick3DNode *m_focusOverride = nullptr;
+    // Camera used while an override is active. Separate from m_camera so
+    // focus-pan works even when the main `camera` binding is gated null
+    // during hover/grab/menu interactions.
+    QQuick3DNode *m_focusCamera = nullptr;
     bool m_worldUpAlignment = true;
 
     int m_fovH = 50;

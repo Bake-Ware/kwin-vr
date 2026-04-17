@@ -69,6 +69,11 @@ Item {
 
         property bool desktopGrabbed: false
         property bool emptySpaceGrabbed: false
+        // Latch that makes the empty-space world-grab persist past button
+        // release. Set by a double-click on empty space; cleared by any
+        // subsequent press. Lets the user "pin" the world while they walk
+        // around / watch a floating video without holding the mouse.
+        property bool emptySpaceGrabToggled: false
         property bool bothClicked: false
         property bool gizmoDragActive: false
         property int heldButtons: 0
@@ -76,13 +81,38 @@ Item {
         property real lastRightPressMs: 0
         onPressed: (event) => {
                        mouseArea.heldButtons |= event.button
-                       if (event.button === Qt.LeftButton) mouseArea.lastLeftPressMs = Date.now()
-                       else if (event.button === Qt.RightButton) mouseArea.lastRightPressMs = Date.now()
+                       const nowMs = Date.now()
+                       const prevLeftPressMs = mouseArea.lastLeftPressMs
+                       if (event.button === Qt.LeftButton) mouseArea.lastLeftPressMs = nowMs
+                       else if (event.button === Qt.RightButton) mouseArea.lastRightPressMs = nowMs
+
+                       /* Toggle-grab is active: any press drops it and consumes
+                        * the click (no new grab / menu / selection). */
+                       if (emptySpaceGrabToggled) {
+                           xrView.release()
+                           emptySpaceGrabToggled = false
+                           emptySpaceGrabbed = false
+                           return;
+                       }
 
                        /* Super+Click = select/deselect object (gizmo) */
                        if (event.modifiers & Qt.MetaModifier && !(event.modifiers & Qt.ControlModifier)) {
                            xrView.selectObjectAtCursor()
                            bothClicked = true
+                           return;
+                       }
+
+                       /* Double-click on empty space = toggle world grab.
+                        * Reuse grabAllIfEmptySpace() which handles the empty-
+                        * space conditions and the grab itself; we just latch
+                        * the toggle flag on top. Checked BEFORE both-click
+                        * radial so rapid VR-trigger double taps that emit L+R
+                        * together don't fall into the menu path. */
+                       if (event.button === Qt.LeftButton
+                           && (nowMs - prevLeftPressMs) < 300
+                           && xrView.grabAllIfEmptySpace()) {
+                           emptySpaceGrabbed = true
+                           emptySpaceGrabToggled = true
                            return;
                        }
 
@@ -147,6 +177,27 @@ Item {
         onReleased: (event) => {
                         mouseArea.heldButtons &= ~event.button
 
+                        /* Empty-space grab: drop on LeftButton release unless
+                         * the grab is toggle-latched (double-click). Hoisted
+                         * above bothClicked / gizmoDragActive so a stale flag
+                         * can't leave the grab stuck. */
+                        if (event.button === Qt.LeftButton
+                            && emptySpaceGrabbed
+                            && !emptySpaceGrabToggled) {
+                            xrView.release()
+                            emptySpaceGrabbed = false
+                            if (mouseArea.heldButtons === 0)
+                                bothClicked = false
+                            return;
+                        }
+
+                        /* Toggle-grab latched: consume the release so the
+                         * fall-through to radialMenuActivate(false) can't open
+                         * the radial menu under the toggled world. */
+                        if (emptySpaceGrabToggled) {
+                            return;
+                        }
+
                         /* Gizmo drag end first — never let bothClicked swallow it
                          * (VR pipeline can drop releases leaving bothClicked stale) */
                         if (gizmoDragActive) {
@@ -166,12 +217,6 @@ Item {
                         if(desktopGrabbed) {
                             xrView.grab(false)
                             desktopGrabbed = false
-                            return;
-                        }
-
-                        if(emptySpaceGrabbed) {
-                            xrView.release()
-                            emptySpaceGrabbed = false
                             return;
                         }
 

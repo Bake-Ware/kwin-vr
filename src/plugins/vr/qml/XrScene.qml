@@ -85,7 +85,78 @@ XrView {
 
     Component { id: gizmoComponent; TransformGizmo3D {} }
 
+    // Saved scene pose of the focused window. On focus we slide the window
+    // along its direction-from-camera to the sibling-average depth and
+    // re-face it to the camera, preserving its angular position in the
+    // user's surroundings. On defocus we restore.
+    property var _focusedPullPose: null
+
+    function _restoreFocusedPullPose() {
+        if (!_focusedPullPose)
+            return
+        const pose = _focusedPullPose
+        _focusedPullPose = null
+        if (pose.window && pose.window.client && pose.window.client.vr) {
+            KwinVrHelpers.setNodePositionFromScene(pose.window, pose.position)
+            KwinVrHelpers.setNodeRotationFromScene(pose.window, pose.rotation)
+        }
+    }
+
+    // Average distance from camera to every vr-floating window, excluding
+    // the target. Used as depth target for the focus pull.
+    function _averageFloatingDistance(exclude) {
+        const camPos = cam.scenePosition
+        let total = 0.0
+        let count = 0
+        for (let i = 0; i < applicationWindowsRepeater.count; ++i) {
+            const w = applicationWindowsRepeater.objectAt(i)
+            if (!w || w === exclude) continue
+            if (!w.client || !w.client.vr || w.attachedFace) continue
+            if (!w.visible) continue
+            total += w.scenePosition.minus(camPos).length()
+            count += 1
+        }
+        return count === 0 ? xrView.distance : total / count
+    }
+
+    // Focus pull: slide the window along its cam→window direction to the
+    // sibling-average depth, and re-face it to the user. Angular position
+    // in the user's surroundings is preserved (no teleport to center).
+    function pullAppWinForward(appWin) {
+        if (!appWin || !appWin.client || !appWin.client.vr || appWin.attachedFace)
+            return
+        if (_focusedPullPose && _focusedPullPose.window === appWin)
+            return
+        _restoreFocusedPullPose()
+
+        const camPos = cam.scenePosition
+        const windowPos = appWin.scenePosition
+        let dir = windowPos.minus(camPos)
+        const currentDist = dir.length()
+        if (currentDist < 0.0001)
+            return
+        dir = dir.times(1.0 / currentDist)
+
+        _focusedPullPose = {
+            window: appWin,
+            position: windowPos,
+            rotation: appWin.sceneRotation
+        }
+
+        const avgDist = _averageFloatingDistance(appWin)
+        const newPos = camPos.plus(dir.times(avgDist))
+        KwinVrHelpers.setNodePositionFromScene(appWin, newPos)
+        KwinVrHelpers.turnToFace(appWin, cam)
+
+        // Animate world rotation so the focused window is centered in view.
+        // Uses follow-mode's speed (KWinVRConfig.followSpeed). No-op if the
+        // window is already within the reactive FOV. Passes cam explicitly
+        // because followMode.camera gets null-gated during hover/grab/menu.
+        followMode.focusOn(appWin, cam)
+    }
+
     onSelectedNodeChanged: {
+        _restoreFocusedPullPose()
         if (_gizmoInstance) {
             _gizmoInstance.destroy()
             _gizmoInstance = null
@@ -105,8 +176,21 @@ XrView {
                     if (appWin && appWin.client && appWin.client.vr)
                         KwinVrHelpers.windowResize(appWin.client, dw, dh)
                 })
+                pullAppWinForward(selectedNode as KwinApplicationWindow)
             }
             transformGizmo = _gizmoInstance
+        }
+    }
+
+    // If the user grabs the focused-pulled window, grab becomes authoritative.
+    // Drop the saved pose so deselect doesn't snap it back behind the user.
+    Connections {
+        target: pickRay
+        function onGrabbedObjectChanged() {
+            if (xrView._focusedPullPose
+                && pickRay.grabbedObject === xrView._focusedPullPose.window) {
+                xrView._focusedPullPose = null
+            }
         }
     }
 
@@ -944,6 +1028,20 @@ XrView {
                     }
                     Component.onDestruction: {
                         delete outputMirrorRepeater.outputMap[output.name]
+                        spaceAllocator.unregisterObject(pseudoOutput)
+                        followMode.unregisterObject(pseudoOutput)
+                    }
+                    // Free the mirror's allocator slot while it is hidden, so
+                    // auto-floated windows can claim the prime front-center
+                    // real estate instead of getting pushed to the fringe.
+                    onIsVirtualHiddenChanged: {
+                        if (isVirtualHidden) {
+                            spaceAllocator.unregisterObject(pseudoOutput)
+                            followMode.unregisterObject(pseudoOutput)
+                        } else {
+                            spaceAllocator.registerObject(pseudoOutput)
+                            followMode.registerObject(pseudoOutput)
+                        }
                     }
                 }
                 function findPseudoOutputByOutput(output: QtObject): KwinPseudoOutputMirror {
@@ -1020,10 +1118,72 @@ XrView {
                         return Qt.size(sz.width / kwinAppWindow.ppu, sz.height / kwinAppWindow.ppu);
                     }
 
+                    // Pseudo-mirror for this window's host output. May be null if
+                    // the output has no mirror, and may have parent===null when
+                    // the mirror is hidden (e.g. hideVirtualDisplay). Either
+                    // case means the window would render into a detached
+                    // subtree — we promote it to vr=true so it floats instead.
+                    // Read outputMap directly (not findPseudoOutputByOutput)
+                    // because the latter walks repeater.children, which feeds
+                    // back into this binding and produces a binding loop.
+                    readonly property QtObject hostMirror: {
+                        const name = kwinAppWindow.client.output ? kwinAppWindow.client.output.name : ""
+                        return outputMirrorRepeater.outputMap[name] ?? null
+                    }
+                    readonly property bool hostOutputHidden:
+                        !hostMirror || hostMirror.parent === null
+
                     function registerForSpaceAllocator() {
+                        if (!spaceAllocator) return
                         spaceAllocator.registerObject(kwinAppWindow)
                     }
-                    Component.onCompleted: Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+
+                    // Place this window in free 3D space via the shared allocator.
+                    // Used when the window auto-floats because its host output is
+                    // hidden / missing. turnToFace (not KeepRoll) because the
+                    // handle may carry arbitrary roll from prior follow-mode
+                    // activity, which would otherwise flip spawns upside down.
+                    function placeInFreeSpace() {
+                        if (!spaceAllocator || !allWindowsGrabHandle) return
+                        if (itemSize.width <= 0 || itemSize.height <= 0) return
+                        const globalPos = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
+                        const localPos = allWindowsGrabHandle.mapPositionFromScene(globalPos)
+                        kwinAppWindow.position = localPos
+                        KwinVrHelpers.turnToFace(kwinAppWindow, spaceAllocator.viewpoint)
+                    }
+
+                    // One-way promotion: if this window's host output is not
+                    // renderable, flip it into vr-floating. Idempotent — once
+                    // client.vr is true the guard short-circuits, so re-showing
+                    // the host mirror does NOT snap the window back (per design:
+                    // auto-floated windows stay floating). Placement deferred so
+                    // the state-machine's parent swap (screen→vr) applies first.
+                    function maybeAutoFloat() {
+                        if (!kwinAppWindow.client.vr && kwinAppWindow.hostOutputHidden) {
+                            kwinAppWindow.client.vr = true
+                            Qt.callLater(placeInFreeSpace)
+                        }
+                    }
+                    onHostOutputHiddenChanged: Qt.callLater(kwinAppWindow.maybeAutoFloat)
+                    Component.onCompleted: {
+                        Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        Qt.callLater(kwinAppWindow.maybeAutoFloat)
+                    }
+
+                    // Programmatic focus (taskbar click, alt+tab, scripts) —
+                    // pull a far-off floating window toward the user while
+                    // active, restore its prior pose when focus leaves.
+                    Connections {
+                        target: kwinAppWindow.client
+                        function onActiveChanged() {
+                            if (kwinAppWindow.client.active) {
+                                xrView.pullAppWinForward(kwinAppWindow)
+                            } else if (xrView._focusedPullPose
+                                       && xrView._focusedPullPose.window === kwinAppWindow) {
+                                xrView._restoreFocusedPullPose()
+                            }
+                        }
+                    }
 
                     states: [
                         State {

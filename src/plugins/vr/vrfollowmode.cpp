@@ -202,9 +202,55 @@ void VrFollowMode::registerObject(QQuick3DNode *node)
 void VrFollowMode::unregisterObject(QQuick3DNode *node)
 {
     m_trackedNodes.removeAll(node);
+    if (m_focusOverride == node) {
+        m_focusOverride = nullptr;
+    }
     if (node) {
         disconnect(node, &QObject::destroyed, this, nullptr);
     }
+}
+
+void VrFollowMode::focusOn(QQuick3DNode *node, QQuick3DNode *camera)
+{
+    if (!node || !camera || !m_rotationTarget) {
+        return;
+    }
+    if (!node->visible()) {
+        return;
+    }
+
+    // In-FOV test needs a camera; use the explicit one (m_camera may be
+    // null-gated during hover/grab/menu).
+    const QVector3D toNode = node->scenePosition() - camera->scenePosition();
+    const QVector3D localDir = camera->mapDirectionFromScene(toNode).normalized();
+    const float hAngle = std::abs(qRadiansToDegrees(std::atan2(localDir.x(), -localDir.z())));
+    const float vAngle = std::abs(qRadiansToDegrees(std::atan2(localDir.y(), -localDir.z())));
+    if (hAngle <= m_fovH && vAngle <= m_fovV) {
+        // Already within the reactive FOV — consider it in-frame.
+        return;
+    }
+
+    if (m_focusOverride && m_focusOverride != node) {
+        disconnect(m_focusOverride, &QObject::destroyed, this, nullptr);
+    }
+    m_focusOverride = node;
+    m_focusCamera = camera;
+    connect(node, &QObject::destroyed, this, [this, node]() {
+        if (m_focusOverride == node) {
+            m_focusOverride = nullptr;
+            m_focusCamera = nullptr;
+        }
+    });
+
+    // Make sure the frame loop is running — updateConnections would have
+    // stopped it when m_camera was null.
+    if (!m_frameTimer.isActive()) {
+        m_timer.start();
+        m_frameTimer.start();
+    }
+
+    m_lookAwayTime = 0.0;
+    setActive(true);
 }
 
 void VrFollowMode::updateConnections()
@@ -280,7 +326,11 @@ bool VrFollowMode::isNodeInStopFov(const QQuick3DNode *node) const
 
 void VrFollowMode::onFrame()
 {
-    if (!m_camera || !m_rotationTarget) {
+    // Effective camera: during a focus override, use the explicit camera
+    // supplied to focusOn so the pan runs even while m_camera is null-gated
+    // (hover/grab/menu).
+    QQuick3DNode *effCam = (m_focusOverride && m_focusCamera) ? m_focusCamera : m_camera;
+    if (!effCam || !m_rotationTarget) {
         return;
     }
 
@@ -288,17 +338,32 @@ void VrFollowMode::onFrame()
     m_timer.restart();
     const double dt = qMin(deltaTime, 0.1);
 
-    auto closest = findClosestNode();
-    if (!closest) {
+    // Override wins over closest while set — a focus-triggered pan must
+    // stay locked on its target until centered.
+    auto target = (m_focusOverride && m_focusOverride->visible())
+        ? m_focusOverride
+        : findClosestNode();
+    if (!target) {
         return;
     }
 
     if (m_active) {
-        if (isNodeInStopFov(closest)) {
+        if (isNodeInStopFov(target)) {
             setActive(false);
             m_lookAwayTime = 0.0;
+            if (m_focusOverride) {
+                // Final re-face: pan is done, lock orientation to cam.
+                KwinVrHelpers::turnToFace(m_focusOverride, effCam);
+            }
+            m_focusOverride = nullptr;
+            m_focusCamera = nullptr;
         } else {
-            rotateTowardsNode(closest, dt);
+            rotateTowardsNode(target, dt);
+            if (target == m_focusOverride) {
+                // Handle rotation drifts the override's scene rotation; re-face
+                // every frame so the window stays normal-to-camera with cam roll.
+                KwinVrHelpers::turnToFace(m_focusOverride, effCam);
+            }
         }
     } else {
         if (anyNodeInFov()) {
@@ -307,7 +372,7 @@ void VrFollowMode::onFrame()
             m_lookAwayTime += dt;
             if (m_lookAwayTime > m_delay) {
                 setActive(true);
-                rotateTowardsNode(closest, dt);
+                rotateTowardsNode(target, dt);
             }
         }
     }
@@ -315,14 +380,18 @@ void VrFollowMode::onFrame()
 
 void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
 {
+    QQuick3DNode *effCam = (m_focusOverride && m_focusCamera) ? m_focusCamera : m_camera;
+    if (!effCam) {
+        return;
+    }
     // Calculate rotation to bring node into view
-    QVector3D toClosest = node->scenePosition() - m_camera->scenePosition();
+    QVector3D toClosest = node->scenePosition() - effCam->scenePosition();
     if (toClosest.lengthSquared() < 0.0001f) {
         return;
     }
 
     toClosest.normalize();
-    QVector3D cameraForward = m_camera->forward().normalized();
+    QVector3D cameraForward = effCam->forward().normalized();
 
     // Delta rotation to bring the closest window into camera's forward direction
     QQuaternion deltaRotation = QQuaternion::rotationTo(toClosest, cameraForward);
@@ -332,7 +401,7 @@ void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
     QQuaternion currentSceneRot = m_rotationTarget->sceneRotation();
 
     // Pivot point is the camera position - we rotate around the user's head
-    QVector3D pivotPoint = m_camera->scenePosition();
+    QVector3D pivotPoint = effCam->scenePosition();
 
     // Rotate position around pivot
     QVector3D offset = currentScenePos - pivotPoint;
@@ -346,7 +415,7 @@ void VrFollowMode::rotateTowardsNode(QQuick3DNode *node, double dt)
     QVector3D awayFromCamera = (targetScenePos - pivotPoint).normalized();
 
     // Reference rotation determines up vector for roll alignment
-    QQuaternion referenceRot = m_worldUpAlignment ? QQuaternion() : m_camera->sceneRotation();
+    QQuaternion referenceRot = m_worldUpAlignment ? QQuaternion() : effCam->sceneRotation();
 
     // This makes -Z point away from camera, thus +Z points toward camera
     QQuaternion targetSceneRot = KwinVrHelpers::rotationToFaceDirection(awayFromCamera, referenceRot);
