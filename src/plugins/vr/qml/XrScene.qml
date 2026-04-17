@@ -577,6 +577,11 @@ XrView {
                     items.push({ label: qsTr("Transform"), action: "transform" })
                 if (xrView.selectedNode)
                     items.push({ label: qsTr("Done"), action: "confirmGizmo" })
+                // #3 stubs — wiring only, no behavior. Real grouping lands in #4–#7.
+                if (xrView.radialMenuTargetNode)
+                    items.push({ label: qsTr("Group"), action: "groupStub" })
+                if (xrView.radialMenuTargetNode && WindowGroupRegistry.findContaining(xrView.radialMenuTargetNode))
+                    items.push({ label: qsTr("Ungroup"), action: "ungroupStub" })
                 return items.concat([
                     { label: qsTr("Park Ray"),  action: "parkRay" },
                     { label: qsTr("Recenter"),  action: "recenter" },
@@ -593,6 +598,12 @@ XrView {
                                        radialMenuLoader.active = false
                                    } else if (action === "confirmGizmo") {
                                        xrView.selectedNode = null
+                                       radialMenuLoader.active = false
+                                   } else if (action === "groupStub") {
+                                       console.log(Logger.kwinvr, "WindowGroup: TODO create group for", xrView.radialMenuTargetNode)
+                                       radialMenuLoader.active = false
+                                   } else if (action === "ungroupStub") {
+                                       console.log(Logger.kwinvr, "WindowGroup: TODO ungroup", xrView.radialMenuTargetNode)
                                        radialMenuLoader.active = false
                                    } else if (action === "parkRay") {
                                        pickRay.enabled = false
@@ -909,6 +920,19 @@ XrView {
                             }
                         }
                     ]
+                }
+            }
+
+            // Window groups (#3 scaffold). Data-only — empty delegate.
+            // Modes (Pinned/Stacked/Camera) and thumbtack geometry land in #4–#6.
+            Repeater3D {
+                id: windowGroupRepeater
+                model: WindowGroupRegistry.groups
+                delegate: Node {
+                    required property var modelData
+                    Component.onCompleted: {
+                        if (modelData) modelData.parent = windowGroupRepeater
+                    }
                 }
             }
 

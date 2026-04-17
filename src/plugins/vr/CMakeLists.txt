@@ -30,6 +30,7 @@ find_package(KF6 REQUIRED COMPONENTS Config CoreAddons I18n WindowSystem GlobalA
 find_package(KDecoration3 REQUIRED)
 
 set_source_files_properties(qml/Logger.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/WindowGroupRegistry.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(vr
     NO_PLUGIN
@@ -83,6 +84,9 @@ qt6_add_qml_module(vr
         qml/KwinShadowModel.qml
 
         qml/TransformGizmo3D.qml
+
+        qml/WindowGroup.qml
+        qml/WindowGroupRegistry.qml
 
     SOURCES
         main.cpp
