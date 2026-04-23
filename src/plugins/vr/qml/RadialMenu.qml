@@ -99,13 +99,13 @@ Rectangle {
         }
 
         Repeater {
-            model: 5
+            model: root.buttonLabels.length
 
             Item {
                 id: buttonContainer
                 width: parent.width
                 height: parent.height
-                rotation: index * 72 - 90
+                rotation: index * (360 / root.buttonLabels.length) - 90
 
                 Rectangle {
                     id: button
