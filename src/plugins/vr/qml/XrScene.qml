@@ -164,14 +164,17 @@ XrView {
         pickRay.grabMoveClamped(value, minDist, maxDist)
     }
 
-    // Scroll-to-depth for grabbed detached VR windows.
+    // Scroll-to-depth for grabbed detached VR windows and the whole-world grab.
     // Each scroll step applies one sensitivity unit in the sign direction.
     function scrollGrab(delta: real): void {
         if (!pickRay.grabbedObject)
             return
-        const appWin = pickRay.grabbedObject as KwinApplicationWindow
-        if (!appWin || !appWin.client || !appWin.client.vr)
-            return
+        const isWorld = pickRay.grabbedObject === allWindowsGrabHandle
+        if (!isWorld) {
+            const appWin = pickRay.grabbedObject as KwinApplicationWindow
+            if (!appWin || !appWin.client || !appWin.client.vr)
+                return
+        }
         const direction = delta > 0 ? 1.0 : -1.0
         pickRay.grabMoveClamped(
             direction * KWinVRConfig.grabScrollSensitivity,
