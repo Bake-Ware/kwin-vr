@@ -39,6 +39,8 @@ XrView {
     property alias rayEnabled: pickRay.enabled
     property alias cursorEnabled: focusTracking.cursorEnabled
     property alias grabbed: pickRay.grabbedObject
+    readonly property bool worldGrabbed: pickRay.grabbedObject === allWindowsGrabHandle
+    readonly property var cursorHoverObject: focusTracking.cursorHoverObject
     property alias currentMovingResizingWindow: focusTracking.currentMovingResizingWindow
     property alias pullGrabbed: pickRay.pullGrabbed
     property alias pushGrabbed: pickRay.pushGrabbed

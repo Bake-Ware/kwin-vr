@@ -68,9 +68,21 @@ Item {
         acceptedButtons: Qt.AllButtons
 
         property bool desktopGrabbed: false
+        /* Left-click empty-space grab-world: drag on motion, toggle on no-motion click */
+        property bool worldGrabbing: false
+        property real worldPressX: 0
+        property real worldPressY: 0
         onPressed: (event) => {
+                       const wasWorldLatched = xrView.worldGrabbed
                        /* Release grabbed object on any button press */
                        if(xrView.release()) {
+                           if(wasWorldLatched) {
+                               /* Latch release — if clicked a window, let it through */
+                               if(xrView.cursorHoverObject) {
+                                   event.accepted = false
+                               }
+                               return;
+                           }
                             /* Nedd to send key press further for kwin to release thw window */
                            if(xrView.currentMovingResizingWindow) {
                                event.accepted = false
@@ -85,9 +97,20 @@ Item {
                            }
                        }
 
-                       /* Activate/close radial menu if click on empty space */
-                       if(xrView.radialMenuActivate(true)) {
-                           return;
+                       if(!xrView.cursorHoverObject) {
+                           if(event.button === Qt.LeftButton) {
+                               /* Begin grab immediately; release decides drag vs latch */
+                               worldGrabbing = true
+                               worldPressX = event.x
+                               worldPressY = event.y
+                               xrView.grab(true)
+                               return;
+                           }
+                           if(event.button === Qt.RightButton) {
+                               if(xrView.radialMenuActivate(true)) {
+                                   return;
+                               }
+                           }
                        }
 
                        event.accepted = false
@@ -99,8 +122,19 @@ Item {
                             return;
                         }
 
-                        if(xrView.radialMenuActivate(false)) {
+                        if(worldGrabbing) {
+                            const moved = (event.x !== worldPressX) || (event.y !== worldPressY)
+                            if(moved) {
+                                xrView.release()
+                            }
+                            worldGrabbing = false
                             return;
+                        }
+
+                        if(event.button === Qt.RightButton && !xrView.cursorHoverObject) {
+                            if(xrView.radialMenuActivate(false)) {
+                                return;
+                            }
                         }
                     }
         onWheel: (event) => {
