@@ -245,6 +245,8 @@ XrView {
         id: snapManager
         xray: pickRay
         windowsRepeater: applicationWindowsRepeater
+        picking: focusTracking.picking
+        kwinInput: xrView.kwinInput
     }
 
     VrKwinCursor {
@@ -519,7 +521,10 @@ XrView {
                          && snapManager.landingSize.height > 0
                 position: snapManager.currentTarget
                           ? allWindowsGrabHandle.mapPositionFromScene(
-                                snapManager.currentTarget.mapPositionToScene(snapManager.landingLocalOffset))
+                                snapManager.currentTarget.mapPositionToScene(
+                                    Qt.vector3d(snapManager.landingLocalOffset.x,
+                                                snapManager.landingLocalOffset.y,
+                                                snapManager.landingLocalOffset.z + KWinVRConfig.zSurfaceMarginTop)))
                           : Qt.vector3d(0, 0, 0)
                 rotation: snapManager.currentTarget ? snapManager.currentTarget.rotation : Qt.quaternion(1, 0, 0, 0)
                 scale: Qt.vector3d(snapManager.landingSize.width / 100,
@@ -554,6 +559,8 @@ XrView {
                     focusControl: focusTracking
                     property real zOffset: 0
                     property int stackingOrder: client.stackingOrder
+
+                    onStackFocusRequested: snapManager.promoteStackMember(kwinAppWindow)
 
                     function centerOffset(childRect: rect, parentRect: rect, zValue: real, ppu: real): vector3d {
                         return Qt.vector3d(
