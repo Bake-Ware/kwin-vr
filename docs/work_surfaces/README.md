@@ -39,7 +39,7 @@ In-repo working docs for the `feat/work_surfaces` branch. This directory is the 
 |-------|--------|---------|----------|------------|
 | Scaffold types | done | `8b11b835a3` | [impl-scaffold](impl-scaffold.md) | [design-data-model](design-data-model.md) |
 | Registry + snap join | done | `dd628ff698` | [impl-registry](impl-registry.md) | [design-lifecycle](design-lifecycle.md) |
-| Group-rigid drag | planned | — | — | [design-drag](design-drag.md) |
+| Group-rigid drag | done | (pending SHA) | [impl-group-drag](impl-group-drag.md) | [design-drag](design-drag.md) |
 | Detach modifier + release-to-solo | planned | — | — | [design-drag](design-drag.md) |
 | Bisection | planned | — | — | [design-bisection](design-bisection.md) |
 | Curvature rendering + kcfg | planned | — | — | [design-curvature](design-curvature.md) |

@@ -44,6 +44,10 @@ QtObject {
     // Members reparented under grabbed during drag (group-rigid via Qt
     // transform inheritance). Array of { window: Node, oldParent: Node }.
     property var _stackDragMembers: null
+    // Same reparenting pattern as _stackDragMembers, but populated from
+    // the grabbed window's workSurface.members for group-rigid cluster
+    // drag (surface-aware, supersedes stackedOnto walk when present).
+    property var _surfaceDragMembers: null
     // True if a grab/drag started between the current trigger press and its
     // release. Cleared on press, set when xray.grabbedObject becomes set.
     property bool _dragStartedThisPress: false
@@ -434,6 +438,41 @@ QtObject {
         _stackDragMembers = null
     }
 
+    // Surface-aware analog of _captureStackDrag. Reparents every other
+    // member of grabbed's workSurface under grabbed so Qt's scene graph
+    // carries them rigidly. Called instead of _captureStackDrag when
+    // grabbed is a surface member; a solo grabbed window falls back to
+    // stack-root capture for legacy stacks not yet in a surface.
+    function _captureSurfaceDrag(grabbed) {
+        _surfaceDragMembers = null
+        if (!grabbed || !grabbed.workSurface) return
+        if (!grabbed.client || !grabbed.client.vr) return
+        const surface = grabbed.workSurface
+        const list = []
+        for (const m of surface.members) {
+            if (!m || m === grabbed) continue
+            const oldParent = m.parent
+            const pose = KwinVrHelpers.getRelativePose(grabbed, m)
+            m.parent = grabbed
+            m.position = pose.position
+            m.rotation = pose.rotation
+            list.push({ window: m, oldParent: oldParent })
+        }
+        if (list.length > 0) _surfaceDragMembers = list
+    }
+
+    function _releaseSurfaceDrag() {
+        if (!_surfaceDragMembers) return
+        for (const m of _surfaceDragMembers) {
+            const scenePos = m.window.scenePosition
+            const sceneRot = m.window.sceneRotation
+            m.window.parent = m.oldParent
+            KwinVrHelpers.setNodePositionFromScene(m.window, scenePos)
+            KwinVrHelpers.setNodeRotationFromScene(m.window, sceneRot)
+        }
+        _surfaceDragMembers = null
+    }
+
     // Watch grabbed window's `client.vr`. If it flips to false mid-drag
     // (root snaps to pseudomirror), members must be detached from grabbed
     // before its state machine reparents to the pseudo output, otherwise
@@ -507,7 +546,13 @@ QtObject {
                 // re-stack to a new target if user drops on one.
                 if (now.stackedOnto)
                     root._detachFromStack(now)
-                root._captureStackDrag(now)
+                // Surface-aware group-rigid drag takes precedence when the
+                // grabbed window belongs to a workSurface. Otherwise fall
+                // back to legacy stack-root capture for pre-surface stacks.
+                if (now.workSurface)
+                    root._captureSurfaceDrag(now)
+                else
+                    root._captureStackDrag(now)
             } else {
                 console.log(Logger.kwinvr, "Snap release: target=", root.currentTarget,
                             "action=", root.actionName(root.currentAction))
@@ -518,8 +563,10 @@ QtObject {
                 }
                 // Restore parent on members; their scene pose is preserved
                 // (since they were children of grabbed throughout the drag,
-                // including during _commitSnap's writes).
+                // including during _commitSnap's writes). Both release paths
+                // are no-ops if their list is empty.
                 root._releaseStackDrag()
+                root._releaseSurfaceDrag()
                 root._lastDragged = null
                 root._setIntent(null, WindowSnapManager.Action.None)
             }
