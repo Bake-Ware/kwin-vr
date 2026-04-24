@@ -1,7 +1,7 @@
 # Impl — registry lifecycle + snap join
 
-**Status:** wip — staged, not yet committed. This doc represents the state about to ship.
-**Commits:** (pending) — will be `work_surfaces: registry lifecycle + snap join`
+**Status:** done
+**Commits:** `dd628ff698` — `work_surfaces: registry lifecycle + snap join + feature docs`
 **Design refs:** [design-data-model](design-data-model.md), [design-lifecycle](design-lifecycle.md)
 
 ## Goal
@@ -58,7 +58,5 @@ After this chunk lands:
 ## Commit history
 
 ```
-(pending)   work_surfaces: registry lifecycle + snap join
+dd628ff698   work_surfaces: registry lifecycle + snap join + feature docs
 ```
-
-Will be added after this doc is written, code compiles, and install + kwin-restart smoke test is clean. This impl doc + design docs + code commit together as one squashed commit per the "tighten current chunk with docs before push" rule.
