@@ -1,7 +1,7 @@
 # Impl — plain-drag detach, Shift opts into group
 
 **Status:** done
-**Commits:** (pending SHA) — this commit
+**Commits:** `500be07b89` — `work_surfaces: plain-drag detach, Shift opts into group`
 **Design refs:** [design-drag](design-drag.md)
 
 ## Goal
@@ -52,5 +52,5 @@ Give the user a way to pull a single window out of a work surface without closin
 ## Commit history
 
 ```
-(pending SHA)   work_surfaces: plain-drag detach, Shift opts into group from surface
+500be07b89   work_surfaces: plain-drag detach, Shift opts into group
 ```
