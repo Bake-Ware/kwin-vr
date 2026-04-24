@@ -4,11 +4,14 @@ Grab/drag behavior for surface members.
 
 ## Modes
 
+**Reversed 2026-04-24:** after VR testing, the default and modifier swapped. Plain drag now targets just the grabbed window; Shift engages group-rigid. Default = individual action, opt-in = group action.
+
 | Gesture | Result |
 |---------|--------|
-| Plain drag on any surface member | **Group-rigid drag.** Entire surface moves as one. All other members reparented under the grabbed window for the duration, restored on release. |
-| **Shift** + drag on a surface member | **Detach drag.** Only the grabbed window moves. On release: if over a snap target → normal snap flow (+ bisect source if source still has >1 member); if over empty space → becomes solo (+ bisect source). |
-| Drag on dedicated handle in a window-tab or group-tab | Same as plain drag = group-rigid. Redundant-but-explicit path for users who don't want modifiers. The whole non-icon tab surface is the handle. |
+| Plain drag on a surface member | **Detach drag.** Only the grabbed window moves. On release: if over a snap target → normal snap flow (+ bisect source if source still has >1 member); if over empty space → becomes solo (+ bisect source). |
+| **Shift** + drag on a surface member | **Group-rigid drag.** Entire surface moves as one. All other members reparented under the grabbed window for the duration, restored on release. |
+| Drag on the group-tab handle (surface level) | Always group-rigid, regardless of modifier. The group-tab is the explicit "move the cluster" affordance. |
+| Drag on a window-tab handle (window level) | Matches window-body drag — plain = detach, Shift = group. |
 | Solo window drag | Unchanged single-window behavior. Shift is a no-op on solo windows until they're in a surface. |
 
 The Shift modifier key is configurable via `workSurfaceGroupDragModifier` kcfg (default `"Shift"`; accepts `"Ctrl" | "Alt" | "Meta"`).
@@ -20,7 +23,7 @@ Extends the existing `_captureStackDrag` / `_releaseStackDrag` pair in `WindowSn
 ```
 _captureSurfaceDrag(grabbed, shiftHeld):
     if !grabbed.workSurface: return         // solo → nothing to capture
-    if shiftHeld: return                    // detach drag → don't reparent
+    if !shiftHeld: return                   // plain = detach; skip reparent
     for m in grabbed.workSurface.members:
         if m === grabbed: continue
         pose = getRelativePose(grabbed, m)

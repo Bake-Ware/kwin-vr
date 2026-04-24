@@ -48,6 +48,10 @@ QtObject {
     // the grabbed window's workSurface.members for group-rigid cluster
     // drag (surface-aware, supersedes stackedOnto walk when present).
     property var _surfaceDragMembers: null
+    // Set true at grab-start when Shift is held on a surface member —
+    // skip surface capture (so only grabbed moves), and on release remove
+    // grabbed from its old surface before any _commitSnap re-join runs.
+    property bool _pendingDetach: false
     // True if a grab/drag started between the current trigger press and its
     // release. Cleared on press, set when xray.grabbedObject becomes set.
     property bool _dragStartedThisPress: false
@@ -546,16 +550,25 @@ QtObject {
                 // re-stack to a new target if user drops on one.
                 if (now.stackedOnto)
                     root._detachFromStack(now)
-                // Surface-aware group-rigid drag takes precedence when the
-                // grabbed window belongs to a workSurface. Otherwise fall
-                // back to legacy stack-root capture for pre-surface stacks.
-                if (now.workSurface)
+                // On a surface member: plain drag pulls just `now` out of
+                // the group (single-window detach); Shift+drag keeps the
+                // whole cluster rigid. Default = single, opt-in = group.
+                const shiftHeld = !!(Qt.application.keyboardModifiers & Qt.ShiftModifier)
+                root._pendingDetach = !shiftHeld && !!now.workSurface
+                if (now.workSurface && shiftHeld)
                     root._captureSurfaceDrag(now)
-                else
+                else if (!now.workSurface)
                     root._captureStackDrag(now)
             } else {
                 console.log(Logger.kwinvr, "Snap release: target=", root.currentTarget,
                             "action=", root.actionName(root.currentAction))
+                // Shift-drag detach: remove from old surface BEFORE the
+                // commit-snap step, so _commitSnap's joinOnSnap creates or
+                // joins the right surface instead of merging back.
+                if (root._pendingDetach && root._lastDragged && root.workSurfaces
+                    && root._lastDragged.workSurface) {
+                    root.workSurfaces.removeMember(root._lastDragged)
+                }
                 if (root._lastDragged
                     && root.currentTarget
                     && root.currentAction !== WindowSnapManager.Action.None) {
@@ -567,6 +580,7 @@ QtObject {
                 // are no-ops if their list is empty.
                 root._releaseStackDrag()
                 root._releaseSurfaceDrag()
+                root._pendingDetach = false
                 root._lastDragged = null
                 root._setIntent(null, WindowSnapManager.Action.None)
             }
