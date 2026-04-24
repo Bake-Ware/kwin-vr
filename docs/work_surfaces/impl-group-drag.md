@@ -1,7 +1,7 @@
 # Impl — group-rigid drag
 
 **Status:** done
-**Commits:** (pending) — this commit
+**Commits:** `83c7371928` — `work_surfaces: group-rigid drag — reparent surface members on grab`
 **Design refs:** [design-drag](design-drag.md)
 
 ## Goal
@@ -55,5 +55,5 @@ This chunk is the "plain drag = group-rigid" half of the drag design. Shift modi
 ## Commit history
 
 ```
-(pending)   work_surfaces: group-rigid drag — reparent surface members on grab
+83c7371928   work_surfaces: group-rigid drag — reparent surface members on grab
 ```
