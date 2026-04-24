@@ -254,6 +254,12 @@ XrView {
         kwinInput: xrView.kwinInput
     }
 
+    // WorkSurface scaffold — phase 1 stub. Registry instantiated so
+    // follow-up commits can wire join/detach/bisect through it.
+    WorkSurfaceRegistry {
+        id: workSurfaces
+    }
+
     VrKwinCursor {
         id: vrCursor
         ppu: xrView.ppu

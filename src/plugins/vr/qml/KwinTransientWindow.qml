@@ -32,6 +32,13 @@ Node {
     property var stackedOnto: null
     property int stackIndex: 0
 
+    // WorkSurface membership — null when solo. Set by WorkSurfaceRegistry
+    // on snap; cleared on detach/dissolve. Used by snap manager for
+    // group-rigid drag and by window delegates for shared curvature.
+    property var workSurface: null
+    // Per-window curvature override. NaN = follow surface / default chain.
+    property real curvatureOverride: NaN
+
     // Emitted when this window becomes active and is part of a stack — so
     // WindowSnapManager can promote it to top of cascade.
     signal stackFocusRequested()
