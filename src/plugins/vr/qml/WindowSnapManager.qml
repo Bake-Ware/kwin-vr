@@ -28,6 +28,7 @@ QtObject {
     required property var windowsRepeater   // kept for compat; unused
     required property VrPicking picking
     required property var kwinInput         // KwinVrInputDevice — for click/release detection
+    property var workSurfaces: null          // WorkSurfaceRegistry; optional in legacy tests
 
     // UV edge band — within this fraction of an edge → snap to that side.
     property real edgeBand: 0.25
@@ -371,6 +372,18 @@ QtObject {
         const tklass = target.client.resourceClass || "?"
         console.log(Logger.kwinvr, "Snap commit:", actionName(action), "→", tklass,
                     "stackIdx=", stackIdx)
+
+        if (workSurfaces) {
+            let edge = ""
+            switch (action) {
+                case WindowSnapManager.Action.SnapLeft:  edge = "left"; break
+                case WindowSnapManager.Action.SnapRight: edge = "right"; break
+                case WindowSnapManager.Action.SnapAbove: edge = "above"; break
+                case WindowSnapManager.Action.SnapBelow: edge = "below"; break
+                case WindowSnapManager.Action.Stack:     edge = "stack"; break
+            }
+            if (edge) workSurfaces.joinOnSnap(dragged, target, edge)
+        }
     }
 
     // Trigger scan on every ray-pick update (mirrors lookForScreenToPut).

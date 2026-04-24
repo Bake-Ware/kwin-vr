@@ -252,10 +252,11 @@ XrView {
         windowsRepeater: applicationWindowsRepeater
         picking: focusTracking.picking
         kwinInput: xrView.kwinInput
+        workSurfaces: workSurfaces
     }
 
-    // WorkSurface scaffold — phase 1 stub. Registry instantiated so
-    // follow-up commits can wire join/detach/bisect through it.
+    // WorkSurface lifecycle — snap manager calls joinOnSnap; follow-ups
+    // will wire detach and bisect on grab release without snap target.
     WorkSurfaceRegistry {
         id: workSurfaces
     }
