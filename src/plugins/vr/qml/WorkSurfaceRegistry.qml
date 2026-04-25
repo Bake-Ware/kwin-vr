@@ -11,9 +11,9 @@ import QtQuick3D
  * WorkSurfaceRegistry — scene-level manager for WorkSurface instances.
  * Lives as a child of XrScene.
  *
- * Phase 1: lifecycle (create/merge/detach/dissolve). Bisection lands
- * in a follow-up commit; for now, removeMember always takes everything
- * left as a single component.
+ * Responsibilities: lifecycle (create/merge/detach/dissolve/bisect).
+ * When removeMember leaves multiple disconnected components, each becomes
+ * its own surface (or orphans to solo on singleton components).
  */
 Node {
     id: root
@@ -21,7 +21,7 @@ Node {
     property int _nextId: 1
 
     /* Emitted on any surface lifecycle change for debug / telemetry. */
-    signal surfaceChanged(string surfaceId, string kind)  // kind: create|merge|join|detach|dissolve
+    signal surfaceChanged(string surfaceId, string kind)  // kind: create|merge|join|detach|dissolve|bisect
 
     Component {
         id: surfaceComponent
@@ -146,8 +146,9 @@ Node {
     }
 
     /*
-     * Remove a window from its surface. Phase 1: no bisection — remaining
-     * members stay as one component. On drop to 1 member, dissolve.
+     * Remove a window from its surface. If the remaining adjacency graph
+     * decomposes into multiple components, each becomes its own surface
+     * (singletons orphan to solo). See design-bisection.md.
      */
     function removeMember(win) {
         if (!win || !win.workSurface) return
@@ -159,7 +160,6 @@ Node {
 
         const adj = Object.assign({}, s.adjacency)
         const wid = _windowKey(win)
-        // Drop all edges touching `win`.
         delete adj[wid]
         for (const k in adj) {
             adj[k] = adj[k].filter(e => e.neighbor !== wid)
@@ -171,7 +171,106 @@ Node {
 
         if (s.members.length <= 1) {
             _dissolve(s)
+            return
         }
+
+        const components = _findConnectedComponents(s.adjacency, s.members)
+        if (components.length <= 1) return
+
+        const continuing = _pickContinuingComponent(components, s)
+        for (const comp of components) {
+            if (comp === continuing) continue
+            if (comp.length <= 1) {
+                // singleton component orphans — no surface for a lone window
+                for (const m of comp) m.workSurface = null
+                continue
+            }
+            const ns = _createSurface()
+            ns.curvature = s.curvature
+            const nsMembers = []
+            for (const m of comp) {
+                m.workSurface = ns
+                nsMembers.push(m)
+            }
+            ns.members = nsMembers
+            ns.adjacency = _subsetAdjacency(s.adjacency, comp)
+            surfaceChanged(ns.surfaceId, "bisect")
+        }
+
+        // Trim continuing surface to its component.
+        s.members = continuing.slice()
+        s.adjacency = _subsetAdjacency(s.adjacency, continuing)
+        if (s.members.length <= 1) {
+            _dissolve(s)
+        }
+    }
+
+    /*
+     * BFS over adjacency (keyed by _windowKey) to find connected components.
+     * Returns array of arrays of window objects.
+     */
+    function _findConnectedComponents(adjacency, memberList) {
+        const keyToWin = ({})
+        for (const m of memberList) keyToWin[_windowKey(m)] = m
+
+        const visited = ({})
+        const components = []
+        for (const m of memberList) {
+            const startKey = _windowKey(m)
+            if (visited[startKey]) continue
+            const queue = [startKey]
+            const comp = []
+            while (queue.length) {
+                const k = queue.shift()
+                if (visited[k]) continue
+                visited[k] = true
+                if (keyToWin[k]) comp.push(keyToWin[k])
+                const edges = adjacency[k] || []
+                for (const e of edges) {
+                    if (!visited[e.neighbor] && keyToWin[e.neighbor])
+                        queue.push(e.neighbor)
+                }
+            }
+            if (comp.length) components.push(comp)
+        }
+        return components
+    }
+
+    /*
+     * Return a new adjacency object restricted to edges whose endpoints
+     * are both in `memberWindows`.
+     */
+    function _subsetAdjacency(adjacency, memberWindows) {
+        const keep = ({})
+        for (const m of memberWindows) keep[_windowKey(m)] = true
+        const out = ({})
+        for (const k in adjacency) {
+            if (!keep[k]) continue
+            out[k] = adjacency[k].filter(e => keep[e.neighbor])
+        }
+        return out
+    }
+
+    /*
+     * Pick the component that retains the surface's identity after a split.
+     * Largest by member count; tie → component containing surface.members[0]
+     * (the oldest remaining anchor, which after removeMember is also the
+     * lowest-indexed member — design tiebreakers 2 and 3 collapse here).
+     */
+    function _pickContinuingComponent(components, surface) {
+        let best = components[0]
+        const anchor = surface.members.length > 0 ? surface.members[0] : null
+        const anchorKey = anchor ? _windowKey(anchor) : null
+        for (let i = 1; i < components.length; i++) {
+            const c = components[i]
+            if (c.length > best.length) { best = c; continue }
+            if (c.length < best.length) continue
+            if (anchorKey && c.some(w => _windowKey(w) === anchorKey)
+                && !best.some(w => _windowKey(w) === anchorKey)) {
+                best = c
+            }
+        }
+        return best
     }
 
     function _dissolve(s) {
