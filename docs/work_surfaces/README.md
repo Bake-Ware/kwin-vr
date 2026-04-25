@@ -41,7 +41,7 @@ In-repo working docs for the `feat/work_surfaces` branch. This directory is the 
 | Registry + snap join | done | `dd628ff698` | [impl-registry](impl-registry.md) | [design-lifecycle](design-lifecycle.md) |
 | Group-rigid drag | done | `83c7371928` | [impl-group-drag](impl-group-drag.md) | [design-drag](design-drag.md) |
 | Plain-drag detach (Shift = group) | done | `500be07b89` | [impl-detach-modifier](impl-detach-modifier.md) | [design-drag](design-drag.md) |
-| Shift+drag bugfixes (modifier snapshot + pose) | done | (this commit) | [impl-shift-drag-fixes](impl-shift-drag-fixes.md) | [design-drag](design-drag.md) |
+| Shift+drag bugfixes (modifier snapshot + pose) | done | `528939d0cd` | [impl-shift-drag-fixes](impl-shift-drag-fixes.md) | [design-drag](design-drag.md) |
 | Bisection | planned | — | — | [design-bisection](design-bisection.md) |
 | Curvature rendering + kcfg | planned | — | — | [design-curvature](design-curvature.md) |
 | Alt+wheel nudge | planned | — | — | [design-curvature](design-curvature.md) |

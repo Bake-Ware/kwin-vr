@@ -60,5 +60,5 @@ Document this as a sharp edge: the helpers are only safe when the parent is alre
 ## Commit history
 
 ```
-<sha>   work_surfaces: Shift+drag fixes — event.modifiers snapshot + pre-reparent pose
+528939d0cd   work_surfaces: Shift+drag fixes — event.modifiers snapshot + pre-reparent pose
 ```
