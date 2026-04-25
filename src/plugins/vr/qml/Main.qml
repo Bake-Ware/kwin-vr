@@ -73,6 +73,13 @@ Item {
         property real worldPressX: 0
         property real worldPressY: 0
         onPressed: (event) => {
+                       /* Snapshot modifier state for downstream consumers.
+                        * Qt.application.keyboardModifiers is unreliable in the
+                        * VR overlay because the scene doesn't hold global
+                        * keyboard focus; event.modifiers comes from the
+                        * synthesized QMouseEvent and is accurate at press time. */
+                       xrView.shiftHeldOnPress = !!(event.modifiers & Qt.ShiftModifier)
+
                        const wasWorldLatched = xrView.worldGrabbed
                        /* Release grabbed object on any button press */
                        if(xrView.release()) {
