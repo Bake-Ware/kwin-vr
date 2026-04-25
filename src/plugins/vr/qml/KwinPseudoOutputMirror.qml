@@ -48,13 +48,14 @@ CurvedPlane {
 
     // Convert a KWin frameGeometry (output coords) to slot.overrides.position
     // for this pseudomirror's Free-mode layout. Z is lifted forward of the
-    // bezel by zSurfaceMarginTop to avoid z-fighting with the VrScreenFrame.
+    // bezel by zWindowMarginTop — the standard window-floating offset — to
+    // keep windows visibly off the bezel and avoid z-fight.
     function outputCoordsToSlotPosition(frameGeo) {
         const og = root.output.geometry
         return Qt.vector3d(
                     +(frameGeo.x + frameGeo.width/2 - og.x - og.width/2) / root.ppu,
                     -(frameGeo.y + frameGeo.height/2 - og.y - og.height/2) / root.ppu,
-                    KWinVRConfig.zSurfaceMarginTop || 0.5)
+                    KWinVRConfig.zWindowMarginTop)
     }
 
     VrScreenFrame {
