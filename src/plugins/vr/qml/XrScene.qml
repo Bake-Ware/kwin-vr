@@ -592,7 +592,10 @@ XrView {
                     parent: isVirtualHidden ? null : outputMirrorRepeater
                     ppu: allWindows.ppu
                     registry: xrView.planeRegistry
-                    topLevelHost: allWindowsGrabHandle
+                    // Pseudomirror's Qt parent is outputMirrorRepeater, not
+                    // allWindowsGrabHandle — its position/rotation bindings
+                    // need to operate in the actual parent's frame.
+                    topLevelHost: outputMirrorRepeater
                     Component.onCompleted: {
                         outputMirrorRepeater.outputMap[output.name] = pseudoOutput
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
