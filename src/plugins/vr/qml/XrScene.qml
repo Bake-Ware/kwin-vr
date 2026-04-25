@@ -250,6 +250,15 @@ XrView {
         xrView: xrView
     }
 
+    // #14 step 1 — quad-overlap snap intent detection. Log only, no visual.
+    WindowSnapManager {
+        id: snapManager
+        xray: pickRay
+        windowsRepeater: applicationWindowsRepeater
+        picking: focusTracking.picking
+        kwinInput: xrView.kwinInput
+    }
+
     // Single registry of every CurvedPlane in the scene. Reachable via
     // xrView.planeRegistry from any descendant.
     PlaneRegistry {
@@ -591,20 +600,12 @@ XrView {
                     // Remove from scene graph entirely when hidden
                     parent: isVirtualHidden ? null : outputMirrorRepeater
                     ppu: allWindows.ppu
-                    registry: xrView.planeRegistry
-                    // Pseudomirror's Qt parent is outputMirrorRepeater, not
-                    // allWindowsGrabHandle — its position/rotation bindings
-                    // need to operate in the actual parent's frame.
-                    topLevelHost: outputMirrorRepeater
                     Component.onCompleted: {
                         outputMirrorRepeater.outputMap[output.name] = pseudoOutput
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
-                        // Set intrinsicPosition so the CurvedPlane render-path
-                        // mirrors the legacy positioning. Position binding picks it up.
-                        intrinsicPosition = localPosition
+                        position = localPosition
                         KwinVrHelpers.turnToFaceKeepRoll(pseudoOutput, spaceAllocator.viewpoint)
-                        intrinsicRotation = pseudoOutput.rotation
                         spaceAllocator.registerObject(pseudoOutput)
                         followMode.registerObject(pseudoOutput)
                     }
@@ -629,6 +630,37 @@ XrView {
                 }
             }
 
+            // #14 step 2 — telegraph ghost. Translucent rect at landing pose.
+            // Parented here so target.rotation maps directly (both share parent).
+            Model {
+                id: telegraphGhost
+                source: "#Rectangle"
+                visible: snapManager.currentTarget !== null
+                         && snapManager.currentAction !== WindowSnapManager.Action.None
+                         && snapManager.landingSize.width > 0
+                         && snapManager.landingSize.height > 0
+                position: snapManager.currentTarget
+                          ? allWindowsGrabHandle.mapPositionFromScene(
+                                snapManager.currentTarget.mapPositionToScene(
+                                    Qt.vector3d(snapManager.landingLocalOffset.x,
+                                                snapManager.landingLocalOffset.y,
+                                                snapManager.landingLocalOffset.z + KWinVRConfig.zSurfaceMarginTop)))
+                          : Qt.vector3d(0, 0, 0)
+                rotation: snapManager.currentTarget ? snapManager.currentTarget.rotation : Qt.quaternion(1, 0, 0, 0)
+                scale: Qt.vector3d(snapManager.landingSize.width / 100,
+                                   snapManager.landingSize.height / 100, 1)
+                depthBias: -100
+                materials: [
+                    DefaultMaterial {
+                        diffuseColor: Qt.rgba(0.3, 0.7, 1.0, 1.0)
+                        opacity: 0.4
+                        lighting: DefaultMaterial.NoLighting
+                        cullMode: Material.NoCulling
+                        depthDrawMode: Material.OpaqueOnlyDepthDraw
+                    }
+                ]
+            }
+
             Repeater3D {
                 id: applicationWindowsRepeater
                 property KwinWindowModel windowDataModel: KwinWindowModel {}
@@ -640,14 +672,15 @@ XrView {
                     id: kwinAppWindow
                     required property int index
                     required property QtObject window
+                    parent: null
                     client: window
                     windowDataModel: applicationWindowsRepeater.windowDataModel
                     ppu: allWindows.ppu
                     focusControl: focusTracking
-                    planeRegistry: xrView.planeRegistry
-                    topLevelHost: allWindowsGrabHandle
                     property real zOffset: 0
                     property int stackingOrder: client.stackingOrder
+
+                    onStackFocusRequested: snapManager.promoteStackMember(kwinAppWindow)
 
                     function centerOffset(childRect: rect, parentRect: rect, zValue: real, ppu: real): vector3d {
                         return Qt.vector3d(
@@ -665,63 +698,47 @@ XrView {
                         return Qt.size(sz.width / kwinAppWindow.ppu, sz.height / kwinAppWindow.ppu);
                     }
 
-                    // The kwinAppWindow Node no longer renders directly — the
-                    // CurvedPlane sibling (created in KwinApplicationWindow.qml's
-                    // Component.onCompleted) handles all rendering. Keep the Node
-                    // as a render-disabled stub for transient subsurface plumbing.
-                    parent: allWindowsGrabHandle
-                    grabHandle: kwinAppWindow
-                    zOffsetGlobal: 0
+                    function registerForSpaceAllocator() {
+                        spaceAllocator.registerObject(kwinAppWindow)
+                    }
+                    Component.onCompleted: Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
 
-                    // Drive vrPlane abduction by pseudomirror based on client.vr.
-                    // On either transition, capture current scene pose into
-                    // intrinsic so the plane stays where it visually was when
-                    // switching to top-level (visual continuity).
-                    function _syncPseudomirrorAbduction() {
-                        if (!vrPlane || !planeRegistry) return
-                        const c = kwinAppWindow.client
-                        if (!c) return
-                        if (c.vr) {
-                            // Going to VR: capture screen pose into intrinsic
-                            // before unhooking, so plane stays in place.
-                            const ab = vrPlane.abductor
-                            if (ab && ab._isPseudomirror) {
-                                if (vrPlane.topLevelHost) {
-                                    vrPlane.intrinsicPosition = vrPlane.topLevelHost.mapPositionFromScene(vrPlane.scenePosition)
-                                    vrPlane.intrinsicRotation = KwinVrHelpers.getRotationDelta(
-                                        vrPlane.topLevelHost.sceneRotation, vrPlane.sceneRotation)
+                    states: [
+                        State {
+                            name: "vr"
+                            when: kwinAppWindow.client.vr
+                            PropertyChanges {
+                                kwinAppWindow {
+                                    parent: allWindowsGrabHandle
+                                    grabHandle: kwinAppWindow
+                                    zOffsetGlobal: 0
                                 }
-                                planeRegistry.removeFromAllSlots(vrPlane.planeId)
                             }
-                        } else {
-                            // Going to screen: add to output's pseudomirror with
-                            // override.position = output coords mapped to surface.
-                            const ps = outputMirrorRepeater.findPseudoOutputByOutput(c.output)
-                            if (!ps) return
-                            const localPos = ps.outputCoordsToSlotPosition(c.frameGeometry)
-                            ps.addChild(vrPlane.planeId, { position: localPos })
+                            StateChangeScript {
+                                script: followMode.registerObject(kwinAppWindow)
+                            }
+                        },
+                        State {
+                            name: "screen"
+                            when: !kwinAppWindow.client.vr
+                            PropertyChanges {
+                                kwinAppWindow {
+                                    parent: outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
+                                    grabHandle: kwinAppWindow.parent
+                                    position: kwinAppWindow.centerOffset(
+                                                  kwinAppWindow.client.frameGeometry,
+                                                  kwinAppWindow.client.output.geometry,
+                                                  kwinAppWindow.zOffset,
+                                                  allWindows.ppu)
+                                    rotation: Qt.quaternion(1,0,0,0)
+                                }
+                                restoreEntryValues: false
+                            }
+                            StateChangeScript {
+                                script: followMode.unregisterObject(kwinAppWindow)
+                            }
                         }
-                    }
-
-                    Component.onCompleted: Qt.callLater(() => {
-                        _syncPseudomirrorAbduction()
-                    })
-
-                    Connections {
-                        target: kwinAppWindow.client
-                        function onVrChanged() {
-                            kwinAppWindow._syncPseudomirrorAbduction()
-                        }
-                        function onFrameGeometryChanged() {
-                            // Reposition slot override when window moves on screen.
-                            if (!vrPlane || !planeRegistry) return
-                            if (!kwinAppWindow.client || kwinAppWindow.client.vr) return
-                            const ps = outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
-                            if (!ps) return
-                            const localPos = ps.outputCoordsToSlotPosition(kwinAppWindow.client.frameGeometry)
-                            ps.updateSlotOverrides(vrPlane.planeId, { position: localPos })
-                        }
-                    }
+                    ]
                 }
             }
         }

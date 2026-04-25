@@ -88,7 +88,11 @@ Node {
         }
 
         depthBias: -root.zOffsetGlobal * KWinVRConfig.depthBiasMultiplier
-        source: "#Rectangle"
+        geometry: CurvedPlaneGeometry {
+            width: winT.textureSizeLogical.width / root.ppu
+            height: winT.textureSizeLogical.height / root.ppu
+            curvature: KWinVRConfig.defaultWindowCurvature || 0.0
+        }
         materials: WindowTextureMaterial {
             id: material
             texture: Texture {
@@ -98,9 +102,6 @@ Node {
                 }
             }
         }
-        scale: Qt.vector3d(winT.textureSizeLogical.width/100/root.ppu,
-                           winT.textureSizeLogical.height/100/root.ppu,
-                           0.0001)
 
         position: {
             const texSize = winT.textureSizeLogical

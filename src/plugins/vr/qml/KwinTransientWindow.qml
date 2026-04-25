@@ -22,6 +22,20 @@ Node {
     property real normalWindowFlexibleBottom: 0
     property real zOffsetGlobal: 0
 
+    // Snapshot of pre-snap frame size, captured by WindowSnapManager on first
+    // snap. Restored on detach. Null = window has never been snapped.
+    property var preSnapGeom: null
+
+    // Stack tracking — set by WindowSnapManager when this window is stacked
+    // onto another. stackedOnto = target window. stackIndex = position in
+    // cascade (1 = first child, 2 = second, etc.).
+    property var stackedOnto: null
+    property int stackIndex: 0
+
+    // Emitted when this window becomes active and is part of a stack — so
+    // WindowSnapManager can promote it to top of cascade.
+    signal stackFocusRequested()
+
     Connections {
         target: root.client
         function onMoveResizedChanged() {

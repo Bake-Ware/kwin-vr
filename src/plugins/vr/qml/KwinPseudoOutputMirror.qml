@@ -4,59 +4,38 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-/* This element represents a KWin Output (a monitor) as a CurvedPlane
- * in Free mode. Hosted screen-state windows are added as slots
- * (positioned at output coords) when their client.vr flips false.
- *
- * The VrScreenFrame is a scene-graph child rendering the bezel; it is
- * not part of the slot list and not driven by the abduction system.
- */
-
 import QtQuick
 import QtQuick3D
 import org.kde.kwin.vr
 
-CurvedPlane {
+/* This element represent a Kwin Output (a monitor, basically)
+ * All children of this element are sorted by ZStacker.
+ * the VrScreenFrame is always at the bottom.
+ *
+ * children should have stackingOrder property to be sorted
+ */
+Node {
     id: root
     required property QtObject output
 
-    // Mark so PlaneInteractionManager + window control-tab suppression
-    // can recognise pseudomirrors.
-    _isPseudomirror: true
-    mode: CurvedPlane.Mode.Free
-    stackChildren: true
-    content: null
-
-    property real ppu: 20
-
-    // Size for SpaceAllocator3D placement
-    property size itemSize: Qt.size(frame.frameWidth / ppu, frame.frameHeight / ppu)
-
-    // Bezel grab handle preserved for legacy callers (radial menu, etc.)
     property alias grabHandle: frame.grabHandle
+    property alias ppu: frame.ppu
+
+    // Size in 3D units for SpaceAllocator3D
+    property size itemSize: Qt.size(frame.frameWidth / ppu, frame.frameHeight / ppu)
 
     function uvToWindow2DCoordinates(coords: vector2d): point {
         const geom = root.output.geometry
-        return Qt.point(coords.x * geom.width,
-                        (1 - coords.y) * geom.height)
+        return Qt.point(
+                    (coords.x * geom.width),
+                    (1 - coords.y) * geom.height)
     }
 
     function uvToGlobal2DCoordinates(coords: vector2d): point {
         const geom = root.output.geometry
-        return Qt.point(geom.x + coords.x * geom.width,
-                        geom.y + (1 - coords.y) * geom.height)
-    }
-
-    // Convert a KWin frameGeometry (output coords) to slot.overrides.position
-    // for this pseudomirror's Free-mode layout. Z is left at 0 — the
-    // compounding per-slot lift comes from CurvedPlane's stackChildren
-    // (each window floats by (slotIndex+1)*zWindowMarginTop forward).
-    function outputCoordsToSlotPosition(frameGeo) {
-        const og = root.output.geometry
-        return Qt.vector3d(
-                    +(frameGeo.x + frameGeo.width/2 - og.x - og.width/2) / root.ppu,
-                    -(frameGeo.y + frameGeo.height/2 - og.y - og.height/2) / root.ppu,
-                    0)
+        return Qt.point(
+                    geom.x + (coords.x * geom.width),
+                    geom.y + (1 - coords.y) * geom.height)
     }
 
     VrScreenFrame {
@@ -66,5 +45,14 @@ CurvedPlane {
         property zMargins itemDepth: ({top: 0.2, bottom: 0})
         frameWidth: frame.outputGeometry.width
         frameHeight: frame.outputGeometry.height
+    }
+
+    property alias itemDepth: stacker.depth
+    ZStacker {
+        id: stacker
+        target: root
+        childIndexPropertyName: "stackingOrder"
+        initialMargins: frame.itemDepth
+        globalOffset: 0
     }
 }

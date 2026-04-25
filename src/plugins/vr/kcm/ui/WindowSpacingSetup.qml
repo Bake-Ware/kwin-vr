@@ -41,6 +41,11 @@ ColumnLayout {
         settingName: "minTransientNormalSpacing"
     }
 
+    KCMUtils.SettingStateBinding {
+        configObject: kcm.settings
+        settingName: "defaultWindowCurvature"
+    }
+
     Kirigami.Separator {
         Layout.fillWidth: true
     }
@@ -173,6 +178,34 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        Layout.alignment: Qt.AlignHCenter
+        spacing: Kirigami.Units.smallSpacing
+
+        Controls.Label {
+            text: i18nc("@label:spinbox", "Default Window Curvature (arc radians):")
+        }
+
+        Controls.SpinBox {
+            id: tDefaultCurvature
+            from: 0
+            to: 600
+            value: Math.round(kcm.settings.defaultWindowCurvature * 100)
+            stepSize: 10
+            property real realValue: value / 100
+            textFromValue: function(value, locale) {
+                return (value / 100).toFixed(2)
+            }
+            valueFromText: function(text, locale) {
+                return Math.round(parseFloat(text) * 100)
+            }
+        }
+
+        Kirigami.ContextualHelpButton {
+            toolTipText: xi18nc("@info:tooltip", "Curvature of VR windows in arc radians. 0 = flat, larger values wrap the surface tighter around the viewer. Typical: 0.5–2.0.")
+        }
+    }
+
     Binding {
         target: kcm.settings
         property: "zWindowMarginTop"
@@ -201,5 +234,11 @@ ColumnLayout {
         target: kcm.settings
         property: "minTransientNormalSpacing"
         value: tMinTransientNormalSpacing.realValue
+    }
+
+    Binding {
+        target: kcm.settings
+        property: "defaultWindowCurvature"
+        value: tDefaultCurvature.realValue
     }
 }

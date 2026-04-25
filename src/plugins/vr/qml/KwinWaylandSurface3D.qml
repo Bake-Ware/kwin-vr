@@ -157,12 +157,12 @@ Node {
 
         readonly property var onPick: useGeometryPick ? onPickReal : onPickAlways
 
-        source: "#Rectangle"
+        geometry: CurvedPlaneGeometry {
+            width: root.surfaceSize.width / root.ppu
+            height: root.surfaceSize.height / root.ppu
+            curvature: KWinVRConfig.defaultWindowCurvature || 0.0
+        }
         // materials: kws.uvTexture ? yuvMaterial : rgbMaterial
         materials: materialLoader.item
-
-        scale: Qt.vector3d(root.surfaceSize.width/100/root.ppu,
-                           root.surfaceSize.height/100/root.ppu,
-                           0.01)
     }
 }
