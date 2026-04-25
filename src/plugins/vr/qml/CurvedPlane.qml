@@ -288,7 +288,6 @@ Node {
         active: !root._suppressControlTab
         sourceComponent: PlaneControlTab {
             plane: root
-            isContainer: root.content === null
             onDissolveRequested: {
                 if (root.content !== null) return
                 if (root.registry) {

@@ -8,14 +8,13 @@
  * PlaneControlTab — decoration overlay for a CurvedPlane.
  *
  * Renders a small Plasma-styled tab at the top edge of the plane's
- * bounding box. Two buttons:
- *   - curvature toggle (stub for phase 1, no slider yet)
- *   - dissolve (containers only)
+ * bounding box. Two button rows: curvature ± and (containers only) dissolve.
+ * Visibility tied to KWinVRConfig.hideControlTabsOnIdle (hover-only) and
+ * the suppression flag (hosted-by-pseudomirror).
  *
- * Visibility:
- *   - never on hosted-by-pseudomirror children
- *   - controlled by `enabled` property otherwise
- *   - global hide-on-idle setting collapses to hover-only
+ * Implementation: Item composed at 240×60 px, projected through a
+ * Texture { sourceItem: Item } onto a flat Model — same pattern as
+ * VrHudPlane's debug overlay.
  */
 
 import QtQuick
@@ -27,80 +26,77 @@ import org.kde.kwin.vr
 Node {
     id: root
 
-    required property CurvedPlane plane
-    property bool enabledTab: true
-    property bool isContainer: false
+    required property var plane
     property bool hovered: false
 
     signal dissolveRequested()
     signal curvatureNudge(real direction)
 
-    // Tab dimensions in world units
-    readonly property real tabW: 0.12
-    readonly property real tabH: 0.03
+    readonly property bool isContainer: plane && plane.content === null
 
-    // Anchor at top edge of plane content. plane.effectiveSize is the
-    // content world size.
-    readonly property real planeW: plane ? plane.effectiveSize.width : 1
+    // Tab dimensions in world units (cm at ppu 100).
+    readonly property real tabW: 0.16
+    readonly property real tabH: 0.04
+
     readonly property real planeH: plane ? plane.effectiveSize.height : 1
 
     position: Qt.vector3d(0, planeH / 2 + tabH / 2 + 0.005, 0)
 
-    visible: enabledTab
-             && (!KWinVRConfig.hideControlTabsOnIdle || hovered)
-
-    Item {
-        id: tabContent
-        width: 240
-        height: 60
-        layer.enabled: true
-
-        Rectangle {
-            anchors.fill: parent
-            color: "#202225"
-            radius: 8
-            border.color: "#444"
-            border.width: 1
-            opacity: 0.9
-        }
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 8
-            Button {
-                text: "∿"
-                font.pixelSize: 24
-                width: 50
-                height: 44
-                onClicked: root.curvatureNudge(1.0)
-            }
-            Button {
-                text: "↺"
-                font.pixelSize: 22
-                width: 50
-                height: 44
-                onClicked: root.curvatureNudge(-1.0)
-            }
-            Button {
-                text: "✕"
-                font.pixelSize: 22
-                visible: root.isContainer
-                width: 50
-                height: 44
-                onClicked: root.dissolveRequested()
-            }
-        }
-    }
+    visible: !KWinVRConfig.hideControlTabsOnIdle || hovered
 
     Model {
         source: "#Rectangle"
-        scale: Qt.vector3d(tabW / 100, tabH / 100, 1)
+        scale: Qt.vector3d(root.tabW / 100, root.tabH / 100, 1)
         depthBias: -150 * KWinVRConfig.depthBiasMultiplier
-        materials: DefaultMaterial {
-            diffuseMap: Texture {
-                sourceItem: tabContent
+
+        materials: PrincipledMaterial {
+            baseColorMap: Texture {
+                sourceItem: Item {
+                    id: tabContent
+                    width: 320
+                    height: 80
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#202225"
+                        radius: 12
+                        border.color: "#444"
+                        border.width: 1
+                        opacity: 0.92
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 12
+
+                        Button {
+                            text: "∿+"
+                            font.pixelSize: 28
+                            width: 70
+                            height: 60
+                            onClicked: root.curvatureNudge(1.0)
+                        }
+                        Button {
+                            text: "∿−"
+                            font.pixelSize: 28
+                            width: 70
+                            height: 60
+                            onClicked: root.curvatureNudge(-1.0)
+                        }
+                        Button {
+                            text: "✕"
+                            font.pixelSize: 24
+                            visible: root.isContainer
+                            width: 70
+                            height: 60
+                            onClicked: root.dissolveRequested()
+                        }
+                    }
+                }
             }
-            lighting: DefaultMaterial.NoLighting
+            alphaMode: PrincipledMaterial.Blend
+            lighting: PrincipledMaterial.NoLighting
+            depthDrawMode: Material.OpaqueOnlyDepthDraw
         }
     }
 }
