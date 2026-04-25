@@ -250,6 +250,13 @@ XrView {
         xrView: xrView
     }
 
+    // Single registry of every CurvedPlane in the scene. Reachable via
+    // xrView.planeRegistry from any descendant.
+    PlaneRegistry {
+        id: planeRegistryInstance
+    }
+    readonly property alias planeRegistry: planeRegistryInstance
+
     VrKwinCursor {
         id: vrCursor
         ppu: xrView.ppu
@@ -527,6 +534,8 @@ XrView {
                     windowDataModel: applicationWindowsRepeater.windowDataModel
                     ppu: allWindows.ppu
                     focusControl: focusTracking
+                    planeRegistry: xrView.planeRegistry
+                    topLevelHost: allWindowsGrabHandle
                     property real zOffset: 0
                     property int stackingOrder: client.stackingOrder
 

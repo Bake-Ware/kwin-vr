@@ -215,6 +215,61 @@ Node {
         }
     }
 
+    // === Render: window content (if any) ===
+    Loader3D {
+        active: root.content !== null
+        sourceComponent: CurvedWindowContent {
+            client: root.content
+            grabHandle: root
+            sizeWorld: root.effectiveSize
+            curvature: root.effectiveCurvature
+        }
+    }
+
+    // === Decoration: control tab ===
+    Loader3D {
+        active: !root._suppressControlTab
+        sourceComponent: PlaneControlTab {
+            plane: root
+            isContainer: root.content === null
+            onDissolveRequested: {
+                if (root.content !== null) return  // window planes don't dissolve
+                // Force-dissolve: orphan all children, destroy.
+                if (root.registry) {
+                    for (const s of root.slots) {
+                        const ch = root.registry.findById(s.planeId)
+                        if (ch) {
+                            ch.intrinsicPosition = ch.effectivePosition
+                            ch.intrinsicRotation = ch.effectiveRotation
+                        }
+                    }
+                    root.slots = []
+                    root.registry.notifySlotsChanged()
+                    root.registry.unregister(root.planeId)
+                }
+                root.destroy()
+            }
+            onCurvatureNudge: (direction) => {
+                const step = (KWinVRConfig.curvatureScrollStep || 0.1) * direction
+                const ab = root.abductor
+                if (ab) {
+                    const cur = root.effectiveCurvature
+                    const next = Math.max(0, Math.min(6, cur + step))
+                    ab.updateSlotOverrides(root.planeId, { curvature: next })
+                } else {
+                    root.intrinsicCurvature = Math.max(0, Math.min(6,
+                        root.intrinsicCurvature + step))
+                }
+            }
+        }
+    }
+
+    // Pseudomirror children suppress their own control tab (per architecture).
+    readonly property bool _suppressControlTab: {
+        if (!abductor) return false
+        return abductor._isPseudomirror === true
+    }
+
     // === Lifecycle ===
 
     Component.onCompleted: {
