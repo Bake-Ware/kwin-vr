@@ -147,10 +147,21 @@ Node {
         if (i < 0) return Qt.vector3d(0, 0, 0)
         const slot = slots[i]
         const ovr = slot.overrides || ({})
-        if (ovr.position !== undefined) return ovr.position
+        // Free-mode children (pseudomirrors, user-created free containers)
+        // stack each child a small Δz forward of the previous so co-planar
+        // overlapping windows don't z-fight. Snap and Stack derive z
+        // explicitly from their layout rules.
+        if (ovr.position !== undefined) {
+            if (mode === CurvedPlane.Mode.Free) {
+                const zStack = i * 0.05
+                return Qt.vector3d(ovr.position.x, ovr.position.y,
+                                   ovr.position.z + zStack)
+            }
+            return ovr.position
+        }
         switch (mode) {
         case CurvedPlane.Mode.Free:
-            return Qt.vector3d(0, 0, 0)
+            return Qt.vector3d(0, 0, i * 0.05)
         case CurvedPlane.Mode.Snap:
             return _snapPosition(i)
         case CurvedPlane.Mode.Stack:
