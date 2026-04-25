@@ -68,5 +68,5 @@ All inside `WorkSurfaceRegistry.qml`, no other files touched.
 ## Commit history
 
 ```
-<sha>   work_surfaces: bisection on removeMember
+5b3756f735   work_surfaces: bisection on removeMember
 ```
