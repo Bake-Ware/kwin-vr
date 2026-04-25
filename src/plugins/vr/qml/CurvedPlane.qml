@@ -154,8 +154,10 @@ Node {
         if (i < 0) return Qt.vector3d(0, 0, 0)
         const slot = slots[i]
         const ovr = slot.overrides || ({})
+        // Pseudomirror's local +Z points away from the camera (into the
+        // bezel), so we negate to push children forward (toward the user).
         const stackZ = (mode === CurvedPlane.Mode.Free && stackChildren)
-                       ? (i + 1) * (KWinVRConfig.zWindowMarginTop || 1.0)
+                       ? -(i + 1) * (KWinVRConfig.zWindowMarginTop || 1.0)
                        : 0
         if (ovr.position !== undefined) {
             return Qt.vector3d(ovr.position.x, ovr.position.y,
