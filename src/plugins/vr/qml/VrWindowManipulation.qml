@@ -69,7 +69,12 @@ QtObject {
 
                 if (window.vr) { // Moving VR window
                     const appWin = root.currentMovingResizingWindow.grabHandle as KwinApplicationWindow
-                    if(!appWin || root.xray.grabbedObject === appWin) {
+                    // Grab the CurvedPlane sibling, not the (invisible) flat
+                    // KwinApplicationWindow Node — that's the entity registered
+                    // in PlaneRegistry and the one PlaneInteractionManager
+                    // expects to see in xray.grabbedObject.
+                    const target = (appWin && appWin.vrPlane) ? appWin.vrPlane : appWin
+                    if(!target || root.xray.grabbedObject === target) {
                         return
                     }
 
@@ -77,12 +82,11 @@ QtObject {
                         root.xray.release()
                     }
 
-                    root.xray.grabAndAlign(appWin)
+                    root.xray.grabAndAlign(target)
 
-                    // Movement of the winodw might begin by a lot of reason, not only when the user
-                    // moves the window directly, but also by the hotkey press or via context menu
-                    // In this case the window will be not udner the ray, so we need to align it
-                    root.alignGrabbedWindowToRayAtCursor(appWin, KWinC.Workspace.cursorPos)
+                    // Movement of the window might begin from a hotkey press or
+                    // context menu — align manually to the ray-cursor.
+                    root.alignGrabbedWindowToRayAtCursor(target, KWinC.Workspace.cursorPos)
                 }
             } else {
                 if (!root.currentMovingResizingWindow) {
@@ -92,7 +96,7 @@ QtObject {
         }
     }
 
-    function isWindowUnderRay(appWin: KwinApplicationWindow): bool {
+    function isWindowUnderRay(appWin): bool {
         return root.picking.isGrabHandlePicked(appWin)
     }
 
@@ -103,12 +107,14 @@ QtObject {
                point.y <= rect.y + rect.height
     }
 
-    function get3DCursorPos(appWin: KwinApplicationWindow, cursorPos: point): var {
+    function get3DCursorPos(target, cursorPos: point): var {
         let ret = {
             result: false,
             position: Qt.vector3d(0, 0, 0)
         }
-        const window = appWin?.client
+        // target may be a KwinApplicationWindow (legacy) or a CurvedPlane.
+        // Both expose .content/.client + mapPositionToScene + ppu.
+        const window = target ? (target.content ?? target.client) : null
         if (!window) {
             return ret
         }
@@ -119,20 +125,17 @@ QtObject {
             return ret
         }
 
-        // Sometimes the cursor ends at the bottom-left corner of the window,
-        // usually when you start moving the window and quickly move the ray out of the window geometry
-        // So, for now we move the point to the center of the window if that happens.
         const fixedCursorPos = (cursorPos.x === geom.x && cursorPos.y === geom.bottom) ?
                                  Qt.point(geom.x + geom.width / 2, geom.y + geom.height / 2) :
                                  cursorPos
 
         const localOffset = Qt.vector3d(
-            (fixedCursorPos.x - (geom.x + geom.width / 2)) / ppu,
-            -(fixedCursorPos.y - (geom.y + geom.height / 2)) / ppu,
+            (fixedCursorPos.x - (geom.x + geom.width / 2)) / target.ppu,
+            -(fixedCursorPos.y - (geom.y + geom.height / 2)) / target.ppu,
             0
         )
 
-        ret.position = appWin.mapPositionToScene(localOffset)
+        ret.position = target.mapPositionToScene(localOffset)
         ret.result = true
         return ret
     }
@@ -161,12 +164,12 @@ QtObject {
         )
     }
 
-    function alignGrabbedWindowToRayAtCursor(appWin: KwinApplicationWindow, cursorPos: point): void {
+    function alignGrabbedWindowToRayAtCursor(target, cursorPos: point): void {
         root.xray.applyGrab()
 
-        const ret = root.get3DCursorPos(appWin, cursorPos);
+        const ret = root.get3DCursorPos(target, cursorPos);
         if(!ret.result) {
-            console.log(Logger.kwinvr, "Can't get 3d coordinates of a pointer inside window", appWin, cursorPos)
+            console.log(Logger.kwinvr, "Can't get 3d coordinates of a pointer inside window", target, cursorPos)
             root.xray.alignGrabbedObjectToCamera()
             return;
         }
@@ -212,11 +215,12 @@ QtObject {
             return
         }
 
-        // We need to grab the window, save relative pose and apply all transformations before vr=true
-        // While we have vr=false, appWin's parent is the pseudo output.
-        xray.grabAndAlign(appWin)
+        // Grab the CurvedPlane sibling; it's what's registered with the
+        // PlaneInteractionManager and the current rendering target.
+        const target = appWin.vrPlane ?? appWin
+        xray.grabAndAlign(target)
         const cursorPos = window.fullScreen ? root.unitToRectPoint(window.frameGeometry, root.moveStartCursorPosNormalized) : KWinC.Workspace.cursorPos
-        root.alignGrabbedWindowToRayAtCursor(appWin, cursorPos)
+        root.alignGrabbedWindowToRayAtCursor(target, cursorPos)
         window.vr = true
 
         // Wayland apps do not need this, since they know nothing about the screen geometry.
@@ -232,13 +236,15 @@ QtObject {
     }
 
     // Resolves the KWin client from either currentMovingResizingWindow or the
-    // grabbed object.  Returns null when neither is a KwinApplicationWindow.
+    // grabbed object. Handles legacy KwinApplicationWindow grabs as well as
+    // CurvedPlane grabs (where .content holds the client).
     function resolveGrabbedClient(): QtObject {
         if (root.currentMovingResizingWindow)
             return root.currentMovingResizingWindow.client ?? null
 
-        const appWin = root.xray.grabbedObject as KwinApplicationWindow
-        return appWin ? (appWin.client ?? null) : null
+        const obj = root.xray.grabbedObject
+        if (!obj) return null
+        return obj.content ?? obj.client ?? null
     }
 
     readonly property Connections lookForScreenToPut: Connections {

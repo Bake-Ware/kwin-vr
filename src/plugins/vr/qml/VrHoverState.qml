@@ -22,6 +22,7 @@ QtObject {
     readonly property KwinWaylandSurface3D currentHoveredKwinWaylandSurface3D: hoveredObject?.parent as KwinWaylandSurface3D
     readonly property KwinDecorationModel currentHoveredKwinDecorationModel: hoveredObject as KwinDecorationModel
     readonly property KwinInternalWindow3D currentHoveredKwinInternalWindow3D: hoveredObject?.parent as KwinInternalWindow3D
+    readonly property CurvedWindowContent currentHoveredCurvedWindow: hoveredObject?.parent as CurvedWindowContent
 
     /*
      * Picking handler - set by pickingState based on hovered window type.
@@ -107,6 +108,17 @@ QtObject {
                         target: root.currentHoveredKwinInternalWindow3D,
                         client: root.currentHoveredKwinInternalWindow3D.client,
                         geometry: root.currentHoveredKwinInternalWindow3D.client.clientGeometry
+                    })
+                }
+            },
+            State {
+                name: "curvedWindow"
+                when: !!root.currentHoveredCurvedWindow?.client
+                PropertyChanges {
+                    root.activePickHandler: ({
+                        target: root.currentHoveredCurvedWindow,
+                        client: root.currentHoveredCurvedWindow.client,
+                        geometry: root.currentHoveredCurvedWindow.client.frameGeometry
                     })
                 }
             }
