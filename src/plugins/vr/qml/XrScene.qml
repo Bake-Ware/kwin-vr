@@ -671,20 +671,28 @@ XrView {
                     zOffsetGlobal: 0
 
                     // Drive vrPlane abduction by pseudomirror based on client.vr.
+                    // On either transition, capture current scene pose into
+                    // intrinsic so the plane stays where it visually was when
+                    // switching to top-level (visual continuity).
                     function _syncPseudomirrorAbduction() {
                         if (!vrPlane || !planeRegistry) return
                         const c = kwinAppWindow.client
                         if (!c) return
                         if (c.vr) {
-                            // Going to VR: drop from any pseudomirror's slots.
-                            // PlaneInteractionManager handles snap-container abduction.
+                            // Going to VR: capture screen pose into intrinsic
+                            // before unhooking, so plane stays in place.
                             const ab = vrPlane.abductor
                             if (ab && ab._isPseudomirror) {
+                                if (vrPlane.topLevelHost) {
+                                    vrPlane.intrinsicPosition = vrPlane.topLevelHost.mapPositionFromScene(vrPlane.scenePosition)
+                                    vrPlane.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                                        vrPlane.topLevelHost.sceneRotation, vrPlane.sceneRotation)
+                                }
                                 planeRegistry.removeFromAllSlots(vrPlane.planeId)
                             }
                         } else {
-                            // Going to screen: add to output's pseudomirror slots
-                            // with override.position = output coords.
+                            // Going to screen: add to output's pseudomirror with
+                            // override.position = output coords mapped to surface.
                             const ps = outputMirrorRepeater.findPseudoOutputByOutput(c.output)
                             if (!ps) return
                             const localPos = ps.outputCoordsToSlotPosition(c.frameGeometry)
