@@ -257,6 +257,14 @@ XrView {
     }
     readonly property alias planeRegistry: planeRegistryInstance
 
+    PlaneInteractionManager {
+        id: planeInteraction
+        xray: pickRay
+        picking: focusTracking.picking
+        registry: planeRegistryInstance
+        topLevelHost: allWindowsGrabHandle
+    }
+
     VrKwinCursor {
         id: vrCursor
         ppu: xrView.ppu

@@ -79,6 +79,7 @@ qt6_add_qml_module(vr
         qml/CurvedWindowContent.qml
         qml/PlaneControlTab.qml
         qml/SelectionPrism.qml
+        qml/PlaneInteractionManager.qml
         qml/VrHudPlane.qml
         qml/VrHudWindow.qml
         qml/Logger.qml

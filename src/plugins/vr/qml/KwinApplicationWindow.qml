@@ -58,6 +58,7 @@ KwinTransientWindow {
         }
         vrPlane = comp.createObject(topLevelHost, {
             registry: planeRegistry,
+            topLevelHost: topLevelHost,
             content: root.client,
             ppu: root.ppu,
             intrinsicCurvature: KWinVRConfig.defaultWindowCurvature,

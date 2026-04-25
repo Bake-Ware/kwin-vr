@@ -13,9 +13,15 @@
  * Key invariants (architecture.md):
  *   - Plane never reads its abductor; it queries the registry.
  *   - Plane is in at most one container's slots list at a time.
- *   - render*  =  intrinsic*  when no abductor;
- *                 abductor.computeChild*(myId)  otherwise.
+ *   - Top-level (no abductor): render = intrinsic.
+ *   - Abducted: render = abductor.computeChild*(myId), in scene frame
+ *     converted to topLevelHost-local for the Qt position binding.
  *   - Containers (content === null) with ≤ 1 slot dissolve next layout pass.
+ *
+ * Qt scene-graph parent: always topLevelHost. We do NOT reparent on
+ * abduction — instead we compute scene poses from abductor and convert
+ * to topLevelHost-local. This keeps drag/grab clean (pickRay's imperative
+ * writes don't fight an abductor reparent).
  */
 
 import QtQuick
@@ -37,11 +43,14 @@ Node {
     property string planeId: ""
     property var registry: null
 
-    // === Content (window-backed) ===
-    property QtObject content: null   // KWin client OR null for pure container
+    // === Scene host (Qt parent) ===
+    property Node topLevelHost: null
+
+    // === Content ===
+    property QtObject content: null
     property real ppu: 20
 
-    // === Intrinsic state (used when no abductor) ===
+    // === Intrinsic (used when no abductor; in topLevelHost frame) ===
     property vector3d intrinsicPosition: Qt.vector3d(0, 0, 0)
     property quaternion intrinsicRotation: Qt.quaternion(1, 0, 0, 0)
     property size intrinsicSize: Qt.size(1, 1)
@@ -49,21 +58,72 @@ Node {
 
     // === Children layout ===
     property int mode: CurvedPlane.Mode.None
-    // Each slot: { planeId: string, overrides: {position?, rotation?, size?, curvature?} }
     property var slots: []
 
-    // === Effective state (resolved from abductor or intrinsic) ===
+    // === Grab override ===
+    // Set by the interaction manager during a grab. Suspends the
+    // position/rotation bindings so pickRay can write imperatively.
+    property bool isGrabbed: false
+
+    // Pseudomirror flag — set by KwinPseudoOutputMirror migration; lets
+    // its hosted children know to suppress their own control tab.
+    property bool _isPseudomirror: false
+
+    // === Effective state ===
     readonly property var abductor: registry ? registry.findAbductor(planeId) : null
     readonly property bool isTopLevel: abductor === null
 
-    readonly property vector3d effectivePosition: {
-        if (isTopLevel || !abductor) return intrinsicPosition
-        return abductor.computeChildPosition(planeId)
+    readonly property vector3d _abductorLocalPosition: {
+        return abductor ? abductor.computeChildPosition(planeId) : Qt.vector3d(0, 0, 0)
     }
-    readonly property quaternion effectiveRotation: {
-        if (isTopLevel || !abductor) return intrinsicRotation
-        return abductor.computeChildRotation(planeId)
+    readonly property quaternion _abductorLocalRotation: {
+        return abductor ? abductor.computeChildRotation(planeId) : Qt.quaternion(1, 0, 0, 0)
     }
+
+    readonly property vector3d _targetScenePosition: {
+        if (!abductor) {
+            return topLevelHost ? topLevelHost.mapPositionToScene(intrinsicPosition)
+                                : intrinsicPosition
+        }
+        return abductor.mapPositionToScene(_abductorLocalPosition)
+    }
+    readonly property vector3d _targetLocalPosition: {
+        return topLevelHost ? topLevelHost.mapPositionFromScene(_targetScenePosition)
+                            : _targetScenePosition
+    }
+
+    // For rotation: scene-target = abductor.sceneRotation * localInAb,
+    // then convert to topLevelHost-local via getRotationDelta.
+    readonly property quaternion _targetLocalRotation: {
+        let sceneRot
+        if (!abductor) {
+            sceneRot = topLevelHost
+                       ? topLevelHost.sceneRotation.times(intrinsicRotation)
+                       : intrinsicRotation
+        } else {
+            sceneRot = abductor.sceneRotation.times(_abductorLocalRotation)
+        }
+        return topLevelHost
+               ? KwinVrHelpers.getRotationDelta(topLevelHost.sceneRotation, sceneRot)
+               : sceneRot
+    }
+
+    // Apply via Binding so isGrabbed can suspend.
+    Binding {
+        target: root
+        property: "position"
+        value: root._targetLocalPosition
+        when: !root.isGrabbed
+        restoreMode: Binding.RestoreNone
+    }
+    Binding {
+        target: root
+        property: "rotation"
+        value: root._targetLocalRotation
+        when: !root.isGrabbed
+        restoreMode: Binding.RestoreNone
+    }
+
     readonly property size effectiveSize: {
         if (isTopLevel || !abductor) return intrinsicSize
         return abductor.computeChildSize(planeId)
@@ -73,11 +133,7 @@ Node {
         return abductor.computeChildCurvature(planeId)
     }
 
-    // === Apply effective transform to the Node ===
-    position: effectivePosition
-    rotation: effectiveRotation
-
-    // === Layout API ===
+    // === Layout API (called by children's effective* bindings) ===
 
     function _slotIndexOf(childId) {
         for (let i = 0; i < slots.length; ++i) {
@@ -133,21 +189,18 @@ Node {
 
     function _snapPosition(idx) {
         const gap = KWinVRConfig.snapGap || 0.02
-        let cumX = 0
-        for (let i = 0; i < idx; ++i) {
-            const cId = slots[i].planeId
-            const sz = computeChildSize(cId)
-            cumX += sz.width + gap
-        }
-        const mySz = computeChildSize(slots[idx].planeId)
-        // Centre-anchor each child; container is centred at 0 in its own frame.
-        // Total width = sum(sizes) + gaps. Origin at start - we'll shift below.
         let totalW = 0
         for (let i = 0; i < slots.length; ++i) {
             const cId = slots[i].planeId
             totalW += computeChildSize(cId).width
             if (i > 0) totalW += gap
         }
+        let cumX = 0
+        for (let i = 0; i < idx; ++i) {
+            const cId = slots[i].planeId
+            cumX += computeChildSize(cId).width + gap
+        }
+        const mySz = computeChildSize(slots[idx].planeId)
         const x = cumX + mySz.width / 2 - totalW / 2
         return Qt.vector3d(x, 0, 0)
     }
@@ -196,17 +249,21 @@ Node {
     }
 
     function _maybeDissolve() {
-        // Only containers (content === null) auto-dissolve.
         if (content !== null) return
         if (slots.length === 0) {
             registry.unregister(planeId)
             root.destroy()
         } else if (slots.length === 1) {
-            // Promote lone child to top-level. Cap its pose at current effective.
             const lone = registry.findById(slots[0].planeId)
             if (lone) {
-                lone.intrinsicPosition = lone.effectivePosition
-                lone.intrinsicRotation = lone.effectiveRotation
+                // Settle lone child at its current scene pose.
+                const sp = lone.scenePosition
+                const sr = lone.sceneRotation
+                if (lone.topLevelHost) {
+                    lone.intrinsicPosition = lone.topLevelHost.mapPositionFromScene(sp)
+                    lone.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                        lone.topLevelHost.sceneRotation, sr)
+                }
             }
             slots = []
             registry.notifySlotsChanged()
@@ -233,14 +290,14 @@ Node {
             plane: root
             isContainer: root.content === null
             onDissolveRequested: {
-                if (root.content !== null) return  // window planes don't dissolve
-                // Force-dissolve: orphan all children, destroy.
+                if (root.content !== null) return
                 if (root.registry) {
                     for (const s of root.slots) {
                         const ch = root.registry.findById(s.planeId)
-                        if (ch) {
-                            ch.intrinsicPosition = ch.effectivePosition
-                            ch.intrinsicRotation = ch.effectiveRotation
+                        if (ch && ch.topLevelHost) {
+                            ch.intrinsicPosition = ch.topLevelHost.mapPositionFromScene(ch.scenePosition)
+                            ch.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                                ch.topLevelHost.sceneRotation, ch.sceneRotation)
                         }
                     }
                     root.slots = []
@@ -264,7 +321,6 @@ Node {
         }
     }
 
-    // Pseudomirror children suppress their own control tab (per architecture).
     readonly property bool _suppressControlTab: {
         if (!abductor) return false
         return abductor._isPseudomirror === true
