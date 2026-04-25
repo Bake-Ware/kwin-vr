@@ -165,7 +165,9 @@ Item {
                          return
                      const direction = dy > 0 ? 1.0 : -1.0
                      const step = direction * KWinVRConfig.grabResizeSensitivity
-                     if (event.modifiers & Qt.ShiftModifier) {
+                     if (event.modifiers & Qt.AltModifier) {
+                         xrView.curvatureNudge(direction)
+                     } else if (event.modifiers & Qt.ShiftModifier) {
                          xrView.resizeGrabbed(step, 0)
                      } else if (event.modifiers & Qt.ControlModifier) {
                          xrView.resizeGrabbed(0, step)

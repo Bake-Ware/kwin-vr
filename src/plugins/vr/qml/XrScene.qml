@@ -328,6 +328,26 @@ XrView {
         _prismActive = false
     }
 
+    // Alt+wheel curvature nudge on the hovered plane. Always writes the
+    // per-window override (intrinsicCurvature when top-level, slot
+    // override when abducted) — matches "modify while child writes the
+    // override" rule from architecture.
+    function curvatureNudge(direction) {
+        const obj = focusTracking.hoveredGrabHandle
+        const plane = planeInteraction._planeFromObject(obj)
+        if (!plane) return
+        const step = (KWinVRConfig.curvatureScrollStep || 0.1) * direction
+        const ab = plane.abductor
+        if (ab) {
+            const cur = plane.effectiveCurvature
+            const next = Math.max(0, Math.min(6, cur + step))
+            ab.updateSlotOverrides(plane.planeId, { curvature: next })
+        } else {
+            plane.intrinsicCurvature = Math.max(0, Math.min(6,
+                plane.intrinsicCurvature + step))
+        }
+    }
+
     VrKwinCursor {
         id: vrCursor
         ppu: xrView.ppu
