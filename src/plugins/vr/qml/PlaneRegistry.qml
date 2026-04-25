@@ -37,6 +37,10 @@ QtObject {
     function register(plane) {
         if (!plane || !plane.planeId) return
         _planes[plane.planeId] = plane
+        // Bump revision so any pending findAbductor() bindings re-evaluate
+        // — the new plane's slots may already contain references that
+        // change abductors of others (e.g. a freshly-created container).
+        slotsRevision = slotsRevision + 1
     }
 
     function unregister(planeId) {
