@@ -30,13 +30,10 @@ KwinTransientWindow {
         normalWindowFlexibleBottom: KWinVRConfig.minTransientNormalSpacing
     }
 
-    // Hide the flat decorated render when the client is in VR state —
-    // the CurvedPlane sibling renders the curved thumbnail instead.
-    visible: !root.client.minimized && root.client.opacity > 0
-             && !root.client.vr
-             && (!KwinVrHelpers.screenLocked
-                 || client.lockScreen || client.lockScreenOverlay
-                 || client.inputMethod)
+    // The flat decorated render is suppressed entirely — the CurvedPlane
+    // sibling (created below) handles rendering for both VR and screen
+    // states (when abducted by a pseudomirror plane).
+    visible: false
 
     // Injected from XrScene: registry + the Node under which the
     // VR-state CurvedPlane should be parented (kept independent of
@@ -73,8 +70,8 @@ KwinTransientWindow {
             ppu: root.ppu,
             intrinsicCurvature: KWinVRConfig.defaultWindowCurvature,
             intrinsicPosition: initialPos,
-            // Visible only when the client is in VR mode.
-            visible: Qt.binding(() => !!(root.client && root.client.vr))
+            visible: Qt.binding(() => !!(root.client && !root.client.minimized
+                                          && root.client.opacity > 0))
         })
         // Bind intrinsicSize to current frame geometry.
         vrPlane.intrinsicSize = Qt.binding(() => {
