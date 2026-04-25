@@ -265,6 +265,69 @@ XrView {
         topLevelHost: allWindowsGrabHandle
     }
 
+    // Selection prism state — driven by Main.qml's right-click drag gesture.
+    property vector3d _prismAnchor1: Qt.vector3d(0, 0, 0)
+    property vector3d _prismAnchor2: Qt.vector3d(0, 0, 0)
+    property bool _prismActive: false
+
+    function prismBegin() {
+        const p = pickRay.scenePosition.plus(pickRay.forward.times(xrView.distance))
+        _prismAnchor1 = p
+        _prismAnchor2 = p
+        _prismActive = true
+    }
+
+    function prismUpdate() {
+        if (!_prismActive) return
+        const p = pickRay.scenePosition.plus(pickRay.forward.times(xrView.distance))
+        _prismAnchor2 = p
+    }
+
+    // Returns true iff a prism was committed (i.e. motion exceeded threshold
+    // and a container was created — radial menu should NOT fire on release).
+    function prismCommit() {
+        if (!_prismActive) return false
+        const a1 = _prismAnchor1
+        const a2 = _prismAnchor2
+        _prismActive = false
+        const motion = a1.minus(a2).length()
+        const threshold = KWinVRConfig.prismMotionThreshold || 0.05
+        if (motion < threshold) return false
+
+        const xmin = Math.min(a1.x, a2.x), xmax = Math.max(a1.x, a2.x)
+        const ymin = Math.min(a1.y, a2.y), ymax = Math.max(a1.y, a2.y)
+        const zmin = Math.min(a1.z, a2.z) - 0.5, zmax = Math.max(a1.z, a2.z) + 0.5
+        const captured = []
+        const planes = planeRegistryInstance.topLevelPlanes()
+        for (const plane of planes) {
+            if (!plane.content) continue   // skip containers, only capture window planes
+            if (plane._isPseudomirror) continue
+            const sp = plane.scenePosition
+            if (sp.x >= xmin && sp.x <= xmax
+                && sp.y >= ymin && sp.y <= ymax
+                && sp.z >= zmin && sp.z <= zmax) {
+                captured.push(plane)
+            }
+        }
+        if (captured.length < 1) return false
+
+        const centre = Qt.vector3d((a1.x + a2.x) / 2,
+                                   (a1.y + a2.y) / 2,
+                                   (a1.z + a2.z) / 2)
+        const cont = planeInteraction._createContainer(
+            CurvedPlane.Mode.Free, centre, Qt.quaternion(1, 0, 0, 0))
+        if (!cont) return false
+        for (const p of captured) {
+            const offset = p.scenePosition.minus(centre)
+            cont.addChild(p.planeId, { position: offset })
+        }
+        return true
+    }
+
+    function prismCancel() {
+        _prismActive = false
+    }
+
     VrKwinCursor {
         id: vrCursor
         ppu: xrView.ppu
@@ -475,6 +538,18 @@ XrView {
         Node {
             id: allWindowsGrabHandle
             position: Qt.vector3d(0, 0, -xrView.distance)
+
+            // Selection prism visualisation — wireframe rect between
+            // the gesture's anchor points.
+            SelectionPrism {
+                active: xrView._prismActive
+                anchor1: xrView._prismActive
+                          ? allWindowsGrabHandle.mapPositionFromScene(xrView._prismAnchor1)
+                          : Qt.vector3d(0, 0, 0)
+                anchor2: xrView._prismActive
+                          ? allWindowsGrabHandle.mapPositionFromScene(xrView._prismAnchor2)
+                          : Qt.vector3d(0, 0, 0)
+            }
 
             SpaceAllocator3D {
                 id: spaceAllocator

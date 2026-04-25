@@ -114,6 +114,9 @@ Item {
                                return;
                            }
                            if(event.button === Qt.RightButton) {
+                               /* Begin selection prism. On release, motion-threshold
+                                * decides: prism commit (drag) vs radial menu (no drag). */
+                               xrView.prismBegin()
                                if(xrView.radialMenuActivate(true)) {
                                    return;
                                }
@@ -121,6 +124,11 @@ Item {
                        }
 
                        event.accepted = false
+                   }
+        onPositionChanged: (event) => {
+                       if (event.buttons & Qt.RightButton) {
+                           xrView.prismUpdate()
+                       }
                    }
         onReleased: (event) => {
                         if(desktopGrabbed) {
@@ -139,9 +147,16 @@ Item {
                         }
 
                         if(event.button === Qt.RightButton && !xrView.cursorHoverObject) {
+                            /* Drag committed → prism, no radial. */
+                            if(xrView.prismCommit()) {
+                                return;
+                            }
+                            /* No drag → existing radial menu. */
                             if(xrView.radialMenuActivate(false)) {
                                 return;
                             }
+                        } else if (event.button === Qt.RightButton) {
+                            xrView.prismCancel()
                         }
                     }
         onWheel: (event) => {
