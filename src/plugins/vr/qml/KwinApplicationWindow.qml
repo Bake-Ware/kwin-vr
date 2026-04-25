@@ -56,12 +56,23 @@ KwinTransientWindow {
                         "CurvedPlane component load failed:", comp.errorString())
             return
         }
+
+        // Spread initial positions across a 3×N grid so multiple VR
+        // windows don't all spawn at origin. Index = registry order at
+        // construction time (rough heuristic, fine for first round).
+        const order = Object.keys(planeRegistry._planes).length
+        const cols = 3
+        const col = order % cols
+        const row = Math.floor(order / cols)
+        const initialPos = Qt.vector3d((col - 1) * 1.5, -(row - 0.5) * 1.0, 0)
+
         vrPlane = comp.createObject(topLevelHost, {
             registry: planeRegistry,
             topLevelHost: topLevelHost,
             content: root.client,
             ppu: root.ppu,
             intrinsicCurvature: KWinVRConfig.defaultWindowCurvature,
+            intrinsicPosition: initialPos,
             // Visible only when the client is in VR mode.
             visible: Qt.binding(() => !!(root.client && root.client.vr))
         })
