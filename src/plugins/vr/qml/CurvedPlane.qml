@@ -60,6 +60,13 @@ Node {
     property int mode: CurvedPlane.Mode.None
     property var slots: []
 
+    // When true, Free-mode children get a compounding z lift of
+    // (slotIndex+1) * KWinVRConfig.zWindowMarginTop on top of any
+    // override.position so overlapping windows float forward of each
+    // other and the host plane. Pseudomirrors enable this; user-created
+    // free containers don't.
+    property bool stackChildren: false
+
     // === Grab override ===
     // Set by the interaction manager during a grab. Suspends the
     // position/rotation bindings so pickRay can write imperatively.
@@ -147,10 +154,16 @@ Node {
         if (i < 0) return Qt.vector3d(0, 0, 0)
         const slot = slots[i]
         const ovr = slot.overrides || ({})
-        if (ovr.position !== undefined) return ovr.position
+        const stackZ = (mode === CurvedPlane.Mode.Free && stackChildren)
+                       ? (i + 1) * (KWinVRConfig.zWindowMarginTop || 1.0)
+                       : 0
+        if (ovr.position !== undefined) {
+            return Qt.vector3d(ovr.position.x, ovr.position.y,
+                               ovr.position.z + stackZ)
+        }
         switch (mode) {
         case CurvedPlane.Mode.Free:
-            return Qt.vector3d(0, 0, 0)
+            return Qt.vector3d(0, 0, stackZ)
         case CurvedPlane.Mode.Snap:
             return _snapPosition(i)
         case CurvedPlane.Mode.Stack:

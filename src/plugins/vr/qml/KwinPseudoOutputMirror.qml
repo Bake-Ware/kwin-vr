@@ -24,6 +24,7 @@ CurvedPlane {
     // can recognise pseudomirrors.
     _isPseudomirror: true
     mode: CurvedPlane.Mode.Free
+    stackChildren: true
     content: null
 
     property real ppu: 20
@@ -47,15 +48,15 @@ CurvedPlane {
     }
 
     // Convert a KWin frameGeometry (output coords) to slot.overrides.position
-    // for this pseudomirror's Free-mode layout. Z is lifted forward of the
-    // bezel by zWindowMarginTop — the standard window-floating offset — to
-    // keep windows visibly off the bezel and avoid z-fight.
+    // for this pseudomirror's Free-mode layout. Z is left at 0 — the
+    // compounding per-slot lift comes from CurvedPlane's stackChildren
+    // (each window floats by (slotIndex+1)*zWindowMarginTop forward).
     function outputCoordsToSlotPosition(frameGeo) {
         const og = root.output.geometry
         return Qt.vector3d(
                     +(frameGeo.x + frameGeo.width/2 - og.x - og.width/2) / root.ppu,
                     -(frameGeo.y + frameGeo.height/2 - og.y - og.height/2) / root.ppu,
-                    KWinVRConfig.zWindowMarginTop)
+                    0)
     }
 
     VrScreenFrame {
