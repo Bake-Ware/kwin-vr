@@ -600,20 +600,11 @@ XrView {
                         outputMirrorRepeater.outputMap[output.name] = pseudoOutput
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
                         const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
-                        // Compute the face-to-camera rotation in scene space
-                        // from globalPosition, then convert to outputMirrorRepeater-
-                        // local. Avoids relying on pseudoOutput.scenePosition
-                        // before the position binding has evaluated, and
-                        // avoids the Binding clobbering rotation writes from
-                        // turnToFaceKeepRoll.
-                        const viewp = spaceAllocator.viewpoint
-                        const fromViewer = globalPosition.minus(viewp.scenePosition)
-                        const sceneRot = KwinVrHelpers.rotationToFaceDirection(
-                            fromViewer.normalized(), viewp.sceneRotation)
-                        const localRotation = KwinVrHelpers.getRotationDelta(
-                            outputMirrorRepeater.sceneRotation, sceneRot)
+                        // Set intrinsicPosition so the CurvedPlane render-path
+                        // mirrors the legacy positioning. Position binding picks it up.
                         intrinsicPosition = localPosition
-                        intrinsicRotation = localRotation
+                        KwinVrHelpers.turnToFaceKeepRoll(pseudoOutput, spaceAllocator.viewpoint)
+                        intrinsicRotation = pseudoOutput.rotation
                         spaceAllocator.registerObject(pseudoOutput)
                         followMode.registerObject(pseudoOutput)
                     }
