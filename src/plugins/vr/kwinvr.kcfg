@@ -172,6 +172,34 @@
       <min>0.0</min>
       <max>5.0</max>
     </entry>
+    <entry name="defaultWindowCurvature" type="Double">
+      <label>Default curvature for VR windows (arc radians)</label>
+      <default>0.0</default>
+      <min>0.0</min>
+      <max>6.0</max>
+    </entry>
+    <entry name="curvatureScrollStep" type="Double">
+      <label>Curvature change per Alt+wheel tick</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="snapGap" type="Double">
+      <label>Gap between snapped windows (m)</label>
+      <default>0.02</default>
+      <min>0.0</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="prismMotionThreshold" type="Double">
+      <label>Right-click drag motion threshold to spawn a selection prism (m)</label>
+      <default>0.05</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="hideControlTabsOnIdle" type="Bool">
+      <label>Show plane control tabs only on hover</label>
+      <default>false</default>
+    </entry>
     <entry name="minTransientNormalSpacing" type="Double">
       <label>Minimum space between transient normal windows (cm)</label>
       <default>4.0</default>
