@@ -29,6 +29,7 @@ QtObject {
     required property VrPicking picking
     required property var kwinInput         // KwinVrInputDevice — for click/release detection
     property var workSurfaces: null          // WorkSurfaceRegistry; optional in legacy tests
+    property bool shiftHeld: false           // Bound from xrView.shiftHeldOnPress; controls group-drag opt-in
 
     // UV edge band — within this fraction of an edge → snap to that side.
     property real edgeBand: 0.25
@@ -46,7 +47,7 @@ QtObject {
     property var _stackDragMembers: null
     // Same reparenting pattern as _stackDragMembers, but populated from
     // the grabbed window's workSurface.members for group-rigid cluster
-    // drag (surface-aware, supersedes stackedOnto walk when present).
+    // drag.
     property var _surfaceDragMembers: null
     // Set true at grab-start when Shift is held on a surface member —
     // skip surface capture (so only grabbed moves), and on release remove
@@ -470,9 +471,23 @@ QtObject {
         for (const m of _surfaceDragMembers) {
             const scenePos = m.window.scenePosition
             const sceneRot = m.window.sceneRotation
-            m.window.parent = m.oldParent
-            KwinVrHelpers.setNodePositionFromScene(m.window, scenePos)
-            KwinVrHelpers.setNodeRotationFromScene(m.window, sceneRot)
+            // Pre-compute target local pose against oldParent's CURRENT scene
+            // transform, then reparent + assign explicitly. Avoids any race
+            // between the QML `parent` write and parentNode() reads inside
+            // the helpers — both helpers (setNodePositionFromScene and
+            // setNodeRotationFromScene) walk parent at call time.
+            if (m.oldParent) {
+                const newLocalPos = m.oldParent.mapPositionFromScene(scenePos)
+                const newLocalRot = KwinVrHelpers.getRotationDelta(
+                    m.oldParent.sceneRotation, sceneRot)
+                m.window.parent = m.oldParent
+                m.window.position = newLocalPos
+                m.window.rotation = newLocalRot
+            } else {
+                m.window.parent = m.oldParent
+                m.window.position = scenePos
+                m.window.rotation = sceneRot
+            }
         }
         _surfaceDragMembers = null
     }
@@ -553,9 +568,11 @@ QtObject {
                 // On a surface member: plain drag pulls just `now` out of
                 // the group (single-window detach); Shift+drag keeps the
                 // whole cluster rigid. Default = single, opt-in = group.
-                const shiftHeld = !!(Qt.application.keyboardModifiers & Qt.ShiftModifier)
-                root._pendingDetach = !shiftHeld && !!now.workSurface
-                if (now.workSurface && shiftHeld)
+                // shiftHeld is bound from xrView.shiftHeldOnPress, snapshotted
+                // by Main.qml from the synthesized mouse event (Qt.application
+                // keyboard modifiers aren't reliable in the VR overlay).
+                root._pendingDetach = !root.shiftHeld && !!now.workSurface
+                if (now.workSurface && root.shiftHeld)
                     root._captureSurfaceDrag(now)
                 else if (!now.workSurface)
                     root._captureStackDrag(now)

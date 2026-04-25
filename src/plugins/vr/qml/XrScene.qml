@@ -41,6 +41,11 @@ XrView {
     property alias grabbed: pickRay.grabbedObject
     readonly property bool worldGrabbed: pickRay.grabbedObject === allWindowsGrabHandle
     readonly property var cursorHoverObject: focusTracking.cursorHoverObject
+    // Modifier state snapshotted at the most recent mouse press, set by
+    // Main.qml from the synthesized QMouseEvent. Qt.application.keyboardModifiers
+    // is unreliable in the VR session because the overlay doesn't hold
+    // global keyboard focus.
+    property bool shiftHeldOnPress: false
     property alias currentMovingResizingWindow: focusTracking.currentMovingResizingWindow
     property alias pullGrabbed: pickRay.pullGrabbed
     property alias pushGrabbed: pickRay.pushGrabbed
@@ -253,6 +258,7 @@ XrView {
         picking: focusTracking.picking
         kwinInput: xrView.kwinInput
         workSurfaces: workSurfaces
+        shiftHeld: xrView.shiftHeldOnPress
     }
 
     // WorkSurface lifecycle — snap manager calls joinOnSnap; follow-ups

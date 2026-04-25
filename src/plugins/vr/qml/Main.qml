@@ -73,6 +73,12 @@ Item {
         property real worldPressX: 0
         property real worldPressY: 0
         onPressed: (event) => {
+                       /* Snapshot Shift state for WindowSnapManager's group-drag
+                        * opt-in. Qt.application.keyboardModifiers is unreliable
+                        * in the VR overlay; event.modifiers comes from the
+                        * synthesized QMouseEvent and is accurate at press time. */
+                       xrView.shiftHeldOnPress = !!(event.modifiers & Qt.ShiftModifier)
+
                        const wasWorldLatched = xrView.worldGrabbed
                        /* Release grabbed object on any button press */
                        if(xrView.release()) {
