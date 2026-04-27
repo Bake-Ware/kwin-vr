@@ -68,12 +68,26 @@ QtObject {
             const obj = root.xray.grabbedObject
             const plane = root._planeFromObject(obj)
             if (plane) {
-                // Grab start.
+                // Grab start. Order matters:
+                //   1. Capture the current scene pose into intrinsic so the
+                //      plane has a sane fallback position for the brief
+                //      moment between detach and Xray taking over.
+                //   2. Suspend the position/rotation binding (isGrabbed=true)
+                //      BEFORE removing from slots, otherwise the binding
+                //      fires once on abductor change and snaps the plane to
+                //      its intrinsic origin (which a freshly-spawned screen-
+                //      state window has at 0,0,0).
+                //   3. Detach.
                 root._grabbedPlane = plane
                 root._snapTarget = null
                 root._snapAction = PlaneInteractionManager.Action.None
-                root.registry.removeFromAllSlots(plane.planeId)
+                if (plane.topLevelHost) {
+                    plane.intrinsicPosition = plane.topLevelHost.mapPositionFromScene(plane.scenePosition)
+                    plane.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                        plane.topLevelHost.sceneRotation, plane.sceneRotation)
+                }
                 plane.isGrabbed = true
+                root.registry.removeFromAllSlots(plane.planeId)
                 console.log(Logger.kwinvr, "PlaneInteraction grab", plane.planeId)
             } else if (root._grabbedPlane) {
                 // Grab end.

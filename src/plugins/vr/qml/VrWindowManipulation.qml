@@ -69,11 +69,10 @@ QtObject {
 
                 if (window.vr) { // Moving VR window
                     const appWin = root.currentMovingResizingWindow.grabHandle as KwinApplicationWindow
-                    // Grab the CurvedPlane sibling, not the (invisible) flat
-                    // KwinApplicationWindow Node — that's the entity registered
-                    // in PlaneRegistry and the one PlaneInteractionManager
-                    // expects to see in xray.grabbedObject.
-                    const target = (appWin && appWin.vrPlane) ? appWin.vrPlane : appWin
+                    // KwinApplicationWindow is itself the CurvedPlane now —
+                    // it self-registers and is what PlaneInteractionManager
+                    // expects in xray.grabbedObject.
+                    const target = appWin
                     if(!target || root.xray.grabbedObject === target) {
                         return
                     }
@@ -200,7 +199,11 @@ QtObject {
     }
 
     function detachWindowToVR(): void {
-        const appWin =  root.currentMovingResizingWindow?.parent?.parent as KwinApplicationWindow
+        // KwinApplicationWindow is the grabHandle on its render-stack
+        // descendants; reach for it via that property rather than a
+        // fixed parent.parent chain (Phase E adds an extra rendering
+        // node so the legacy depth no longer matches).
+        const appWin = root.currentMovingResizingWindow?.grabHandle as KwinApplicationWindow
         if (!appWin)
             return
 
@@ -215,9 +218,9 @@ QtObject {
             return
         }
 
-        // Grab the CurvedPlane sibling; it's what's registered with the
-        // PlaneInteractionManager and the current rendering target.
-        const target = appWin.vrPlane ?? appWin
+        // KwinApplicationWindow is itself the CurvedPlane now; the
+        // legacy `vrPlane` sibling field is gone.
+        const target = appWin
         xray.grabAndAlign(target)
         const cursorPos = window.fullScreen ? root.unitToRectPoint(window.frameGeometry, root.moveStartCursorPosNormalized) : KWinC.Workspace.cursorPos
         root.alignGrabbedWindowToRayAtCursor(target, cursorPos)

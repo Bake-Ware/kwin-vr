@@ -27,7 +27,11 @@ CurvedPlane {
     mode: CurvedPlane.Mode.Free
     stackChildren: true
     _isPseudomirror: true
-    intrinsicCurvature: 0
+    // Pseudomirror's curvature drives every child via the abductor curvature
+    // push: wallpaper, screen-state windows, and any other slot child all
+    // inherit it. Free-floating VR windows already pick up the same value
+    // through their own intrinsicCurvature.
+    intrinsicCurvature: KWinVRConfig.defaultWindowCurvature || 0.0
     intrinsicSize: Qt.size(frame.frameWidth / root.ppu, frame.frameHeight / root.ppu)
 
     property alias ppu: frame.ppu
