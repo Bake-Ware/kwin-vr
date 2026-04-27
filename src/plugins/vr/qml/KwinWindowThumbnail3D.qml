@@ -91,7 +91,9 @@ Node {
         geometry: CurvedPlaneGeometry {
             width: winT.textureSizeLogical.width / root.ppu
             height: winT.textureSizeLogical.height / root.ppu
-            curvature: KWinVRConfig.defaultWindowCurvature || 0.0
+            // Screen-state windows render flat on their pseudomirror.
+            // Free-floating VR windows take the configured default curvature.
+            curvature: root.client?.vr ? (KWinVRConfig.defaultWindowCurvature || 0.0) : 0.0
         }
         materials: WindowTextureMaterial {
             id: material
