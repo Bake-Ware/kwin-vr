@@ -250,15 +250,6 @@ XrView {
         xrView: xrView
     }
 
-    // #14 step 1 — quad-overlap snap intent detection. Log only, no visual.
-    WindowSnapManager {
-        id: snapManager
-        xray: pickRay
-        windowsRepeater: applicationWindowsRepeater
-        picking: focusTracking.picking
-        kwinInput: xrView.kwinInput
-    }
-
     // Single registry of every CurvedPlane in the scene. Reachable via
     // xrView.planeRegistry from any descendant.
     PlaneRegistry {
@@ -635,37 +626,6 @@ XrView {
                     }
                     return null
                 }
-            }
-
-            // #14 step 2 — telegraph ghost. Translucent rect at landing pose.
-            // Parented here so target.rotation maps directly (both share parent).
-            Model {
-                id: telegraphGhost
-                source: "#Rectangle"
-                visible: snapManager.currentTarget !== null
-                         && snapManager.currentAction !== WindowSnapManager.Action.None
-                         && snapManager.landingSize.width > 0
-                         && snapManager.landingSize.height > 0
-                position: snapManager.currentTarget
-                          ? allWindowsGrabHandle.mapPositionFromScene(
-                                snapManager.currentTarget.mapPositionToScene(
-                                    Qt.vector3d(snapManager.landingLocalOffset.x,
-                                                snapManager.landingLocalOffset.y,
-                                                snapManager.landingLocalOffset.z + KWinVRConfig.zSurfaceMarginTop)))
-                          : Qt.vector3d(0, 0, 0)
-                rotation: snapManager.currentTarget ? snapManager.currentTarget.rotation : Qt.quaternion(1, 0, 0, 0)
-                scale: Qt.vector3d(snapManager.landingSize.width / 100,
-                                   snapManager.landingSize.height / 100, 1)
-                depthBias: -100
-                materials: [
-                    DefaultMaterial {
-                        diffuseColor: Qt.rgba(0.3, 0.7, 1.0, 1.0)
-                        opacity: 0.4
-                        lighting: DefaultMaterial.NoLighting
-                        cullMode: Material.NoCulling
-                        depthDrawMode: Material.OpaqueOnlyDepthDraw
-                    }
-                ]
             }
 
             Repeater3D {
