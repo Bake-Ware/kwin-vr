@@ -15,7 +15,7 @@ import QtQuick3D.Xr
 import org.kde.kwin.vr
 
 /* This is a KWin window composed from wayland surfaces and subsurfaces without server decorations
- * Each surface is a 3D rectangle. all of them are arranged as a stack by ZStacker.
+ * Each surface is a 3D rectangle. all of them are arranged as a stack by VolumetricStacker.
  */
 KwinWaylandSurface3D {
     id: root
@@ -59,7 +59,7 @@ KwinWaylandSurface3D {
                                       bottom: Math.max(rwa.depth.bottom, root.visible ? KWinVRConfig.zWindowMarginBottom : 0)
                                   })
     // onItemDepthChanged: console.log("---> item Depth (main)", itemDepth)
-    ZStacker {
+    VolumetricStacker {
         id: rwa
         target: subSurfaceRepeater
         initialMargins: root.surfaceModelDepth

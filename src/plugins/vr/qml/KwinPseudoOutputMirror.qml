@@ -9,7 +9,7 @@ import QtQuick3D
 import org.kde.kwin.vr
 
 /* This element represent a Kwin Output (a monitor, basically)
- * All children of this element are sorted by ZStacker.
+ * All children of this element are sorted by VolumetricStacker.
  * the VrScreenFrame is always at the bottom.
  *
  * children should have stackingOrder property to be sorted
@@ -48,7 +48,7 @@ Node {
     }
 
     property alias itemDepth: stacker.depth
-    ZStacker {
+    VolumetricStacker {
         id: stacker
         target: root
         childIndexPropertyName: "stackingOrder"

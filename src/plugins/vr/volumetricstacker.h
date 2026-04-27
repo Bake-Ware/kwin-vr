@@ -1,80 +1,39 @@
 /*
     SPDX-FileCopyrightText: 2026 Stanislav Aleksandrov <lightofmysoul@gmail.com>
+    SPDX-FileCopyrightText: 2026 Bake-Ware
 
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #pragma once
 
+#include "layoutmodes/ilayoutmode.h"
+#include "zmargins.h"
+
 #include <QPointer>
 #include <QQuick3DObject>
 #include <QTimer>
 
+#include <memory>
+#include <unordered_map>
+
 namespace KWin
 {
 
-struct ZMargins
-{
-    Q_GADGET
-    Q_PROPERTY(float top MEMBER top)
-    Q_PROPERTY(float bottom MEMBER bottom)
-    Q_PROPERTY(float flexibleTop MEMBER flexibleTop)
-    Q_PROPERTY(float flexibleBottom MEMBER flexibleBottom)
-    QML_VALUE_TYPE(zMargins)
-    QML_STRUCTURED_VALUE
-public:
-    constexpr ZMargins() = default;
-    constexpr ZMargins(float top, float bottom)
-        : top(top)
-        , bottom(bottom)
-    {
-    }
-
-    bool operator==(const ZMargins &other) const noexcept
-    {
-        return qFuzzyCompare(top, other.top) && qFuzzyCompare(bottom, other.bottom)
-            && qFuzzyCompare(flexibleTop, other.flexibleTop) && qFuzzyCompare(flexibleBottom, other.flexibleBottom);
-    }
-
-    Q_INVOKABLE bool equals(const ZMargins &other) const noexcept
-    {
-        return *this == other;
-    }
-
-    Q_INVOKABLE double depth() const
-    {
-        return top + bottom;
-    }
-
-    Q_INVOKABLE QString toString() const
-    {
-        return QStringLiteral("ZMargins(top=%1[%3], bottom=%2[%4])").arg(top).arg(bottom).arg(flexibleTop).arg(flexibleBottom);
-    }
-
-    float top = 0;
-    float bottom = 0;
-    float flexibleTop = 0;
-    float flexibleBottom = 0;
-};
-
 /**
- * Positions children of a specified target along the Z axis,
- * similar to Row and Column in Qt Quick.
+ * Volumetric layout primitive. Positions children of `target` in 3D space
+ * according to the configured `mode`. Strategy pattern: each Mode is an
+ * ILayoutMode implementation. Phase A ships only Stack mode (Z-only,
+ * bit-identical to the prior ZStacker behaviour).
  *
- * Iterates over target's children and reads two properties:
- * index and itemDepth. Then it sets the calculated zOffset property for each child.
+ * Children expose:
+ *   property int <childIndexPropertyName>   // sort key; default "index"
+ *   property zMargins itemDepth             // Z thickness
  *
- * Children can use zOffset property to apply their position around Z axis.
- *
- * For this class to work each child of a specified target should have
- * these three properties defined:
- * @code
- *   property int index
- *   property real zOffset
- *   property ZMargins itemDepth
- * @endcode
+ * Stacker writes per child:
+ *   zOffset, zOffsetGlobal                  // local + global Z position
  */
-class ZStacker : public QObject
+class VolumetricStacker : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QQuick3DObject *target READ target WRITE setTarget NOTIFY targetChanged)
@@ -83,10 +42,18 @@ class ZStacker : public QObject
     Q_PROPERTY(ZMargins depth READ depth NOTIFY depthChanged FINAL)
     Q_PROPERTY(qreal globalOffset READ globalOffset WRITE setGlobalOffset NOTIFY globalOffsetChanged FINAL)
     Q_PROPERTY(QString childIndexPropertyName READ childIndexPropertyName WRITE setChildIndexPropertyName NOTIFY childIndexPropertyNameChanged FINAL)
-
+    Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
     QML_ELEMENT
+
 public:
-    explicit ZStacker(QObject *parent = nullptr);
+    enum Mode {
+        Stack = 0,
+        // Cascade, SnapRow, Free, OcclusionAware land in later phases.
+    };
+    Q_ENUM(Mode)
+
+    explicit VolumetricStacker(QObject *parent = nullptr);
+    ~VolumetricStacker() override;
 
     QQuick3DObject *target() const;
     void setTarget(QQuick3DObject *newTarget);
@@ -104,6 +71,9 @@ public:
     qreal globalOffset() const;
     void setGlobalOffset(qreal newGlobalOffset);
 
+    Mode mode() const;
+    void setMode(Mode newMode);
+
 Q_SIGNALS:
     void targetChanged();
     void centerIndexChanged();
@@ -111,6 +81,7 @@ Q_SIGNALS:
     void initialMarginsChanged();
     void childIndexPropertyNameChanged();
     void globalOffsetChanged();
+    void modeChanged();
 
 private Q_SLOTS:
     void scheduleRecompute();
@@ -122,8 +93,9 @@ private:
     void hookChildren(const QList<QQuick3DObject *> &children);
     void unhookChild(QQuick3DObject &child);
     void unhookChildren(const QList<QQuick3DObject *> &children);
-
     void setDepth(const ZMargins &newDepth);
+
+    ILayoutMode *modeImpl() const;
 
     QPointer<QQuick3DObject> m_target;
     QTimer m_timer;
@@ -133,6 +105,8 @@ private:
     QString m_childIndexPropertyName;
     QByteArray m_childIndexPropertyNameUtf8;
     QString m_childDepthPropertyName;
+    Mode m_mode = Mode::Stack;
+    std::unordered_map<int, std::unique_ptr<ILayoutMode>> m_modes;
 
     QMetaMethod m_scheduleRecomputeMeta;
     bool m_updateConnections = false;

@@ -43,7 +43,7 @@ KwinWaylandSubSurface3D {
 
     property alias itemDepth: rwa.depth
     // onItemDepthChanged: console.log("---> item Depth (sub)", itemDepth)
-    ZStacker {
+    VolumetricStacker {
         id: rwa
         target: subSurfaceRepeater
         initialMargins: root.surfaceModelDepth

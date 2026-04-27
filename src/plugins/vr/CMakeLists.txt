@@ -104,7 +104,10 @@ qt6_add_qml_module(vr
         shadowgeometry.h shadowgeometry.cpp
         decorationgeometry.h decorationgeometry.cpp
         geometrytypes.h
-        zstacker.h zstacker.cpp
+        zmargins.h
+        volumetricstacker.h volumetricstacker.cpp
+        layoutmodes/ilayoutmode.h
+        layoutmodes/stackmode.h layoutmodes/stackmode.cpp
         spaceallocator3d.h spaceallocator3d.cpp
         kwinvrbridge.h kwinvrbridge.cpp
         openxrtest.h openxrtest.cpp

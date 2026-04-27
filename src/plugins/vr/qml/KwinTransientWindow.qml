@@ -101,7 +101,7 @@ Node {
         delegate: root.nextComponent
     }
 
-    ZStacker {
+    VolumetricStacker {
         id: menuStack
         target: menuRepeater
         initialMargins: windowLoader.item?.itemDepth ?? ({top: 0, bottom: 0})
@@ -118,7 +118,7 @@ Node {
         }
         delegate: root.nextComponent
     }
-    ZStacker {
+    VolumetricStacker {
         id: transientNormalsStack
         target: transientNormalsRepeater
         initialMargins: menuStack.depth

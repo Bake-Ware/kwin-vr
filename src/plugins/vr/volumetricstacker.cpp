@@ -1,16 +1,19 @@
 /*
     SPDX-FileCopyrightText: 2026 Stanislav Aleksandrov <lightofmysoul@gmail.com>
+    SPDX-FileCopyrightText: 2026 Bake-Ware
 
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-#include "zstacker.h"
+#include "volumetricstacker.h"
 #include "kwinvr_logging.h"
+#include "layoutmodes/stackmode.h"
+
 #include <QDebug>
 #include <QMetaProperty>
 #include <QQmlProperty>
 
-#include <climits>
+#include <optional>
 
 namespace KWin
 {
@@ -27,7 +30,7 @@ QDebug operator<<(QDebug debug, const ZMargins &margins)
     return debug;
 }
 
-ZStacker::ZStacker(QObject *parent)
+VolumetricStacker::VolumetricStacker(QObject *parent)
     : QObject(parent)
     , m_childIndexPropertyName(s_childIndexPropName)
     , m_childIndexPropertyNameUtf8(s_childIndexPropName)
@@ -35,17 +38,27 @@ ZStacker::ZStacker(QObject *parent)
 {
     m_timer.setSingleShot(true);
     m_timer.setInterval(0);
-    connect(&m_timer, &QTimer::timeout, this, &ZStacker::recomputeLayout);
+    connect(&m_timer, &QTimer::timeout, this, &VolumetricStacker::recomputeLayout);
 
     m_scheduleRecomputeMeta = staticMetaObject.method(staticMetaObject.indexOfSlot("scheduleRecompute()"));
+
+    m_modes[Mode::Stack] = std::make_unique<StackMode>();
 }
 
-QQuick3DObject *ZStacker::target() const
+VolumetricStacker::~VolumetricStacker() = default;
+
+ILayoutMode *VolumetricStacker::modeImpl() const
+{
+    auto it = m_modes.find(m_mode);
+    return it != m_modes.end() ? it->second.get() : nullptr;
+}
+
+QQuick3DObject *VolumetricStacker::target() const
 {
     return m_target;
 }
 
-void ZStacker::setTarget(QQuick3DObject *newTarget)
+void VolumetricStacker::setTarget(QQuick3DObject *newTarget)
 {
     if (m_target == newTarget) {
         return;
@@ -53,17 +66,16 @@ void ZStacker::setTarget(QQuick3DObject *newTarget)
 
     if (m_target) {
         disconnect(m_target, &QQuick3DObject::childrenChanged,
-                   this, &ZStacker::onChildrenChanged);
+                   this, &VolumetricStacker::onChildrenChanged);
         unhookChildren(m_target->childItems());
     }
 
     m_target = newTarget;
-
     m_updateConnections = false;
 
     if (m_target) {
         connect(m_target, &QQuick3DObject::childrenChanged,
-                this, &ZStacker::onChildrenChanged);
+                this, &VolumetricStacker::onChildrenChanged);
         hookChildren(m_target->childItems());
         scheduleRecompute();
     } else {
@@ -74,21 +86,20 @@ void ZStacker::setTarget(QQuick3DObject *newTarget)
     Q_EMIT targetChanged();
 }
 
-void ZStacker::onChildrenChanged()
+void VolumetricStacker::onChildrenChanged()
 {
     if (!m_target) {
         return;
     }
-
     m_updateConnections = true;
     scheduleRecompute();
 }
 
-void ZStacker::onChildParentChanged()
+void VolumetricStacker::onChildParentChanged()
 {
     QQuick3DObject *child = qobject_cast<QQuick3DObject *>(sender());
     if (!child) {
-        qCWarning(KWINVR) << "zStacker: No signal sender when calling onChildParentChanged()";
+        qCWarning(KWINVR) << "VolumetricStacker: No signal sender when calling onChildParentChanged()";
         return;
     }
 
@@ -98,7 +109,7 @@ void ZStacker::onChildParentChanged()
     }
 
     unhookChild(*child);
-    // No need to call scheduleRecompute(), because childrenChanged() signal will be emitted too
+    // No need to call scheduleRecompute(): childrenChanged() signal will be emitted too.
 }
 
 static std::optional<QMetaMethod> notifySignalForProperty(QObject *sender, const char *propertyName)
@@ -122,14 +133,14 @@ static std::optional<QMetaMethod> notifySignalForProperty(QObject *sender, const
     return notify;
 }
 
-void ZStacker::hookChildren(const QList<QQuick3DObject *> &children)
+void VolumetricStacker::hookChildren(const QList<QQuick3DObject *> &children)
 {
     for (auto *child : children) {
         if (!child) {
             continue;
         }
 
-        connect(child, &QQuick3DObject::parentChanged, this, &ZStacker::onChildParentChanged, Qt::UniqueConnection);
+        connect(child, &QQuick3DObject::parentChanged, this, &VolumetricStacker::onChildParentChanged, Qt::UniqueConnection);
 
         connect(child, SIGNAL(itemDepthChanged()),
                 this, SLOT(scheduleRecompute()), Qt::UniqueConnection);
@@ -141,9 +152,9 @@ void ZStacker::hookChildren(const QList<QQuick3DObject *> &children)
     }
 }
 
-void ZStacker::unhookChild(QQuick3DObject &child)
+void VolumetricStacker::unhookChild(QQuick3DObject &child)
 {
-    disconnect(&child, &QQuick3DObject::parentChanged, this, &ZStacker::onChildParentChanged);
+    disconnect(&child, &QQuick3DObject::parentChanged, this, &VolumetricStacker::onChildParentChanged);
 
     disconnect(&child, SIGNAL(itemDepthChanged()),
                this, SLOT(scheduleRecompute()));
@@ -154,25 +165,24 @@ void ZStacker::unhookChild(QQuick3DObject &child)
     }
 }
 
-void ZStacker::unhookChildren(const QList<QQuick3DObject *> &children)
+void VolumetricStacker::unhookChildren(const QList<QQuick3DObject *> &children)
 {
     for (auto *child : children) {
         if (!child) {
             continue;
         }
-
         unhookChild(*child);
     }
 }
 
-void ZStacker::scheduleRecompute()
+void VolumetricStacker::scheduleRecompute()
 {
     if (!m_timer.isActive()) {
         m_timer.start();
     }
 }
 
-void ZStacker::recomputeLayout()
+void VolumetricStacker::recomputeLayout()
 {
     if (!m_target) {
         setDepth(m_initialMargins);
@@ -185,96 +195,54 @@ void ZStacker::recomputeLayout()
         hookChildren(children);
     }
 
-    struct Item
-    {
-        QQuick3DObject *obj;
-        int index;
-    };
-    QList<Item> indexed;
-    indexed.reserve(children.size());
+    QList<LayoutItem> items;
+    items.reserve(children.size());
 
     for (auto *child : std::as_const(children)) {
         if (!child) {
             continue;
         }
-        int idx = -1;
-        QVariant v = QQmlProperty::read(child, m_childIndexPropertyName);
-        if (v.isValid()) {
-            idx = v.toInt();
-        }
-        if (idx >= 0) {
-            indexed.push_back({child, idx});
-        }
-    }
-
-    std::sort(indexed.begin(), indexed.end(), [](const Item &a, const Item &b) {
-        return a.index < b.index;
-    });
-
-    const auto centerIndex = m_centerIndex;
-    int closestIndexToCenter = INT_MIN;
-
-    float targetZOffset = 0;
-
-    auto prevZMargins = m_initialMargins;
-    for (int i = 0; i != indexed.size(); i++) {
-        const auto &item = indexed[i];
-        if (item.index < centerIndex) {
-            closestIndexToCenter = i;
+        QVariant idxVar = QQmlProperty::read(child, m_childIndexPropertyName);
+        if (!idxVar.isValid()) {
             continue;
         }
-
-        QVariant itemZMarginsVar = QQmlProperty::read(item.obj, m_childDepthPropertyName);
-        if (!itemZMarginsVar.isValid() || !itemZMarginsVar.canConvert<ZMargins>()) {
+        const int idx = idxVar.toInt();
+        if (idx < 0) {
             continue;
         }
-        auto currZMargins = itemZMarginsVar.value<ZMargins>();
-
-        auto flexibleDepth = prevZMargins.flexibleTop + currZMargins.flexibleBottom;
-        auto hardDepth = prevZMargins.top + currZMargins.bottom;
-        auto effectiveDepth = std::max(flexibleDepth, hardDepth);
-        prevZMargins = currZMargins;
-
-        targetZOffset += effectiveDepth;
-        QQmlProperty::write(item.obj, s_childZOffsetPropName, targetZOffset);
-        QQmlProperty::write(item.obj, s_childZOffsetGlobalPropName, m_globalOffset + targetZOffset);
-    }
-
-    ZMargins totalDepth;
-    totalDepth.top = targetZOffset + prevZMargins.top;
-
-    targetZOffset = 0;
-    prevZMargins = m_initialMargins;
-    for (int i = closestIndexToCenter; i >= 0; i--) {
-        const auto &item = indexed[i];
-
-        QVariant itemZMarginsVar = QQmlProperty::read(item.obj, m_childDepthPropertyName);
-        if (!itemZMarginsVar.isValid() || !itemZMarginsVar.canConvert<ZMargins>()) {
-            continue;
+        QVariant depthVar = QQmlProperty::read(child, m_childDepthPropertyName);
+        ZMargins depth;
+        if (depthVar.isValid() && depthVar.canConvert<ZMargins>()) {
+            depth = depthVar.value<ZMargins>();
         }
-        auto currZMargins = itemZMarginsVar.value<ZMargins>();
-
-        auto flexibleDepth = prevZMargins.flexibleBottom + currZMargins.flexibleTop;
-        auto hardDepth = prevZMargins.bottom + currZMargins.top;
-        auto effectiveDepth = std::max(flexibleDepth, hardDepth);
-        prevZMargins = currZMargins;
-
-        targetZOffset -= effectiveDepth;
-        QQmlProperty::write(item.obj, s_childZOffsetPropName, targetZOffset);
-        QQmlProperty::write(item.obj, s_childZOffsetGlobalPropName, m_globalOffset + targetZOffset);
+        items.append(LayoutItem{child, idx, 0, depth, QSizeF{}, -1});
     }
 
-    totalDepth.bottom = -targetZOffset + prevZMargins.bottom;
+    ILayoutMode *mode = modeImpl();
+    if (!mode) {
+        qCWarning(KWINVR) << "VolumetricStacker: no mode impl for" << m_mode;
+        setDepth(m_initialMargins);
+        return;
+    }
 
-    setDepth(totalDepth);
+    LayoutResult result = mode->apply(items, m_initialMargins, m_centerIndex);
+
+    for (auto it = result.placements.constBegin(); it != result.placements.constEnd(); ++it) {
+        QQuick3DObject *obj = it.key();
+        const LayoutOutput &out = it.value();
+        QQmlProperty::write(obj, s_childZOffsetPropName, out.zOffset);
+        QQmlProperty::write(obj, s_childZOffsetGlobalPropName, m_globalOffset + out.zOffset);
+    }
+
+    setDepth(result.totalDepth);
 }
 
-int ZStacker::centerIndex() const
+int VolumetricStacker::centerIndex() const
 {
     return m_centerIndex;
 }
 
-void ZStacker::setCenterIndex(int newCenterIndex)
+void VolumetricStacker::setCenterIndex(int newCenterIndex)
 {
     if (m_centerIndex == newCenterIndex) {
         return;
@@ -284,12 +252,12 @@ void ZStacker::setCenterIndex(int newCenterIndex)
     Q_EMIT centerIndexChanged();
 }
 
-ZMargins ZStacker::depth() const
+ZMargins VolumetricStacker::depth() const
 {
     return m_depth;
 }
 
-void ZStacker::setDepth(const ZMargins &newDepth)
+void VolumetricStacker::setDepth(const ZMargins &newDepth)
 {
     if (m_depth == newDepth) {
         return;
@@ -298,12 +266,12 @@ void ZStacker::setDepth(const ZMargins &newDepth)
     Q_EMIT depthChanged();
 }
 
-ZMargins ZStacker::initialMargins() const
+ZMargins VolumetricStacker::initialMargins() const
 {
     return m_initialMargins;
 }
 
-void ZStacker::setInitialMargins(const ZMargins &newInitialMargins)
+void VolumetricStacker::setInitialMargins(const ZMargins &newInitialMargins)
 {
     if (m_initialMargins == newInitialMargins) {
         return;
@@ -314,12 +282,12 @@ void ZStacker::setInitialMargins(const ZMargins &newInitialMargins)
     Q_EMIT initialMarginsChanged();
 }
 
-QString ZStacker::childIndexPropertyName() const
+QString VolumetricStacker::childIndexPropertyName() const
 {
     return m_childIndexPropertyName;
 }
 
-void ZStacker::setChildIndexPropertyName(const QString &newChildIndexPropertyName)
+void VolumetricStacker::setChildIndexPropertyName(const QString &newChildIndexPropertyName)
 {
     if (m_childIndexPropertyName == newChildIndexPropertyName) {
         return;
@@ -330,12 +298,12 @@ void ZStacker::setChildIndexPropertyName(const QString &newChildIndexPropertyNam
     Q_EMIT childIndexPropertyNameChanged();
 }
 
-qreal ZStacker::globalOffset() const
+qreal VolumetricStacker::globalOffset() const
 {
     return m_globalOffset;
 }
 
-void ZStacker::setGlobalOffset(qreal newGlobalOffset)
+void VolumetricStacker::setGlobalOffset(qreal newGlobalOffset)
 {
     if (qFuzzyCompare(m_globalOffset, newGlobalOffset)) {
         return;
@@ -343,6 +311,21 @@ void ZStacker::setGlobalOffset(qreal newGlobalOffset)
     m_globalOffset = newGlobalOffset;
     scheduleRecompute();
     Q_EMIT globalOffsetChanged();
+}
+
+VolumetricStacker::Mode VolumetricStacker::mode() const
+{
+    return m_mode;
+}
+
+void VolumetricStacker::setMode(Mode newMode)
+{
+    if (m_mode == newMode) {
+        return;
+    }
+    m_mode = newMode;
+    scheduleRecompute();
+    Q_EMIT modeChanged();
 }
 
 } // namespace KWin
