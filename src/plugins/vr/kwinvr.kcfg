@@ -190,6 +190,18 @@
       <min>0.0</min>
       <max>0.5</max>
     </entry>
+    <entry name="occlusionIntraLayerGap" type="Double">
+      <label>Z step between occlusion-aware Z classes within a layer (m)</label>
+      <default>0.005</default>
+      <min>0.0</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="occlusionLayerGap" type="Double">
+      <label>Z step between layers when occlusion forces separation (m)</label>
+      <default>0.01</default>
+      <min>0.0</min>
+      <max>0.5</max>
+    </entry>
     <entry name="prismMotionThreshold" type="Double">
       <label>Right-click drag motion threshold to spawn a selection prism (m)</label>
       <default>0.05</default>

@@ -112,6 +112,7 @@ qt6_add_qml_module(vr
         layoutmodes/cascademode.h layoutmodes/cascademode.cpp
         layoutmodes/snaprowmode.h layoutmodes/snaprowmode.cpp
         layoutmodes/freemode.h layoutmodes/freemode.cpp
+        layoutmodes/occlusionawaremode.h layoutmodes/occlusionawaremode.cpp
         spaceallocator3d.h spaceallocator3d.cpp
         kwinvrbridge.h kwinvrbridge.cpp
         openxrtest.h openxrtest.cpp

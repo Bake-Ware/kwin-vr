@@ -8,7 +8,10 @@
 
 #include "layoutmodes/cascademode.h"
 #include "layoutmodes/freemode.h"
+#include "layoutmodes/occlusionawaremode.h"
 #include "layoutmodes/snaprowmode.h"
+
+#include <QRectF>
 
 namespace KWin
 {
@@ -36,6 +39,28 @@ QVector3D LayoutEngine::snapRowPosition(int idx, const QVariantList &widths, qre
 qreal LayoutEngine::freeStackZ(int idx, qreal step) const
 {
     return FreeMode::stackOffsetZ(idx, step);
+}
+
+QVariantList LayoutEngine::classifyOcclusion(const QVariantList &items) const
+{
+    QList<OcclusionItem> input;
+    input.reserve(items.size());
+    for (const QVariant &v : items) {
+        QVariantMap m = v.toMap();
+        OcclusionItem oi;
+        oi.footprint = m.value(QStringLiteral("footprint")).toRectF();
+        oi.previousZClass = m.value(QStringLiteral("previousZClass"), -1).toInt();
+        input.append(oi);
+    }
+
+    QList<int> classes = OcclusionAwareMode::classify(input);
+
+    QVariantList out;
+    out.reserve(classes.size());
+    for (int c : classes) {
+        out.append(c);
+    }
+    return out;
 }
 
 } // namespace KWin
