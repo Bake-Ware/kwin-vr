@@ -158,7 +158,8 @@ Node {
         // camera (per kwinvrhelpers' rotationToFaceDirection), so positive
         // z is forward.
         const stackZ = (mode === CurvedPlane.Mode.Free && stackChildren)
-                       ? LayoutEngine.freeStackZ(i, KWinVRConfig.zWindowMarginTop || 1.0)
+                       ? LayoutEngine.freeStackZ(_stackRank(childId),
+                                                 KWinVRConfig.zWindowMarginTop || 1.0)
                        : 0
         if (ovr.position !== undefined) {
             return Qt.vector3d(ovr.position.x, ovr.position.y,
@@ -173,6 +174,24 @@ Node {
             return _stackPosition(i)
         }
         return Qt.vector3d(0, 0, 0)
+    }
+
+    // Rank of childId among siblings by their stackingOrder property.
+    // Lower stackingOrder = lower rank = nearer the plane. Falls back to
+    // slot insertion order for slots whose child doesn't expose one.
+    function _stackRank(childId) {
+        if (!registry) return 0
+        const me = registry.findById(childId)
+        const myIdx = _slotIndexOf(childId)
+        const myOrder = (me && me.stackingOrder !== undefined) ? me.stackingOrder : myIdx
+        let rank = 0
+        for (let j = 0; j < slots.length; ++j) {
+            if (j === myIdx) continue
+            const other = registry.findById(slots[j].planeId)
+            const otherOrder = (other && other.stackingOrder !== undefined) ? other.stackingOrder : j
+            if (otherOrder < myOrder || (otherOrder === myOrder && j < myIdx)) rank++
+        }
+        return rank
     }
 
     function computeChildRotation(childId) {

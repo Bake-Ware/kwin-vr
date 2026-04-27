@@ -47,6 +47,12 @@ CurvedPlane {
     // For SpaceAllocator3D.
     readonly property size itemSize: root.intrinsicSize
 
+    // Z-lift rank source for pseudomirror's stackChildren mode — KWin's
+    // stacking order makes focused windows rise above siblings, so any
+    // transient (right-click menu, dialog) opened by the focused window
+    // renders above unfocused windows on the same monitor.
+    readonly property int stackingOrder: client ? client.stackingOrder : 0
+
     // ─── Embedded rendering ───────────────────────────────────────────
     KwinTransientWindow {
         id: rendering
