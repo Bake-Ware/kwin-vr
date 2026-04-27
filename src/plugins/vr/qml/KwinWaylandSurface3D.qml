@@ -20,6 +20,19 @@ Node {
     /* KWin::SurfaceInterface */
     required property QtObject surface
 
+    // Nearest CurvedPlane ancestor's curvature; see KwinWindowThumbnail3D
+    // for the walk pattern.
+    readonly property real _ancestorPlaneCurvature: {
+        let n = root.parent
+        while (n) {
+            if (n.planeId !== undefined && n.effectiveCurvature !== undefined) {
+                return n.effectiveCurvature
+            }
+            n = n.parent
+        }
+        return KWinVRConfig.defaultWindowCurvature || 0.0
+    }
+
     property real ppu: 20
     property alias grabHandle: model.grabHandle
     property alias pickable: model.pickable
@@ -160,9 +173,9 @@ Node {
         geometry: CurvedPlaneGeometry {
             width: root.surfaceSize.width / root.ppu
             height: root.surfaceSize.height / root.ppu
-            // Screen-state windows render flat on their pseudomirror.
-            // Free-floating VR windows take the configured default curvature.
-            curvature: root.client?.vr ? (KWinVRConfig.defaultWindowCurvature || 0.0) : 0.0
+            // Curvature inherits from the nearest CurvedPlane ancestor;
+            // see KwinWindowThumbnail3D for the same pattern.
+            curvature: root._ancestorPlaneCurvature
         }
         // materials: kws.uvTexture ? yuvMaterial : rgbMaterial
         materials: materialLoader.item

@@ -327,8 +327,37 @@ Node {
     }
 
     readonly property bool _suppressControlTab: {
-        if (!abductor) return false
-        return abductor._isPseudomirror === true
+        // Pseudomirrors don't get a tab on themselves — they're hardware-tied.
+        if (root._isPseudomirror) return true
+        // Children of a pseudomirror don't get tabs either.
+        if (abductor && abductor._isPseudomirror === true) return true
+        return false
+    }
+
+    // Container border decoration. Renders only on container planes (no
+    // window content) that aren't pseudomirrors. Gives visible feedback
+    // that a snap/stack/free container exists, per architecture.md
+    // §"Decorations".
+    readonly property bool _showContainerBorder: root.content === null
+                                                 && !root._isPseudomirror
+                                                 && root.mode !== CurvedPlane.Mode.None
+    Model {
+        id: containerBorder
+        visible: root._showContainerBorder
+        source: "#Rectangle"
+        scale: Qt.vector3d(root.effectiveSize.width / 100,
+                           root.effectiveSize.height / 100, 1)
+        // Slightly behind the front face so it doesn't z-fight with content.
+        position: Qt.vector3d(0, 0, -0.001)
+        materials: [
+            DefaultMaterial {
+                diffuseColor: Qt.rgba(0.4, 0.7, 1.0, 1.0)
+                opacity: 0.25
+                lighting: DefaultMaterial.NoLighting
+                cullMode: Material.NoCulling
+                depthDrawMode: Material.OpaqueOnlyDepthDraw
+            }
+        ]
     }
 
     // === Lifecycle ===

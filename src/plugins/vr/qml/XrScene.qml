@@ -600,12 +600,19 @@ XrView {
                     // Remove from scene graph entirely when hidden
                     parent: isVirtualHidden ? null : outputMirrorRepeater
                     ppu: allWindows.ppu
+                    registry: planeRegistryInstance
+                    topLevelHost: outputMirrorRepeater
                     Component.onCompleted: {
                         outputMirrorRepeater.outputMap[output.name] = pseudoOutput
                         const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
-                        const localPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
-                        position = localPosition
+                        // CurvedPlane drives `position` from intrinsicPosition via
+                        // a Binding; write the intrinsic so it propagates.
+                        pseudoOutput.intrinsicPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
                         KwinVrHelpers.turnToFaceKeepRoll(pseudoOutput, spaceAllocator.viewpoint)
+                        // turnToFaceKeepRoll wrote `rotation` imperatively; capture
+                        // back to intrinsicRotation so the binding stays consistent.
+                        pseudoOutput.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                            outputMirrorRepeater.sceneRotation, pseudoOutput.sceneRotation)
                         spaceAllocator.registerObject(pseudoOutput)
                         followMode.registerObject(pseudoOutput)
                     }
@@ -672,73 +679,42 @@ XrView {
                     id: kwinAppWindow
                     required property int index
                     required property QtObject window
-                    parent: null
+
+                    // CurvedPlane lives at the top-level scene-graph host always.
+                    // The abductor binding (set when client.vr === false in
+                    // KwinApplicationWindow itself) computes screen-state
+                    // placement; no Qt reparenting needed.
+                    parent: allWindowsGrabHandle
+                    registry: planeRegistryInstance
+                    topLevelHost: allWindowsGrabHandle
+
                     client: window
                     windowDataModel: applicationWindowsRepeater.windowDataModel
                     ppu: allWindows.ppu
                     focusControl: focusTracking
-                    property real zOffset: 0
-                    property int stackingOrder: client.stackingOrder
-
-                    onStackFocusRequested: snapManager.promoteStackMember(kwinAppWindow)
-
-                    function centerOffset(childRect: rect, parentRect: rect, zValue: real, ppu: real): vector3d {
-                        return Qt.vector3d(
-                                    +(childRect.x + childRect.width/2 - parentRect.x - parentRect.width/2)/ppu,
-                                    -(childRect.y + childRect.height/2 - parentRect.y - parentRect.height/2)/ppu,
-                                    zValue)
-                    }
-
-                    //For the space allocator
-                    property size itemSize: {
-                        if(!parent) {
-                            return Qt.size(0,0)
-                        }
-                        const sz = client.frameGeometry;
-                        return Qt.size(sz.width / kwinAppWindow.ppu, sz.height / kwinAppWindow.ppu);
-                    }
 
                     function registerForSpaceAllocator() {
                         spaceAllocator.registerObject(kwinAppWindow)
                     }
-                    Component.onCompleted: Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
 
-                    states: [
-                        State {
-                            name: "vr"
-                            when: kwinAppWindow.client.vr
-                            PropertyChanges {
-                                kwinAppWindow {
-                                    parent: allWindowsGrabHandle
-                                    grabHandle: kwinAppWindow
-                                    zOffsetGlobal: 0
-                                }
-                            }
-                            StateChangeScript {
-                                script: followMode.registerObject(kwinAppWindow)
-                            }
-                        },
-                        State {
-                            name: "screen"
-                            when: !kwinAppWindow.client.vr
-                            PropertyChanges {
-                                kwinAppWindow {
-                                    parent: outputMirrorRepeater.findPseudoOutputByOutput(kwinAppWindow.client.output)
-                                    grabHandle: kwinAppWindow.parent
-                                    position: kwinAppWindow.centerOffset(
-                                                  kwinAppWindow.client.frameGeometry,
-                                                  kwinAppWindow.client.output.geometry,
-                                                  kwinAppWindow.zOffset,
-                                                  allWindows.ppu)
-                                    rotation: Qt.quaternion(1,0,0,0)
-                                }
-                                restoreEntryValues: false
-                            }
-                            StateChangeScript {
-                                script: followMode.unregisterObject(kwinAppWindow)
+                    Component.onCompleted: {
+                        Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        // VR-state windows participate in followMode; track here.
+                        if (client.vr) {
+                            followMode.registerObject(kwinAppWindow)
+                        }
+                    }
+
+                    Connections {
+                        target: kwinAppWindow.client
+                        function onVrChanged() {
+                            if (kwinAppWindow.client.vr) {
+                                followMode.registerObject(kwinAppWindow)
+                            } else {
+                                followMode.unregisterObject(kwinAppWindow)
                             }
                         }
-                    ]
+                    }
                 }
             }
         }

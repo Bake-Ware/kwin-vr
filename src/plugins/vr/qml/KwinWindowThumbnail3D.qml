@@ -28,6 +28,21 @@ import org.kde.kwin.vr
  */
 Node {
     id: root
+
+    // Walks the Qt scene-graph parent chain to find the nearest
+    // CurvedPlane ancestor (identified by having a planeId + an
+    // effectiveCurvature). Falls back to defaultWindowCurvature.
+    readonly property real _ancestorPlaneCurvature: {
+        let n = root.parent
+        while (n) {
+            if (n.planeId !== undefined && n.effectiveCurvature !== undefined) {
+                return n.effectiveCurvature
+            }
+            n = n.parent
+        }
+        return KWinVRConfig.defaultWindowCurvature || 0.0
+    }
+
     required property QtObject client
 
     property alias grabHandle: model.grabHandle
@@ -91,9 +106,12 @@ Node {
         geometry: CurvedPlaneGeometry {
             width: winT.textureSizeLogical.width / root.ppu
             height: winT.textureSizeLogical.height / root.ppu
-            // Screen-state windows render flat on their pseudomirror.
-            // Free-floating VR windows take the configured default curvature.
-            curvature: root.client?.vr ? (KWinVRConfig.defaultWindowCurvature || 0.0) : 0.0
+            // Curvature inherits from the nearest CurvedPlane ancestor.
+            // For a top-level free VR window: its own plane's curvature
+            // (= KWinVRConfig.defaultWindowCurvature). For a hosted
+            // (screen-state) window: the pseudomirror's curvature (= 0).
+            // For a transient inside a window: the window's curvature.
+            curvature: root._ancestorPlaneCurvature
         }
         materials: WindowTextureMaterial {
             id: material
