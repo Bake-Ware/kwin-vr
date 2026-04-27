@@ -313,7 +313,16 @@ void KwinVr::start()
 
     qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
     qputenv("QT_QUICK3D_XR_ASYNC_RENDER", KWinVRConfigWrapper::instance()->threadedRendering() ? "1" : "0");
-    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", KWinVRConfigWrapper::instance()->multiview() ? "0" : "1");
+
+    // Force multiview off on NVIDIA proprietary driver: Qt's auto-generated
+    // multiview shader uses #version 140, which NVIDIA's GLSL compiler rejects
+    // for GL_OVR_multiview2 (needs 330+). Result is a black VR screen.
+    bool multiviewEnabled = KWinVRConfigWrapper::instance()->multiview();
+    if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
+        qCWarning(KWINVR) << "NVIDIA proprietary driver detected; forcing multiview off (GLSL 140 incompatibility)";
+        multiviewEnabled = false;
+    }
+    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
 
     input()->pointer()->setPositionLimiter([](const QPointF &pos, const QPointF &, std::chrono::microseconds) {
         return pos;

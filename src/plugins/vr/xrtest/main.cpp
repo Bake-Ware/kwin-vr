@@ -114,7 +114,12 @@ int main(int argc, char *argv[])
 
     const KConfigGroup generalGroup(KSharedConfig::openConfig(QStringLiteral("kwinvr")), QStringLiteral("General"));
     qputenv("QT_QUICK3D_XR_ASYNC_RENDER", generalGroup.readEntry("threadedRendering", false) ? "1" : "0");
-    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", generalGroup.readEntry("multiview", false) ? "0" : "1");
+
+    bool multiviewEnabled = generalGroup.readEntry("multiview", false);
+    if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
+        multiviewEnabled = false;
+    }
+    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
 
     QQmlApplicationEngine engine;
     XrTestResult result;
