@@ -106,8 +106,12 @@ qt6_add_qml_module(vr
         geometrytypes.h
         zmargins.h
         volumetricstacker.h volumetricstacker.cpp
+        layoutengine.h layoutengine.cpp
         layoutmodes/ilayoutmode.h
         layoutmodes/stackmode.h layoutmodes/stackmode.cpp
+        layoutmodes/cascademode.h layoutmodes/cascademode.cpp
+        layoutmodes/snaprowmode.h layoutmodes/snaprowmode.cpp
+        layoutmodes/freemode.h layoutmodes/freemode.cpp
         spaceallocator3d.h spaceallocator3d.cpp
         kwinvrbridge.h kwinvrbridge.cpp
         openxrtest.h openxrtest.cpp

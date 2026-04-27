@@ -158,7 +158,7 @@ Node {
         // camera (per kwinvrhelpers' rotationToFaceDirection), so positive
         // z is forward.
         const stackZ = (mode === CurvedPlane.Mode.Free && stackChildren)
-                       ? (i + 1) * (KWinVRConfig.zWindowMarginTop || 1.0)
+                       ? LayoutEngine.freeStackZ(i, KWinVRConfig.zWindowMarginTop || 1.0)
                        : 0
         if (ovr.position !== undefined) {
             return Qt.vector3d(ovr.position.x, ovr.position.y,
@@ -204,26 +204,16 @@ Node {
     }
 
     function _snapPosition(idx) {
-        const gap = KWinVRConfig.snapGap || 0.02
-        let totalW = 0
+        const widths = []
         for (let i = 0; i < slots.length; ++i) {
-            const cId = slots[i].planeId
-            totalW += computeChildSize(cId).width
-            if (i > 0) totalW += gap
+            widths.push(computeChildSize(slots[i].planeId).width)
         }
-        let cumX = 0
-        for (let i = 0; i < idx; ++i) {
-            const cId = slots[i].planeId
-            cumX += computeChildSize(cId).width + gap
-        }
-        const mySz = computeChildSize(slots[idx].planeId)
-        const x = cumX + mySz.width / 2 - totalW / 2
-        return Qt.vector3d(x, 0, 0)
+        return LayoutEngine.snapRowPosition(idx, widths, KWinVRConfig.snapGap || 0.02)
     }
 
     function _stackPosition(idx) {
         const step = KWinVRConfig.zSurfaceMarginTop || 0.01
-        return Qt.vector3d(step * idx, -step * idx, step * idx)
+        return LayoutEngine.cascadePosition(idx, step, -step, step)
     }
 
     // === Slot mutation ===
