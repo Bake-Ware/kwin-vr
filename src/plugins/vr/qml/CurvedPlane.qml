@@ -275,10 +275,20 @@ Node {
 
     function _maybeDissolve() {
         if (content !== null) return
+        // Mode-specific thresholds:
+        //   Snap / Stack: a group needs ≥ 2 members to be a group; ≤ 1 dissolves.
+        //   Free: persists at 1 (a single window on its own free plane is valid);
+        //         dissolves only when empty.
+        //   Pseudomirrors are hardware-tied — never auto-dissolve.
+        if (root._isPseudomirror) return
         if (slots.length === 0) {
             registry.unregister(planeId)
             root.destroy()
-        } else if (slots.length === 1) {
+            return
+        }
+        const dissolveAtOne = (mode === CurvedPlane.Mode.Snap
+                               || mode === CurvedPlane.Mode.Stack)
+        if (slots.length === 1 && dissolveAtOne) {
             const lone = registry.findById(slots[0].planeId)
             if (lone) {
                 // Settle lone child at its current scene pose.

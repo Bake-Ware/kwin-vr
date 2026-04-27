@@ -38,11 +38,26 @@ Slot
 ## Modes
 
 ```
-None   leaf, no children
-Free   children at arbitrary positions on me; offsets stored in slot.overrides.position
-Snap   children auto-packed in a row, magnetised. No per-slot position; layout = order
-Stack  children cascaded with constant offset. No per-slot position; layout = order
+None             leaf, no children
+Free             children at arbitrary positions; offsets stored in slot.overrides.position.
+                 With stackChildren=true, children also receive a per-rank +Z lift
+                 (rank derived from each child's `stackingOrder` property when present,
+                 else slot index). Pseudomirrors set this so focused windows rise.
+Snap             children auto-packed in a row, magnetised. Layout = slot order.
+Stack            children cascaded with constant XYZ offset. Layout = slot order.
+OcclusionAware   per Z-class assignment using sticky first-fit on each child's
+                 footprint. Non-overlapping siblings share a Z class; overlap forces
+                 a new class. (Available as a per-batch helper today; CurvedPlane
+                 currently only routes Free / Snap / Stack to it via per-slot calls.)
 ```
+
+Each mode is a self-contained C++ helper under `src/plugins/vr/layoutmodes/`.
+`CascadeMode`, `SnapRowMode`, `FreeMode`, and `OcclusionAwareMode` expose static
+helper functions; `LayoutEngine` (QML singleton) wraps them so `CurvedPlane.qml`
+can compute one slot's pose at a time. Batch dispatch (whole-container at once)
+uses `ILayoutMode` subclasses through `VolumetricStacker`. `StackMode` (the
+former `ZStacker` math) is the only batch implementation today; the rest land
+when batch callers exist (e.g. layered transient stacks).
 
 ## Registry
 
@@ -214,8 +229,8 @@ on slot removal:
     if container.slots.length == 0:
         registry.unregister(container)
         container destroy
-    if container.slots.length == 1:
-        // dissolve: the lone child becomes top-level
+    if container.slots.length == 1 and container.mode in {Snap, Stack}:
+        // a snap row or stack of one isn't a group — dissolve.
         lone = container.slots[0].plane
         lone.intrinsicPosition  = lone.renderPosition
         lone.intrinsicRotation  = lone.renderRotation
@@ -224,7 +239,10 @@ on slot removal:
         container destroy
 ```
 
-User-created Free containers (selection prism) follow same dissolution rule: ≤ 1 child → die.
+Mode-specific dissolution thresholds:
+- **Snap, Stack**: a group needs ≥ 2 members. ≤ 1 child → dissolve.
+- **Free** (including selection-prism containers): persists with 1 child. Dissolves only when empty.
+- **Pseudomirror**: hardware-tied; never auto-dissolves.
 
 ## Selection prism
 
@@ -249,27 +267,52 @@ Threshold: motion magnitude > `KWinVRConfig.prismMotionThreshold` (e.g. 0.05m).
 
 ## Pseudomirror
 
-Stays as is structurally. Each pseudomirror IS a CurvedPlane with `mode: Free`. Its hosted (screen-state) windows are CurvedPlanes registered as slots of the pseudomirror, each with overrides.position = window's output-coord position.
+Each pseudomirror IS a CurvedPlane with `mode: Free`, `_isPseudomirror: true`,
+`intrinsicCurvature: 0`, and `stackChildren: true`. Hosted (screen-state)
+windows are KwinApplicationWindow CurvedPlanes registered as slots, each with
+`overrides.position` driven from the window's `frameGeometry`.
+
+The pseudomirror's `intrinsicCurvature: 0` flows through the abductor curvature
+push to all its children — wallpaper and screen-state windows render flat
+regardless of `KWinVRConfig.defaultWindowCurvature`. Free-floating (vr=true)
+windows have no abductor and use their own intrinsicCurvature, which defaults
+to `defaultWindowCurvature`.
 
 `client.vr` flips:
-- `client.vr = false` → window is a slot of its output's pseudomirror (flat layout, no VR controls)
-- `client.vr = true`  → window is removed from pseudomirror's slots, becomes top-level (no abductor) at its last vr position
+- `client.vr = false` → window is a slot of its output's pseudomirror (flat
+  layout, no VR controls). Slot.overrides.position keeps tracking the window's
+  frameGeometry.
+- `client.vr = true`  → window is removed from pseudomirror's slots, settles
+  at its current scene pose into intrinsicPosition / intrinsicRotation, and
+  becomes top-level (no abductor).
 
-Pseudomirror does NOT show a control tab on hosted windows. That's the only special-case decoration rule.
+Pseudomirrors **self-suppress** their own control tab (hardware-tied; not
+user-dissolvable) and suppress the control tab on their slot children too.
+
+`stackChildren: true` ranks children by their exposed `stackingOrder` property
+(KWin focus order), giving a per-rank +Z lift. Focused windows rise above
+unfocused ones — this is how the desktop right-click menu z-lifts above
+neighbouring windows on the same monitor.
 
 ## Decorations
 
 Every plane renders its own decoration layer.
 
 ```
-Window planes (content !== null):
+Window planes (content !== null, mode === None):
     no border
     control tab: "∿" curvature button (per-window override on Alt+wheel)
-    Hidden iff abductor === some pseudomirror.
+    Hidden iff abductor._isPseudomirror === true.
 
-Container planes (content === null):
-    border (thin rect at uvSize bbox)
+Container planes (content === null, mode ∈ {Free, Snap, Stack}):
+    translucent rectangle behind the front face (gives visible feedback
+    that a snap/stack/free container exists)
     control tab: "∿" curvature button + "✕" dissolve button
+
+Pseudomirror planes:
+    no own control tab (hardware-tied, not user-dissolvable)
+    no border (the VrScreenFrame child handles visual representation)
+    control tab also suppressed on slot children
 ```
 
 Setting `KWinVRConfig.hideControlTabsOnIdle` (bool, default false) → tabs only visible while plane is hovered or being dragged.
@@ -294,31 +337,54 @@ Alt + wheel on a window: `renderCurvature += direction * KWinVRConfig.curvatureS
 
 ## File structure
 
-New files:
+QML primitives & infrastructure:
 
 ```
 src/plugins/vr/qml/
-    CurvedPlane.qml             primitive (Node + props + relayout)
-    PlaneRegistry.qml            singleton registry
-    CurvedWindowContent.qml      Model + CurvedPlaneGeometry + texture material
-    SelectionPrism.qml           wireframe + capture logic
-    PlaneControlTab.qml          decoration: dissolve + curvature button
+    CurvedPlane.qml             primitive (Node + props + slot layout dispatch)
+    PlaneRegistry.qml           singleton registry
+    PlaneInteractionManager.qml ray-pick grab → snap / stack / drag dispatch
+    CurvedWindowContent.qml     Model + CurvedPlaneGeometry + texture material
+    SelectionPrism.qml          wireframe + capture logic
+    PlaneControlTab.qml         decoration: dissolve + curvature button
 ```
 
-Modified:
+C++ layout engine:
 
 ```
-KwinApplicationWindow.qml       wraps content in a CurvedPlane (mode: None)
-KwinTransientWindow.qml         strip stackedOnto/stackIndex/preSnapGeom; transients render unchanged
-XrScene.qml                     remove WindowSnapManager + telegraphGhost; add PlaneRegistry, prism gesture
-Main.qml                        add right-click drag detection (prism)
-KwinPseudoOutputMirror.qml      becomes a CurvedPlane (mode: Free)
+src/plugins/vr/
+    zmargins.h                            ZMargins value type (QML zMargins)
+    volumetricstacker.{h,cpp}             batch layout (Mode dispatch via ILayoutMode)
+    layoutengine.{h,cpp}                  per-item QML singleton (Layer Q_ENUM, helpers)
+    layoutmodes/
+        ilayoutmode.h                     batch interface
+        stackmode.{h,cpp}                 ZStacker bidirectional Z accumulator
+        cascademode.{h,cpp}               diagonal stepX/Y/Z per index
+        snaprowmode.{h,cpp}               1D row pack with gap
+        freemode.{h,cpp}                  Free stack-Z helper
+        occlusionawaremode.{h,cpp}        sticky footprint-max-Z classifier
+```
+
+Modified to wrap into the plane system:
+
+```
+KwinApplicationWindow.qml       CurvedPlane(mode: None) wrapping embedded
+                                KwinTransientWindow rendering
+KwinPseudoOutputMirror.qml      CurvedPlane(mode: Free, _isPseudomirror,
+                                stackChildren, intrinsicCurvature: 0)
+KwinTransientWindow.qml         legacy snap/stack props stripped
+KwinWindowThumbnail3D.qml       curvature inherits from nearest
+                                CurvedPlane ancestor via parent walk
+KwinWaylandSurface3D.qml        same parent-walk pattern
+XrScene.qml                     state-machine reparent removed; abductor
+                                binding handles screen-state placement
 ```
 
 Deleted:
 
 ```
-src/plugins/vr/qml/WindowSnapManager.qml      entirely
+src/plugins/vr/qml/WindowSnapManager.qml    legacy imperative cascade engine
+src/plugins/vr/zstacker.{h,cpp}             renamed to volumetricstacker.*
 ```
 
 ## kcfg additions
@@ -343,7 +409,32 @@ src/plugins/vr/qml/WindowSnapManager.qml      entirely
 <entry name="hideControlTabsOnIdle" type="Bool">
   <default>false</default>
 </entry>
+<entry name="occlusionIntraLayerGap" type="Double">
+  <label>Z step between occlusion-aware Z classes within a layer</label>
+  <default>0.005</default>
+</entry>
+<entry name="occlusionLayerGap" type="Double">
+  <label>Z step between layers when occlusion forces separation</label>
+  <default>0.01</default>
+</entry>
 ```
+
+## Layers
+
+`LayoutEngine.Layer` Q_ENUM, sparse values so future modes (Cockpit-style,
+Hyprland-mirror, etc.) slot in without renumbering:
+
+```
+Content    = 0
+Transient  = 100
+Overlay    = 200
+HUD        = 300
+```
+
+Lower value = nearer the plane / further back. Higher = front. Used by
+`OcclusionAwareMode` for layer-pass dispatch (when
+`VolumetricStacker` batch gains layer-aware iteration; per-slot helpers
+don't need it today).
 
 ## Invariants
 
