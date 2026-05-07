@@ -112,6 +112,12 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
+    // KWin-VR's own internal QQuick windows (Vr2DViewport, KCM helpers,
+    // etc.) shouldn't recurse into the rendered scene.
+    if (window->isInternal()) {
+        return false;
+    }
+
     switch (window->windowType()) {
     case WindowType::OnScreenDisplay:
     case WindowType::Notification:

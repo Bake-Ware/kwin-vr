@@ -22,11 +22,15 @@ XrView {
     referenceSpace: XrView.ReferenceSpaceLocal
     depthSubmissionEnabled: false
 
-    // Scene tree (registry, repeaters, prism viz). Owned by Main.qml so
-    // that 0..N viewports can share it. XrScene wires viewport-specific
-    // helpers (camera, spaceAllocator, followMode) on completion.
-    required property WindowSceneRoot scene
-    importScene: scene
+    // Scene tree (registry, repeaters, prism viz). Inlined here today;
+    // architecture aim is to share across viewports, but XrView is a
+    // QQuick3DNode (not View3D) and exposes no importScene, so each
+    // viewport instantiates its own. Future work: switch the XR side to
+    // a View3D-based code path or factor scene-state out of the render
+    // tree so multiple viewports can read the same registry.
+    WindowSceneRoot {
+        id: scene
+    }
 
     Timer {
         id: autoAlignTimer
@@ -266,8 +270,8 @@ XrView {
         xrView: xrView
     }
 
-    // Forward registry alias for legacy callers.
-    readonly property alias planeRegistry: scene.planeRegistry
+    // Forward the registry for legacy callers reading xrView.planeRegistry.
+    readonly property var planeRegistry: scene ? scene.planeRegistry : null
 
     // Selection prism — XR ray-pick-driven gesture; state lives on the
     // shared scene so the visualisation parents under the imported tree.

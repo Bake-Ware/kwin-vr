@@ -29,9 +29,6 @@ import org.kde.kwin.vr
 Window {
     id: root
 
-    // Shared scene to render. Must be set by the spawner.
-    required property WindowSceneRoot scene
-
     title: qsTr("KWin-VR Viewport")
     width: 1280
     height: 720
@@ -41,7 +38,6 @@ Window {
     View3D {
         id: view3d
         anchors.fill: parent
-        importScene: scene
         camera: orbitCam
 
         environment: SceneEnvironment {
@@ -49,6 +45,14 @@ Window {
             backgroundMode: SceneEnvironment.Color
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.Medium
+        }
+
+        // Inlined scene — XrView's no-importScene means we can't share a
+        // node tree, so each viewport hosts its own. Same KwinWindowModel
+        // sources both, so the windows shown match between modes.
+        WindowSceneRoot {
+            id: scene
+            viewpoint: orbitCam
         }
 
         // Orbit pivot. Sits at the centre of where the curved-plane

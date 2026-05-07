@@ -15,32 +15,56 @@ import org.kde.kwin.vr
 Item {
     id: root
 
-    // Shared scene tree (registry + planes + repeaters). Owned at this level
-    // so 0..N viewports can importScene it. KwinVrBridge.fallbackMode picks
-    // which viewport owns input + camera at startup.
-    WindowSceneRoot {
-        id: sceneRoot
-    }
-
-    // VR mode: XrView + headtrack + ray-pick gesture stack.
+    // KwinVrBridge.fallbackMode picks which viewport owns input + camera
+    // at startup. Each viewport hosts its own scene tree (XrView is a
+    // QQuick3DNode, can't importScene a shared root).
+    //
+    // VR mode is gated via Loader (XrScene is an Item subtree).
+    // 2D fallback is a top-level Window, instantiated unconditionally
+    // and gated via `visible` — Loader can't host Window.
     Loader {
         anchors.fill: parent
         active: !KwinVrBridge.fallbackMode
         sourceComponent: vrModeComponent
     }
 
-    // 2D fallback: Plasma client window with orbit camera. Spawns when
-    // VR was activated but no DRM lease is open.
-    Loader {
-        active: KwinVrBridge.fallbackMode
-        sourceComponent: fallback2DComponent
+    // Vr2DViewport is a top-level Window and Loader can't host one.
+    // Spawn imperatively when fallbackMode is true. This also avoids the
+    // Window-inside-Item binding-eval timing quirk that left `visible`
+    // stuck at false when bound directly.
+    property var _fallbackViewport: null
+
+    function _maybeSpawnFallback() {
+        if (KwinVrBridge.fallbackMode && !_fallbackViewport) {
+            const comp = Qt.createComponent("Vr2DViewport.qml")
+            if (comp.status === Component.Ready) {
+                // Top-level Window: no QML parent. Call .show() explicitly
+                // so the QQuickWindow registers as a kwin internal client.
+                _fallbackViewport = comp.createObject(null)
+                if (_fallbackViewport) {
+                    _fallbackViewport.show()
+                    console.warn("KWINVR Vr2DViewport spawned visible=", _fallbackViewport.visible,
+                                 "size=", _fallbackViewport.width, "x", _fallbackViewport.height)
+                } else {
+                    console.warn("KWINVR Vr2DViewport createObject returned null")
+                }
+            } else {
+                console.warn("KWINVR Vr2DViewport component error:", comp.errorString())
+            }
+        } else if (!KwinVrBridge.fallbackMode && _fallbackViewport) {
+            _fallbackViewport.destroy()
+            _fallbackViewport = null
+        }
     }
 
-    Component {
-        id: fallback2DComponent
-        Vr2DViewport {
-            scene: sceneRoot
-        }
+    Connections {
+        target: KwinVrBridge
+        function onFallbackModeChanged() { root._maybeSpawnFallback() }
+    }
+
+    Component.onCompleted: {
+        console.warn("KWINVR Main.qml ready, fallbackMode=", KwinVrBridge.fallbackMode)
+        _maybeSpawnFallback()
     }
 
     Component {
@@ -213,7 +237,6 @@ Item {
 
             XrScene {
                 id: xrView
-                scene: sceneRoot
                 kwinInput: kwinInput
                 kwinInputFilter: kwinInputFIlter
             }
