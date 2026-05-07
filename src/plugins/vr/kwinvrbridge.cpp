@@ -20,4 +20,18 @@ KwinVrBridge *KwinVrBridge::instance()
     return &s_instance;
 }
 
+bool KwinVrBridge::fallbackMode() const
+{
+    return m_fallbackMode;
+}
+
+void KwinVrBridge::setFallbackMode(bool fallback)
+{
+    if (m_fallbackMode == fallback) {
+        return;
+    }
+    m_fallbackMode = fallback;
+    Q_EMIT fallbackModeChanged();
+}
+
 } // namespace KWin

@@ -221,6 +221,20 @@ void KwinVr::proceedWithVrActivation()
                      i18n("Standby"),
                      KNotification::Persistent);
 
+    // No DRM lease open → no HMD in use; QML drops the XrScene path and
+    // spawns a Vr2DViewport (Plasma client window) instead.
+    bool anyLeased = false;
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    for (BackendOutput *output : outputs) {
+        if (output->isLeased() || output->isLeasePending()) {
+            anyLeased = true;
+            break;
+        }
+    }
+    KwinVrBridge::instance()->setFallbackMode(!anyLeased);
+    qCDebug(KWINVR) << "VR activation: anyLeased=" << anyLeased
+                    << "→ fallbackMode=" << !anyLeased;
+
     m_engine = new QQmlApplicationEngine(this);
     connect(m_engine, &QObject::destroyed, this, [this] {
         // Clean everything inside KWin.
