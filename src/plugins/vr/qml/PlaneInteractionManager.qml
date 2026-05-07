@@ -62,6 +62,67 @@ QtObject {
         return PlaneInteractionManager.Action.Stack
     }
 
+    // Public alias — viewport-driven mouse pickers convert UV to action via
+    // the same rule as the ray pick path.
+    function uvToAction(u, v) { return _uvToAction(u, v) }
+
+    // === Public grab/release API for viewport input drivers ===
+    //
+    // The Connections-based path (xray/picking) is XR-specific. 2D viewports
+    // (Vr2DViewport mouse picks) call these directly — same state, same
+    // commit logic, no Xray dependency.
+
+    function beginGrab(plane) {
+        if (!plane) return
+        if (root._grabbedPlane) return // single global grab — first wins
+        root._grabbedPlane = plane
+        root._snapTarget = null
+        root._snapAction = PlaneInteractionManager.Action.None
+        if (plane.topLevelHost) {
+            plane.intrinsicPosition = plane.topLevelHost.mapPositionFromScene(plane.scenePosition)
+            plane.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                plane.topLevelHost.sceneRotation, plane.sceneRotation)
+        }
+        plane.isGrabbed = true
+        root.registry.removeFromAllSlots(plane.planeId)
+    }
+
+    function setSnapTarget(plane, action) {
+        if (!root._grabbedPlane) return
+        if (plane === root._grabbedPlane) return
+        if (plane && plane._isPseudomirror) {
+            root._snapTarget = null
+            root._snapAction = PlaneInteractionManager.Action.None
+            return
+        }
+        root._snapTarget = plane
+        root._snapAction = plane ? action : PlaneInteractionManager.Action.None
+    }
+
+    function endGrab() {
+        const p = root._grabbedPlane
+        if (!p) return
+        const tgt = root._snapTarget
+        const act = root._snapAction
+        if (tgt && act !== PlaneInteractionManager.Action.None) {
+            root._commit(p, tgt, act)
+        } else {
+            // Settle: capture current scene pose into intrinsic so the
+            // plane stays where the user dropped it.
+            if (p.topLevelHost) {
+                p.intrinsicPosition = p.topLevelHost.mapPositionFromScene(p.scenePosition)
+                p.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                    p.topLevelHost.sceneRotation, p.sceneRotation)
+            }
+        }
+        p.isGrabbed = false
+        root._grabbedPlane = null
+        root._snapTarget = null
+        root._snapAction = PlaneInteractionManager.Action.None
+    }
+
+    function planeFromObject(obj) { return _planeFromObject(obj) }
+
     // === Grab / release ===
 
     readonly property Connections _grabWatcher: Connections {
