@@ -72,6 +72,11 @@ KwinVr::KwinVr()
         stop();
     }, Qt::QueuedConnection);
 
+    connect(KwinVrBridge::instance(), &KwinVrBridge::vrDeactivateRequested, this, [this]() {
+        qCDebug(KWINVR) << "VR deactivate requested from QML";
+        setVrActive(false);
+    }, Qt::QueuedConnection);
+
     connect(&m_xrTest, &OpenXRTest::sessionResult, this, [this](bool success, const QString &message) {
         qCWarning(KWINVR) << "OpenXR test result:" << success << "message:" << message;
         if (success) {

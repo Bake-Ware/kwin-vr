@@ -34,4 +34,9 @@ void KwinVrBridge::setFallbackMode(bool fallback)
     Q_EMIT fallbackModeChanged();
 }
 
+void KwinVrBridge::requestVrDeactivate()
+{
+    Q_EMIT vrDeactivateRequested();
+}
+
 } // namespace KWin

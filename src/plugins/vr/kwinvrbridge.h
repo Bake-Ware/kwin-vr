@@ -32,9 +32,14 @@ public:
     bool fallbackMode() const;
     void setFallbackMode(bool fallback);
 
+    // Called by Vr2DViewport when user dismisses the fallback window
+    // (Esc / window close). KwinVr listens and calls setVrActive(false).
+    Q_INVOKABLE void requestVrDeactivate();
+
 Q_SIGNALS:
     void xrFailed(const QString &errorString);
     void fallbackModeChanged();
+    void vrDeactivateRequested();
 
 private:
     explicit KwinVrBridge(QObject *parent = nullptr);
