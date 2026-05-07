@@ -22,14 +22,30 @@ XrView {
     referenceSpace: XrView.ReferenceSpaceLocal
     depthSubmissionEnabled: false
 
+    // Scene tree (registry, repeaters, prism viz). Owned by Main.qml so
+    // that 0..N viewports can share it. XrScene wires viewport-specific
+    // helpers (camera, spaceAllocator, followMode) on completion.
+    required property WindowSceneRoot scene
+    importScene: scene
+
     Timer {
         id: autoAlignTimer
-        onTriggered: allWindows.resetView()
+        onTriggered: scene.resetView()
         interval: KWinVRConfig.resetViewDelay * 1000
     }
     Component.onCompleted: {
         if(KWinVRConfig.resetViewDelay >= 0)
             autoAlignTimer.start()
+        // Wire scene to this viewport's helpers.
+        scene.viewpoint = cam
+        scene.spaceAllocator = spaceAllocator
+        scene.followMode = followMode
+        scene.autoAlignTimer = autoAlignTimer
+        scene.focusControl = focusTracking
+        scene.virtualScreenName = kvs.params.name
+        scene.planeInteraction.xray = pickRay
+        scene.planeInteraction.picking = focusTracking.picking
+        scene.followCamera = KWinVRConfig.followEnabled
     }
 
     property real ppu: KWinVRConfig.ppu
@@ -39,7 +55,7 @@ XrView {
     property alias rayEnabled: pickRay.enabled
     property alias cursorEnabled: focusTracking.cursorEnabled
     property alias grabbed: pickRay.grabbedObject
-    readonly property bool worldGrabbed: pickRay.grabbedObject === allWindowsGrabHandle
+    readonly property bool worldGrabbed: pickRay.grabbedObject === scene.grabHandle
     readonly property var cursorHoverObject: focusTracking.cursorHoverObject
     // Modifier state snapshotted at the most recent mouse press, set by
     // Main.qml from the synthesized QMouseEvent. Qt.application.keyboardModifiers
@@ -56,7 +72,7 @@ XrView {
     }
 
     function die() {  }
-    function resetView() { allWindows.resetView() }
+    function resetView() { scene.resetView() }
 
     KwinVirtualScreenHandle {
         id: kvs
@@ -162,7 +178,7 @@ XrView {
         if(pickRay.grabbedObject)
             pickRay.release()
         else
-            pickRay.grab(grabAll ? allWindowsGrabHandle : focusTracking.hoveredGrabHandle)
+            pickRay.grab(grabAll ? scene.grabHandle : focusTracking.hoveredGrabHandle)
     }
 
     function grabMoveClamped(value: real, minDist: real, maxDist: real): void {
@@ -174,7 +190,7 @@ XrView {
     function scrollGrab(delta: real): void {
         if (!pickRay.grabbedObject)
             return
-        const isWorld = pickRay.grabbedObject === allWindowsGrabHandle
+        const isWorld = pickRay.grabbedObject === scene.grabHandle
         if (!isWorld) {
             const appWin = pickRay.grabbedObject as KwinApplicationWindow
             if (!appWin || !appWin.client || !appWin.client.vr)
@@ -250,83 +266,24 @@ XrView {
         xrView: xrView
     }
 
-    // Single registry of every CurvedPlane in the scene. Reachable via
-    // xrView.planeRegistry from any descendant.
-    PlaneRegistry {
-        id: planeRegistryInstance
-    }
-    readonly property alias planeRegistry: planeRegistryInstance
+    // Forward registry alias for legacy callers.
+    readonly property alias planeRegistry: scene.planeRegistry
 
-    PlaneInteractionManager {
-        id: planeInteraction
-        xray: pickRay
-        picking: focusTracking.picking
-        registry: planeRegistryInstance
-        topLevelHost: allWindowsGrabHandle
-    }
-
-    // Selection prism state — driven by Main.qml's right-click drag gesture.
-    property vector3d _prismAnchor1: Qt.vector3d(0, 0, 0)
-    property vector3d _prismAnchor2: Qt.vector3d(0, 0, 0)
-    property bool _prismActive: false
-
+    // Selection prism — XR ray-pick-driven gesture; state lives on the
+    // shared scene so the visualisation parents under the imported tree.
     function prismBegin() {
         const p = pickRay.scenePosition.plus(pickRay.forward.times(xrView.distance))
-        _prismAnchor1 = p
-        _prismAnchor2 = p
-        _prismActive = true
+        scene.prismBegin(p)
     }
 
     function prismUpdate() {
-        if (!_prismActive) return
+        if (!scene.prismActive) return
         const p = pickRay.scenePosition.plus(pickRay.forward.times(xrView.distance))
-        _prismAnchor2 = p
+        scene.prismUpdate(p)
     }
 
-    // Returns true iff a prism was committed (i.e. motion exceeded threshold
-    // and a container was created — radial menu should NOT fire on release).
-    function prismCommit() {
-        if (!_prismActive) return false
-        const a1 = _prismAnchor1
-        const a2 = _prismAnchor2
-        _prismActive = false
-        const motion = a1.minus(a2).length()
-        const threshold = KWinVRConfig.prismMotionThreshold || 0.05
-        if (motion < threshold) return false
-
-        const xmin = Math.min(a1.x, a2.x), xmax = Math.max(a1.x, a2.x)
-        const ymin = Math.min(a1.y, a2.y), ymax = Math.max(a1.y, a2.y)
-        const zmin = Math.min(a1.z, a2.z) - 0.5, zmax = Math.max(a1.z, a2.z) + 0.5
-        const captured = []
-        const planes = planeRegistryInstance.topLevelPlanes()
-        for (const plane of planes) {
-            if (!plane.content) continue   // skip containers, only capture window planes
-            if (plane._isPseudomirror) continue
-            const sp = plane.scenePosition
-            if (sp.x >= xmin && sp.x <= xmax
-                && sp.y >= ymin && sp.y <= ymax
-                && sp.z >= zmin && sp.z <= zmax) {
-                captured.push(plane)
-            }
-        }
-        if (captured.length < 1) return false
-
-        const centre = Qt.vector3d((a1.x + a2.x) / 2,
-                                   (a1.y + a2.y) / 2,
-                                   (a1.z + a2.z) / 2)
-        const cont = planeInteraction._createContainer(
-            CurvedPlane.Mode.Free, centre, Qt.quaternion(1, 0, 0, 0))
-        if (!cont) return false
-        for (const p of captured) {
-            const offset = p.scenePosition.minus(centre)
-            cont.addChild(p.planeId, { position: offset })
-        }
-        return true
-    }
-
-    function prismCancel() {
-        _prismActive = false
-    }
+    function prismCommit() { return scene.prismCommit() }
+    function prismCancel() { scene.prismCancel() }
 
     // Alt+wheel curvature nudge on the hovered plane. Always writes the
     // per-window override (intrinsicCurvature when top-level, slot
@@ -334,7 +291,7 @@ XrView {
     // override" rule from architecture.
     function curvatureNudge(direction) {
         const obj = focusTracking.hoveredGrabHandle
-        const plane = planeInteraction._planeFromObject(obj)
+        const plane = scene.planeInteraction._planeFromObject(obj)
         if (!plane) return
         const step = (KWinVRConfig.curvatureScrollStep || 0.1) * direction
         const ab = plane.abductor
@@ -465,7 +422,7 @@ XrView {
                 false,
                 false,
                 false,
-                allWindows.followCamera,
+                scene.followCamera,
                 xrView.environment.backgroundMode === SceneEnvironment.Transparent
             ]
             onButtonClicked: (index) => {
@@ -473,13 +430,13 @@ XrView {
                                      pickRay.enabled = false
                                      radialMenuLoader.active = false
                                  } else if(index === 1) {
-                                     allWindows.resetView()
+                                     scene.resetView()
                                      radialMenuLoader.active = false
                                  } else if (index === 2) {
                                      xrView.grab(true)
                                      radialMenuLoader.active = false
                                  } else if (index === 3) {
-                                     allWindows.followCamera = !allWindows.followCamera
+                                     scene.followCamera = !scene.followCamera
                                  }  else if (index === 4) {
                                      if(xrView.environment.backgroundMode === SceneEnvironment.Transparent) {
                                          xrView.environment.backgroundMode = SceneEnvironment.Color
@@ -494,189 +451,52 @@ XrView {
     }
 
 
-    Node {
-        id: allWindows
-        property real ppu: xrView.ppu
-        property bool followCamera: false
-        Component.onCompleted: followCamera = KWinVRConfig.followEnabled
-        onFollowCameraChanged: followCamera ? (allWindows.position = cam.scenePosition) : null
+    // Camera-bound helpers — XR-only today; Vr2DViewport will instantiate
+    // its own equivalents (or null-out the scene's bindings) when active.
+    SpaceAllocator3D {
+        id: spaceAllocator
+        viewpoint: cam
+        distance: xrView.distance
+        spacing: 0.1
+        searchGranularity: 0.1
+        sizePropertyName: "itemSize"
+    }
 
-        function resetView() {
-            allWindows.position = cam.scenePosition
-            const targetPos = cam.mapPositionToScene(Qt.vector3d(0, 0, -xrView.distance))
-            KwinVrHelpers.setNodePositionFromScene(allWindowsGrabHandle, targetPos)
-            // Maybe to respect followMode's followWorldUpAlignment ?
-            KwinVrHelpers.setNodeRotationFromScene(allWindowsGrabHandle, cam.sceneRotation)
+    VrFollowMode {
+        id: followMode
+        camera: {
+            if(autoAlignTimer.running)
+                return null
+
+            if(!scene.followCamera)
+                return null
+
+            if(headScroll.headScrollActive)
+                return null
+
+            if(pickRay.grabbedObject)
+                return null
+
+            if(focusTracking.currentMovingResizingWindow)
+                return null
+
+            if(radialMenuLoader.active)
+                return null
+
+            // Do not start movement When we hover something
+            // But do not stop movement when we already started
+            if(focusTracking.hoveredObject && !followMode.active)
+                return null
+
+            return cam
         }
-
-        Connections {
-            target: cam
-            enabled: allWindows.followCamera
-            function onScenePositionChanged() {
-                allWindows.position = cam.scenePosition
-            }
-        }
-
-        VrFollowMode {
-            id: followMode
-            camera: {
-                if(autoAlignTimer.running)
-                    return null
-
-                if(!allWindows.followCamera)
-                    return null
-
-                if(headScroll.headScrollActive)
-                    return null
-
-                if(pickRay.grabbedObject)
-                    return null
-
-                if(focusTracking.currentMovingResizingWindow)
-                    return null
-
-                if(radialMenuLoader.active)
-                    return null
-
-                // Do not start movement When we hover something
-                // But do not stop movement when we already started
-                if(focusTracking.hoveredObject && !followMode.active)
-                    return null
-
-                return cam
-            }
-            rotationTarget: allWindowsGrabHandle
-            fovH: KWinVRConfig.followFovH
-            fovV: KWinVRConfig.followFovV
-            stopFovH: KWinVRConfig.followStopFovH
-            stopFovV: KWinVRConfig.followStopFovV
-            delay: KWinVRConfig.followDelay
-            speed: KWinVRConfig.followSpeed
-            worldUpAlignment: KWinVRConfig.followWorldUpAlignment
-        }
-
-        Node {
-            id: allWindowsGrabHandle
-            position: Qt.vector3d(0, 0, -xrView.distance)
-
-            // Selection prism visualisation — wireframe rect between
-            // the gesture's anchor points.
-            SelectionPrism {
-                active: xrView._prismActive
-                anchor1: xrView._prismActive
-                          ? allWindowsGrabHandle.mapPositionFromScene(xrView._prismAnchor1)
-                          : Qt.vector3d(0, 0, 0)
-                anchor2: xrView._prismActive
-                          ? allWindowsGrabHandle.mapPositionFromScene(xrView._prismAnchor2)
-                          : Qt.vector3d(0, 0, 0)
-            }
-
-            SpaceAllocator3D {
-                id: spaceAllocator
-                viewpoint: cam
-                distance: xrView.distance
-                spacing: 0.1
-                searchGranularity: 0.1
-                sizePropertyName: "itemSize"
-            }
-
-            Repeater3D {
-                id: outputMirrorRepeater
-                // Map of output → pseudomirror, survives parent:null hiding
-                property var outputMap: ({})
-                model: OutputModel {}
-                delegate: KwinPseudoOutputMirror {
-                    id: pseudoOutput
-                    readonly property bool isVirtualHidden: output.name === ("Virtual-" + kvs.params.name) && KWinVRConfig.hideVirtualDisplay
-                    // Remove from scene graph entirely when hidden
-                    parent: isVirtualHidden ? null : outputMirrorRepeater
-                    ppu: allWindows.ppu
-                    registry: planeRegistryInstance
-                    topLevelHost: outputMirrorRepeater
-                    Component.onCompleted: {
-                        outputMirrorRepeater.outputMap[output.name] = pseudoOutput
-                        const globalPosition = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
-                        // CurvedPlane drives `position` from intrinsicPosition via
-                        // a Binding; write the intrinsic so it propagates.
-                        pseudoOutput.intrinsicPosition = outputMirrorRepeater.mapPositionFromScene(globalPosition)
-                        KwinVrHelpers.turnToFaceKeepRoll(pseudoOutput, spaceAllocator.viewpoint)
-                        // turnToFaceKeepRoll wrote `rotation` imperatively; capture
-                        // back to intrinsicRotation so the binding stays consistent.
-                        pseudoOutput.intrinsicRotation = KwinVrHelpers.getRotationDelta(
-                            outputMirrorRepeater.sceneRotation, pseudoOutput.sceneRotation)
-                        spaceAllocator.registerObject(pseudoOutput)
-                        followMode.registerObject(pseudoOutput)
-                    }
-                    Component.onDestruction: {
-                        delete outputMirrorRepeater.outputMap[output.name]
-                    }
-                }
-                function findPseudoOutputByOutput(output: QtObject): KwinPseudoOutputMirror {
-                    // Check the map first — works even when pseudomirror is hidden (parent: null)
-                    const mapped = outputMap[output.name]
-                    if (mapped) {
-                        return mapped
-                    }
-                    // Fallback: iterate children for non-mapped entries
-                    for(const child of this.children) {
-                        const pseudoMirror = child as KwinPseudoOutputMirror
-                        if(pseudoMirror && pseudoMirror.output === output) {
-                            return pseudoMirror
-                        }
-                    }
-                    return null
-                }
-            }
-
-            Repeater3D {
-                id: applicationWindowsRepeater
-                property KwinWindowModel windowDataModel: KwinWindowModel {}
-
-                model: PrimaryWindowModelFilter {
-                    windowModel: applicationWindowsRepeater.windowDataModel
-                }
-                delegate: KwinApplicationWindow {
-                    id: kwinAppWindow
-                    required property int index
-                    required property QtObject window
-
-                    // CurvedPlane lives at the top-level scene-graph host always.
-                    // The abductor binding (set when client.vr === false in
-                    // KwinApplicationWindow itself) computes screen-state
-                    // placement; no Qt reparenting needed.
-                    parent: allWindowsGrabHandle
-                    registry: planeRegistryInstance
-                    topLevelHost: allWindowsGrabHandle
-
-                    client: window
-                    windowDataModel: applicationWindowsRepeater.windowDataModel
-                    ppu: allWindows.ppu
-                    focusControl: focusTracking
-
-                    function registerForSpaceAllocator() {
-                        spaceAllocator.registerObject(kwinAppWindow)
-                    }
-
-                    Component.onCompleted: {
-                        Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
-                        // VR-state windows participate in followMode; track here.
-                        if (client.vr) {
-                            followMode.registerObject(kwinAppWindow)
-                        }
-                    }
-
-                    Connections {
-                        target: kwinAppWindow.client
-                        function onVrChanged() {
-                            if (kwinAppWindow.client.vr) {
-                                followMode.registerObject(kwinAppWindow)
-                            } else {
-                                followMode.unregisterObject(kwinAppWindow)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        rotationTarget: scene.grabHandle
+        fovH: KWinVRConfig.followFovH
+        fovV: KWinVRConfig.followFovV
+        stopFovH: KWinVRConfig.followStopFovH
+        stopFovV: KWinVRConfig.followStopFovV
+        delay: KWinVRConfig.followDelay
+        speed: KWinVRConfig.followSpeed
+        worldUpAlignment: KWinVRConfig.followWorldUpAlignment
     }
 }

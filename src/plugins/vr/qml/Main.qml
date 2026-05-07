@@ -177,8 +177,16 @@ Item {
                  }
     }
 
+    // Shared scene tree (registry + planes + repeaters). Owned at this level
+    // so 0..N viewports can importScene it (XrScene today; Vr2DViewport
+    // forthcoming). XrScene wires camera-bound helpers on completion.
+    WindowSceneRoot {
+        id: sceneRoot
+    }
+
     XrScene {
         id: xrView
+        scene: sceneRoot
         kwinInput: kwinInput
         kwinInputFilter: kwinInputFIlter
     }

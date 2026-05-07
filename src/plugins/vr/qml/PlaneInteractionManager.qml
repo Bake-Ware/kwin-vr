@@ -23,8 +23,10 @@ import org.kde.kwin.vr
 QtObject {
     id: root
 
-    required property Xray xray
-    required property VrPicking picking
+    // xray + picking wired by the active viewport (XrScene today;
+    // Vr2DViewport will route mouse picks). Null until a viewport binds.
+    property var xray: null
+    property var picking: null
     required property var registry
     required property Node topLevelHost
 

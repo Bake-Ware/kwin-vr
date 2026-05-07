@@ -45,6 +45,7 @@ qt6_add_qml_module(vr
 
         qml/XrItemHacked.qml
         qml/XrScene.qml
+        qml/WindowSceneRoot.qml
         qml/VrKwinCursor.qml
         qml/VrOsdWindows.qml
         qml/KwinWindowThumbnail3D.qml
