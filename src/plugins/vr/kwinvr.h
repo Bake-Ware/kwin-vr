@@ -37,6 +37,7 @@ public Q_SLOTS:
     QVariantList leasableOutputs() const;
     bool setOutputLeasable(const QString &outputName, bool leasable);
     void refreshLeases();
+    void spawnViewport();
 
 Q_SIGNALS:
     void vrActiveChanged();

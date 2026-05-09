@@ -67,6 +67,12 @@ Item {
                 onClicked: kcm.vrActive = !kcm.vrActive
             }
 
+            Controls.Button {
+                text: i18nc("@action:button", "Spawn Viewport")
+                icon.name: "window-new"
+                onClicked: kcm.spawnViewport()
+            }
+
             Controls.CheckBox {
                 id: tAutostartVr
                 text: i18nc("@option:check", "Auto-start")

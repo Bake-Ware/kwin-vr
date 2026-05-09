@@ -125,9 +125,83 @@ CurvedPlane {
         }
     }
 
+    // Cross-viewport pose sync (see qml/PlanePoseSync.qml). Another
+    // Vr2DViewport's grab handler writes scene-space pose into
+    // PlanePoseSync; we mirror the change here via `setNodePositionFromScene`
+    // (which writes Qt Node's local `position`, the same channel
+    // KwinVrHelpers uses for local drags). `isGrabbed` is set so the
+    // abductor binding doesn't overwrite the imperative write on the
+    // next frame — slotted planes compute pose from slot overrides
+    // via that binding. Cleared on `grabEnded` so abductor takes over
+    // again for snap-back / settle.
+    Connections {
+        target: PlanePoseSync
+        function onRevisionChanged() {
+            if (!root.client) return
+            const myId = "" + root.client.internalId
+            if (PlanePoseSync.lastChangedClientId !== myId) return
+            const p = PlanePoseSync.getPose(myId)
+            if (!p) return
+
+            // Mirror sender's beginGrab: detach from any slot so the
+            // abductor binding doesn't fight the imperative writes,
+            // then suspend the binding via isGrabbed.
+            if (root.registry) {
+                root.registry.removeFromAllSlots(root.planeId)
+            }
+            root.isGrabbed = true
+
+            if (p.scenePosition !== undefined) {
+                KwinVrHelpers.setNodePositionFromScene(root, p.scenePosition)
+            }
+            if (p.sceneRotation !== undefined) {
+                KwinVrHelpers.setNodeRotationFromScene(root, p.sceneRotation)
+            }
+            if (p.curvature !== undefined && root.intrinsicCurvature !== p.curvature) {
+                root.intrinsicCurvature = p.curvature
+            }
+        }
+        function onGrabEnded(clientId) {
+            if (!root.client) return
+            const myId = "" + root.client.internalId
+            if (clientId !== myId) return
+
+            // Mirror sender's "settle in place" path: capture current
+            // scene pose into intrinsic so the plane stays where the
+            // remote drop left it, then release isGrabbed. Plane is
+            // already detached from slots (done on first pose receive).
+            if (root.topLevelHost) {
+                root.intrinsicPosition = root.topLevelHost.mapPositionFromScene(root.scenePosition)
+                root.intrinsicRotation = KwinVrHelpers.getRotationDelta(
+                    root.topLevelHost.sceneRotation, root.sceneRotation)
+            }
+            root.isGrabbed = false
+        }
+    }
+
     Component.onCompleted: {
         // CurvedPlane base registered us in registry. Now place ourselves
         // in the right slot list based on current client.vr state.
         Qt.callLater(_reconcileSlot)
+
+        // Adopt any in-flight pose from other viewports. New viewport
+        // spawned mid-session sees windows at the positions earlier
+        // viewports already moved them to.
+        if (root.client) {
+            const myId = "" + root.client.internalId
+            const p = PlanePoseSync.getPose(myId)
+            if (p && p.scenePosition !== undefined) {
+                Qt.callLater(function() {
+                    root.isGrabbed = true
+                    KwinVrHelpers.setNodePositionFromScene(root, p.scenePosition)
+                    if (p.sceneRotation !== undefined) {
+                        KwinVrHelpers.setNodeRotationFromScene(root, p.sceneRotation)
+                    }
+                    if (p.curvature !== undefined) {
+                        root.intrinsicCurvature = p.curvature
+                    }
+                })
+            }
+        }
     }
 }

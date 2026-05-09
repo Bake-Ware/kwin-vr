@@ -30,6 +30,7 @@ find_package(KF6 REQUIRED COMPONENTS Config CoreAddons I18n WindowSystem GlobalA
 find_package(KDecoration3 REQUIRED)
 
 set_source_files_properties(qml/Logger.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/PlanePoseSync.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(vr
     NO_PLUGIN
@@ -82,6 +83,7 @@ qt6_add_qml_module(vr
         qml/PlaneControlTab.qml
         qml/SelectionPrism.qml
         qml/PlaneInteractionManager.qml
+        qml/PlanePoseSync.qml
         qml/VrHudPlane.qml
         qml/VrHudWindow.qml
         qml/Logger.qml

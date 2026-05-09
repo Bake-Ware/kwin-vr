@@ -5,24 +5,21 @@
 */
 
 /*
- * Vr2DViewport — a Plasma client window that renders the curved-plane
- * scene from a 2D-controlled orbit camera.
+ * Vr2DViewport — fullscreen Plasma client window that renders the
+ * curved-plane scene with a 2D camera + mouse input.
  *
- * Use cases:
- *   - Fallback when VR is started but no DRM lease is open (no HMD).
- *   - Future: spectator/inspector window into a live VR session.
- *   - Future: additional viewers when invited into the user's
- *     environment (local-process for now; remote via Telesthete later).
- *
- * Each viewport hosts its own WindowSceneRoot inline (XrView is a
- * QQuick3DNode and doesn't expose importScene). Same KwinWindowModel
- * sources both, so the windows shown match between modes.
+ * Input model (single MouseArea owns the gesture, no
+ * OrbitCameraController — they fought over event grab and trunctated
+ * drags):
+ *   - LMB on plane → grab + drag at constant pick depth.
+ *   - LMB / MMB / RMB on empty → orbit (custom math around orbitOrigin).
+ *   - Wheel: alt = curvature on hovered plane; plain = dolly-zoom.
+ *   - Esc / Window close → KwinVrBridge.requestVrDeactivate().
  */
 
 import QtQuick
 import QtQuick.Window
 import QtQuick3D
-import QtQuick3D.Helpers
 
 import org.kde.kwin.vr
 
@@ -36,15 +33,39 @@ Window {
     visible: true
     visibility: Window.FullScreen
 
-    // Closing the window deactivates VR — symmetric with HMD detach.
     onClosing: KwinVrBridge.requestVrDeactivate()
 
-    // Esc deactivates VR. Anything else falls through.
     Item {
         id: keyHost
         anchors.fill: parent
         focus: true
         Keys.onEscapePressed: KwinVrBridge.requestVrDeactivate()
+    }
+
+    // === Camera state (orbit around origin) ===
+    property real _yawDeg: 0
+    property real _pitchDeg: 0
+    property real _radius: 0
+    property real _orbitSensitivity: 0.4
+    property real _zoomSensitivity: 0.1
+
+    function _updateCamera() {
+        const yaw = _yawDeg * Math.PI / 180
+        const pitch = _pitchDeg * Math.PI / 180
+        const ox = orbitOrigin.position.x
+        const oy = orbitOrigin.position.y
+        const oz = orbitOrigin.position.z
+        orbitCam.position = Qt.vector3d(
+            ox + _radius * Math.cos(pitch) * Math.sin(yaw),
+            oy + _radius * Math.sin(pitch),
+            oz + _radius * Math.cos(pitch) * Math.cos(yaw)
+        )
+        orbitCam.eulerRotation = Qt.vector3d(-_pitchDeg, _yawDeg, 0)
+    }
+
+    Component.onCompleted: {
+        _radius = scene.distance
+        _updateCamera()
     }
 
     View3D {
@@ -64,28 +85,18 @@ Window {
             viewpoint: orbitCam
         }
 
-        // Orbit pivot. Sits at the centre of where the curved-plane
-        // grabHandle is in scene-space, so the camera orbits the
-        // visible cluster of windows rather than scene origin.
         Node {
             id: orbitOrigin
             position: Qt.vector3d(0, 0, -scene.distance)
         }
 
-        // Camera starts at scene origin facing the cluster — same pose
-        // the XR head would have at session start. OrbitCameraController
-        // takes over once user drags.
         PerspectiveCamera {
             id: orbitCam
-            position: Qt.vector3d(0, 0, 0)
-            eulerRotation: Qt.vector3d(0, 0, 0)
             fieldOfView: 60
             clipNear: 0.1
             clipFar: 1000
 
-            // HUD — head-locked overlays (panel, taskbar, notifications,
-            // OSDs). Mirrors XrScene's hudNode under XrCamera; same node
-            // tree, just a different camera parent.
+            // Head-locked HUD overlays.
             Node {
                 id: hudNode
 
@@ -133,32 +144,12 @@ Window {
         }
     }
 
-    // Drag-to-orbit + wheel-to-zoom. Provided by QtQuick3D.Helpers.
-    // Disabled while a left-click drag is grabbing a plane so orbit
-    // doesn't fight the grab gesture.
-    OrbitCameraController {
-        id: orbitController
-        anchors.fill: view3d
-        camera: orbitCam
-        origin: orbitOrigin
-        enabled: !grabPicker.grabbing
-    }
-
-    // === Plane interaction helpers (mirror XrScene's API surface) ===
-    //
-    // KWinVrShortcuts and the wheel handlers below dispatch to these so
-    // a 2D session has parity with VR shortcuts.
-
-    // Hovered plane = first hit at current mouse pos. Refreshed on each
-    // mouse move so curvatureNudge / grab can act on what's under cursor.
+    // === Plane interaction helpers ===
     property var _hoveredPlane: null
 
     function _refreshHoveredPlane(x, y) {
         const result = view3d.pick(x, y)
-        if (!result.objectHit) {
-            _hoveredPlane = null
-            return
-        }
+        if (!result.objectHit) { _hoveredPlane = null; return }
         const p = scene.planeInteraction.planeFromObject(result.objectHit)
         _hoveredPlane = (p && !p._isPseudomirror) ? p : null
     }
@@ -176,96 +167,153 @@ Window {
             plane.intrinsicCurvature = Math.max(0, Math.min(6,
                 plane.intrinsicCurvature + step))
         }
+        // Curvature sync across viewports deferred — it conflicts with
+        // the drag-driven isGrabbed toggling because it's a one-shot
+        // change without a matching grab-end signal. Most users live
+        // with per-viewport curvature for now.
     }
 
-    function resetView() { scene.resetView() }
+    function resetView() {
+        _yawDeg = 0
+        _pitchDeg = 0
+        _radius = scene.distance
+        orbitOrigin.position = Qt.vector3d(0, 0, -scene.distance)
+        _updateCamera()
+    }
 
-    // === Mouse-driven plane interaction ===
+    // === Unified input ===
+    // No OrbitCameraController — it fought with the grab MouseArea over
+    // event grab and truncated drags. Custom orbit math here.
     MouseArea {
-        id: grabPicker
+        id: gesture
         anchors.fill: view3d
-        acceptedButtons: Qt.LeftButton
-        propagateComposedEvents: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         hoverEnabled: true
 
-        property bool grabbing: false
+        // "" | "grab" | "orbit"
+        property string mode: ""
+        property real lastX: 0
+        property real lastY: 0
         property real grabDepth: 0
         property vector3d grabOffset: Qt.vector3d(0, 0, 0)
 
         onPositionChanged: (mouse) => {
-            // Update hovered plane for shortcut targets.
-            root._refreshHoveredPlane(mouse.x, mouse.y)
+            const dx = mouse.x - lastX
+            const dy = mouse.y - lastY
+            lastX = mouse.x; lastY = mouse.y
 
-            if (!grabbing) {
-                mouse.accepted = false
-                return
+            if (mode === "grab") {
+                const plane = scene.planeInteraction._grabbedPlane
+                if (!plane) return
+                const mouseScene = view3d.mapTo3DScene(
+                    Qt.vector3d(mouse.x, mouse.y, grabDepth))
+                const newPos = mouseScene.plus(grabOffset)
+                KwinVrHelpers.setNodePositionFromScene(plane, newPos)
+
+                // Broadcast scene-space pose so peer viewports' planes
+                // for this same client can mirror the move. Use
+                // scenePosition/sceneRotation — they're always live;
+                // intrinsicPosition isn't updated by setNodePositionFromScene
+                // during a drag. Slotted planes get the same treatment
+                // (receivers set isGrabbed to suspend the abductor
+                // binding until the matching grab-end signal).
+                if (plane.client && plane.client.internalId) {
+                    PlanePoseSync.setPose(
+                        "" + plane.client.internalId,
+                        plane.scenePosition,
+                        plane.sceneRotation,
+                        plane.intrinsicCurvature)
+                }
+
+                const hits = view3d.pickAll(mouse.x, mouse.y)
+                let target = null
+                let action = PlaneInteractionManager.Action.None
+                for (let i = 0; i < hits.length; ++i) {
+                    const otherPlane = scene.planeInteraction.planeFromObject(hits[i].objectHit)
+                    if (!otherPlane) continue
+                    if (otherPlane === plane) continue
+                    if (otherPlane._isPseudomirror) continue
+                    target = otherPlane
+                    action = scene.planeInteraction.uvToAction(
+                        hits[i].uvPosition.x, hits[i].uvPosition.y)
+                    break
+                }
+                scene.planeInteraction.setSnapTarget(target, action)
+            } else if (mode === "orbit") {
+                root._yawDeg -= dx * root._orbitSensitivity
+                root._pitchDeg -= dy * root._orbitSensitivity
+                if (root._pitchDeg > 89) root._pitchDeg = 89
+                if (root._pitchDeg < -89) root._pitchDeg = -89
+                root._updateCamera()
+            } else {
+                root._refreshHoveredPlane(mouse.x, mouse.y)
             }
-            const plane = scene.planeInteraction._grabbedPlane
-            if (!plane) return
-
-            const mouseScene = view3d.mapTo3DScene(Qt.vector3d(mouse.x, mouse.y, grabDepth))
-            const newPos = mouseScene.plus(grabOffset)
-            KwinVrHelpers.setNodePositionFromScene(plane, newPos)
-
-            // Re-pick to identify a snap target.
-            const hits = view3d.pickAll(mouse.x, mouse.y)
-            let target = null
-            let action = PlaneInteractionManager.Action.None
-            for (let i = 0; i < hits.length; ++i) {
-                const otherPlane = scene.planeInteraction.planeFromObject(hits[i].objectHit)
-                if (!otherPlane) continue
-                if (otherPlane === plane) continue
-                if (otherPlane._isPseudomirror) continue
-                target = otherPlane
-                action = scene.planeInteraction.uvToAction(
-                    hits[i].uvPosition.x, hits[i].uvPosition.y)
-                break
-            }
-            scene.planeInteraction.setSnapTarget(target, action)
         }
 
         onPressed: (mouse) => {
-            const result = view3d.pick(mouse.x, mouse.y)
-            if (!result.objectHit) {
-                mouse.accepted = false
-                return
+            lastX = mouse.x; lastY = mouse.y
+
+            if (mouse.button === Qt.LeftButton) {
+                const result = view3d.pick(mouse.x, mouse.y)
+                if (result.objectHit) {
+                    const plane = scene.planeInteraction.planeFromObject(result.objectHit)
+                    if (plane && !plane._isPseudomirror) {
+                        scene.planeInteraction.beginGrab(plane)
+                        const planeView = view3d.mapFrom3DScene(plane.scenePosition)
+                        grabDepth = planeView.z
+                        const mouseScene = view3d.mapTo3DScene(
+                            Qt.vector3d(mouse.x, mouse.y, grabDepth))
+                        grabOffset = plane.scenePosition.minus(mouseScene)
+                        mode = "grab"
+                        return
+                    }
+                }
             }
-            const plane = scene.planeInteraction.planeFromObject(result.objectHit)
-            if (!plane || plane._isPseudomirror) {
-                mouse.accepted = false
-                return
-            }
-            scene.planeInteraction.beginGrab(plane)
-            const planeView = view3d.mapFrom3DScene(plane.scenePosition)
-            grabDepth = planeView.z
-            const mouseScene = view3d.mapTo3DScene(Qt.vector3d(mouse.x, mouse.y, grabDepth))
-            grabOffset = plane.scenePosition.minus(mouseScene)
-            grabbing = true
+            mode = "orbit"
         }
 
         onReleased: (mouse) => {
-            if (!grabbing) return
-            scene.planeInteraction.endGrab()
-            grabbing = false
+            if (mode === "grab") {
+                const grabbedPlane = scene.planeInteraction._grabbedPlane
+                scene.planeInteraction.endGrab()
+                if (grabbedPlane && grabbedPlane.client && grabbedPlane.client.internalId) {
+                    // Final post-snap pose for peer viewports, then signal
+                    // grab end so they release isGrabbed and let their
+                    // abductor binding take over.
+                    PlanePoseSync.setPose(
+                        "" + grabbedPlane.client.internalId,
+                        grabbedPlane.scenePosition,
+                        grabbedPlane.sceneRotation,
+                        grabbedPlane.intrinsicCurvature)
+                    PlanePoseSync.endGrab("" + grabbedPlane.client.internalId)
+                }
+            }
+            mode = ""
         }
 
         onCanceled: {
-            if (!grabbing) return
-            scene.planeInteraction.endGrab()
-            grabbing = false
+            if (mode === "grab") {
+                const grabbedPlane = scene.planeInteraction._grabbedPlane
+                scene.planeInteraction.endGrab()
+                if (grabbedPlane && grabbedPlane.client && grabbedPlane.client.internalId) {
+                    PlanePoseSync.endGrab("" + grabbedPlane.client.internalId)
+                }
+            }
+            mode = ""
         }
 
-        // Wheel modifiers — alt = curvature nudge, others fall through to
-        // OrbitCameraController for zoom.
         onWheel: (wheel) => {
             if (wheel.modifiers & Qt.AltModifier) {
                 const direction = wheel.angleDelta.y > 0 ? 1.0 : -1.0
                 root._refreshHoveredPlane(wheel.x, wheel.y)
                 root.curvatureNudge(direction)
-                wheel.accepted = true
-            } else {
-                wheel.accepted = false
+                return
             }
+            const factor = wheel.angleDelta.y > 0
+                ? (1 - root._zoomSensitivity)
+                : (1 + root._zoomSensitivity)
+            root._radius = Math.max(0.5, root._radius * factor)
+            root._updateCamera()
         }
     }
 

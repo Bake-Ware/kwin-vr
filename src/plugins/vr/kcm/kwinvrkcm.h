@@ -48,6 +48,11 @@ public:
     Q_INVOKABLE bool isAutoLeaseOutput(const QString &name) const;
     Q_INVOKABLE void setAutoLeaseOutput(const QString &name, bool autoLease);
 
+    // Spawn a Vr2DViewport instance. If VR is inactive, activates it
+    // first (will land in fallback mode if no lease — exactly what you
+    // want for an on-demand viewer window).
+    Q_INVOKABLE void spawnViewport();
+
 Q_SIGNALS:
     void xrTestChanged();
     void vrActiveChanged();

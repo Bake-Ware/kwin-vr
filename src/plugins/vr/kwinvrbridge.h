@@ -36,10 +36,16 @@ public:
     // (Esc / window close). KwinVr listens and calls setVrActive(false).
     Q_INVOKABLE void requestVrDeactivate();
 
+    // Called from KCM "Spawn Viewport" or D-Bus to add a Vr2DViewport
+    // instance pointing at the shared scene. Multi-instance: each call
+    // adds another viewport.
+    Q_INVOKABLE void requestSpawnViewport();
+
 Q_SIGNALS:
     void xrFailed(const QString &errorString);
     void fallbackModeChanged();
     void vrDeactivateRequested();
+    void spawnViewportRequested();
 
 private:
     explicit KwinVrBridge(QObject *parent = nullptr);

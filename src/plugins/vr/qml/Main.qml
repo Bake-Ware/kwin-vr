@@ -16,8 +16,14 @@ Item {
     id: root
 
     // KwinVrBridge.fallbackMode picks which viewport owns input + camera
-    // at startup. Each viewport hosts its own scene tree (XrView is a
-    // QQuick3DNode, can't importScene a shared root).
+    // at startup. Each viewport hosts its own WindowSceneRoot (its own
+    // PlaneRegistry, its own KwinApplicationWindow Repeater3D delegates,
+    // its own GL texture handles for client surface content) — Qt's
+    // QQuickWindow architecture rejects cross-window QSGTexture sharing,
+    // which is what View3D.importScene tried to do. State sync across
+    // viewports uses the PlanePoseSync QML singleton instead: a grab
+    // in viewport A writes the new pose to the singleton; every other
+    // viewport's KwinApplicationWindow listens and applies the pose.
     //
     // VR mode is gated via Loader (XrScene is an Item subtree).
     // 2D fallback is a top-level Window, instantiated unconditionally
@@ -28,38 +34,37 @@ Item {
         sourceComponent: vrModeComponent
     }
 
-    // Vr2DViewport is a top-level Window and Loader can't host one.
-    // Spawn imperatively when fallbackMode is true. This also avoids the
-    // Window-inside-Item binding-eval timing quirk that left `visible`
-    // stuck at false when bound directly.
-    property var _fallbackViewport: null
+    // Vr2DViewport is a top-level Window and Loader can't host one. Spawn
+    // imperatively. Auto-spawn one when fallbackMode flips true. Extra
+    // viewports come from KCM "Spawn Viewport" via the bridge signal.
+    property var _viewports: []
+
+    function _spawnViewport() {
+        const comp = Qt.createComponent("Vr2DViewport.qml")
+        if (comp.status !== Component.Ready) {
+            console.warn("KWINVR Vr2DViewport component error:", comp.errorString())
+            return
+        }
+        const w = comp.createObject(null)
+        if (!w) {
+            console.warn("KWINVR Vr2DViewport createObject returned null")
+            return
+        }
+        w.show()
+        _viewports.push(w)
+        console.warn("KWINVR Vr2DViewport spawned, total=", _viewports.length)
+    }
 
     function _maybeSpawnFallback() {
-        if (KwinVrBridge.fallbackMode && !_fallbackViewport) {
-            const comp = Qt.createComponent("Vr2DViewport.qml")
-            if (comp.status === Component.Ready) {
-                // Top-level Window: no QML parent. Call .show() explicitly
-                // so the QQuickWindow registers as a kwin internal client.
-                _fallbackViewport = comp.createObject(null)
-                if (_fallbackViewport) {
-                    _fallbackViewport.show()
-                    console.warn("KWINVR Vr2DViewport spawned visible=", _fallbackViewport.visible,
-                                 "size=", _fallbackViewport.width, "x", _fallbackViewport.height)
-                } else {
-                    console.warn("KWINVR Vr2DViewport createObject returned null")
-                }
-            } else {
-                console.warn("KWINVR Vr2DViewport component error:", comp.errorString())
-            }
-        } else if (!KwinVrBridge.fallbackMode && _fallbackViewport) {
-            _fallbackViewport.destroy()
-            _fallbackViewport = null
+        if (KwinVrBridge.fallbackMode && _viewports.length === 0) {
+            _spawnViewport()
         }
     }
 
     Connections {
         target: KwinVrBridge
         function onFallbackModeChanged() { root._maybeSpawnFallback() }
+        function onSpawnViewportRequested() { root._spawnViewport() }
     }
 
     Component.onCompleted: {

@@ -388,6 +388,11 @@ void KwinVr::closeNotification()
     }
 }
 
+void KwinVr::spawnViewport()
+{
+    KwinVrBridge::instance()->requestSpawnViewport();
+}
+
 QVariantList KwinVr::leasableOutputs() const
 {
     QVariantList result;

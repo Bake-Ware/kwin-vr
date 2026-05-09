@@ -39,4 +39,9 @@ void KwinVrBridge::requestVrDeactivate()
     Q_EMIT vrDeactivateRequested();
 }
 
+void KwinVrBridge::requestSpawnViewport()
+{
+    Q_EMIT spawnViewportRequested();
+}
+
 } // namespace KWin

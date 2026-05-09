@@ -121,6 +121,21 @@ void KwinVRKcm::setVrActive(bool active)
     }
 }
 
+void KwinVRKcm::spawnViewport()
+{
+    auto iface = vrInterface();
+    if (!iface->isValid()) {
+        return;
+    }
+    // If VR isn't running yet, kick it on first. The QML side handles
+    // the "no lease → fallback viewport" path on its own; KCM just asks
+    // for an extra viewport once the engine is alive.
+    if (!iface->property("vrActive").toBool()) {
+        iface->setProperty("vrActive", true);
+    }
+    iface->call(QStringLiteral("spawnViewport"));
+}
+
 QStringList KwinVRKcm::openXrRuntimeCandidates() const
 {
     return m_openXrRuntimeCandidates;
