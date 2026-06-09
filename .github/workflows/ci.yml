@@ -60,12 +60,17 @@ jobs:
 
       - name: Unit tests
         run: |
-          # Headless: wrap in xvfb + a session bus. Integration subset is added
-          # separately per doc/TEST_BASELINE.md once triaged.
+          export QT_QPA_PLATFORM=offscreen
+          export XDG_RUNTIME_DIR=$(mktemp -d)
           xvfb-run -a dbus-run-session bash ci/run-unit-tests.sh build
 
-      # TODO(M1 Phase D): add the green integration-test subset from
-      # doc/TEST_BASELINE.md as a separate step once the baseline is triaged.
+      - name: Integration tests (required subset)
+        run: |
+          # Quarantine list: ci/integration-quarantine.txt, triaged in
+          # doc/TEST_BASELINE.md. Un-quarantining tests is progress.
+          export QT_QPA_PLATFORM=offscreen
+          export XDG_RUNTIME_DIR=$(mktemp -d)
+          xvfb-run -a dbus-run-session bash ci/run-integration-tests.sh build
 
       - name: Install tree artifact
         run: |

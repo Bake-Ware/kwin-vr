@@ -1,0 +1,21 @@
+# Integration tests excluded from the required CI set (one name per line).
+# Every entry must have a class + note in doc/TEST_BASELINE.md.
+# Removing lines (un-quarantining) is progress; adding lines needs justification.
+kwin-testLockScreen
+kwin-testGameController
+kwin-testXdgShellWindow
+kwin-testDontCrashReinitializeCompositor
+kwin-testInputMethod
+kwin-testOutputChanges
+kwin-testPlasmaWindow
+kwin-testFifo
+kwin-testDrm
+kwin-testDrmLegacy
+kwin-testDrmNoModifiers
+kwin-testX11Window
+kwin-testScreencasting
+kwin-testActivities
+kwin-testSlidingPopups
+kwin-testToplevelOpenCloseAnimation
+kwin-testDesktopSwitchingAnimation
+kwin-testMinimizeAnimation
