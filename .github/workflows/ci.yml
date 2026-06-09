@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          # runtime + build deps (kept in sync with PKGBUILD depends/makedepends)
+          pacman -S --noconfirm --needed \
+            git cmake ninja extra-cmake-modules kdoctools krunner \
+            plasma-wayland-protocols wayland-protocols python xorg-xwayland \
+            aurorae breeze iio-sensor-proxy plasma-activities kauth kcmutils \
+            kcolorscheme kconfig kcoreaddons kcrash kdbusaddons kdeclarative \
+            kdecoration kglobalaccel kglobalacceld kguiaddons ki18n kidletime \
+            kirigami kitemmodels knewstuff knighttime knotifications kpackage \
+            kquickcharts kscreenlocker kservice ksvg kwayland kwidgetsaddons \
+            kwindowsystem kxmlgui lcms2 libcanberra libdisplay-info libdrm \
+            libei libepoxy libevdev libinput libpipewire \
+            libqaccessibilityclient-qt6 libxcb libxcvt libxkbcommon mesa milou \
+            pipewire-session-manager libplasma qt6-5compat qt6-base \
+            qt6-declarative qt6-svg qt6-tools systemd-libs wayland \
+            xcb-util-keysyms xcb-util-wm qt6-quick3d openxr \
+            xorg-server-xvfb dbus
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: XR import fence
+        run: bash ci/check-xr-imports.sh
+
+      - name: qmllint (advisory)
+        # Advisory until the existing QML is lint-clean; the import fence above
+        # is the blocking check. Tighten this once M2 lands.
+        continue-on-error: true
+        run: |
+          /usr/lib/qt6/bin/qmllint src/plugins/vr/qml/*.qml || true
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake -B build -G Ninja \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_LIBEXECDIR=lib \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: |
+          # Headless: wrap in xvfb + a session bus. Integration subset is added
+          # separately per doc/TEST_BASELINE.md once triaged.
+          xvfb-run -a dbus-run-session bash ci/run-unit-tests.sh build
+
+      # TODO(M1 Phase D): add the green integration-test subset from
+      # doc/TEST_BASELINE.md as a separate step once the baseline is triaged.
+
+      - name: Install tree artifact
+        run: |
+          DESTDIR="$PWD/install-tree" cmake --install build
+          tar -C install-tree -czf kwin-vr-install-tree.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwin-vr-install-tree
+          path: kwin-vr-install-tree.tar.gz
+          retention-days: 14
