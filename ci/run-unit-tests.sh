@@ -11,5 +11,7 @@ cd "$(dirname "$0")/.."
 
 integration_regex=$(grep -rhoP 'integrationTest\(NAME\s+\K\w+' autotests/integration/ \
     | sed 's/^/^kwin-/;s/$/$/' | paste -sd'|')
+quarantine_regex=$(grep -v '^#' ci/unit-quarantine.txt | grep -v '^$' \
+    | sed 's/^/^/;s/$/$/' | paste -sd'|')
 
-ctest --test-dir "$BUILD_DIR" --output-on-failure -E "$integration_regex" "$@"
+ctest --test-dir "$BUILD_DIR" --output-on-failure -E "$integration_regex|$quarantine_regex" "$@"
