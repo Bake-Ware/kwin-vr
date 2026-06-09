@@ -10,6 +10,10 @@ endif()
 
 add_subdirectory(xrtest)
 
+if (BUILD_TESTING)
+    add_subdirectory(autotests)
+endif()
+
 find_package(ECM REQUIRED NO_MODULE)
 
 ecm_qt_declare_logging_category(vr

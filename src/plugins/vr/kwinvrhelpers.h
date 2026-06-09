@@ -9,6 +9,7 @@
 #include "core/backendoutput.h"
 #include "kwinvirtualscreenhandle.h"
 #include "wayland/surface.h"
+#include "window.h"
 
 #include <KDecoration3/Decoration>
 
@@ -55,7 +56,6 @@ public:
     float distance = 0;
 };
 
-class Window;
 class KwinVrHelpers : public QObject
 {
     Q_OBJECT
