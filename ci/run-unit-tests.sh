@@ -9,7 +9,7 @@ BUILD_DIR="${1:-build}"
 [ $# -gt 0 ] && shift
 cd "$(dirname "$0")/.."
 
-integration_regex=$(grep -oP 'integrationTest\(NAME\s+\K\w+' autotests/integration/CMakeLists.txt \
+integration_regex=$(grep -rhoP 'integrationTest\(NAME\s+\K\w+' autotests/integration/ \
     | sed 's/^/^kwin-/;s/$/$/' | paste -sd'|')
 
 ctest --test-dir "$BUILD_DIR" --output-on-failure -E "$integration_regex" "$@"
