@@ -1,4 +1,56 @@
-# Contributing to KWin
+# Contributing to kwin-vr
+
+> The section below is this fork's working agreement. The original upstream KWin
+> contributing guide follows it and still applies for build/debug/test mechanics.
+
+## Fork Working Agreement (read this first)
+
+This exists because the project's #1 historical failure mode is **feature regression**:
+features built on experiment branches broke or vanished as work moved on. These rules are
+the fix. They apply to everyone, including (especially) the maintainer.
+
+### Branch policy
+
+1. **`main` is the only long-lived branch.** It must always build and pass CI.
+2. **No long-lived feature branches.** Short-lived PR branches only — days, not weeks.
+   If an experiment can't merge quickly, land it on `main` **behind a kcfg flag**
+   (default off) instead of letting a branch drift.
+3. **Nothing is abandoned silently.** The same day work on a branch stops, it gets:
+   - an annotated archive tag: `git tag -a archive/<name> <tip> -m "<what's here, what's salvageable>"`
+   - a GitHub issue listing the salvageable pieces, each citing the tag + commit hash
+     and a target milestone. Then the branch is deleted.
+   The 6.5.5-era branches were archived under `archive/*` tags on 2026-06-09; their
+   salvage tickets are the canonical example.
+
+### Regression armor
+
+4. **Every behavior has a VOC-ID** in `doc/VOCABULARY.md` (Given/When/Then). A PR that
+   changes user-facing behavior must cite the VOC-IDs it touches and update the doc in
+   the same PR.
+5. **Regressions get a failing test before the fix merges.** No exceptions — the test is
+   what makes the fix permanent.
+6. Behaviors CI can't exercise yet are covered by `doc/SMOKE.md`; run the relevant smoke
+   entries before merging a VR-behavior PR and say so in the PR description.
+7. **CI is required on `main`.** Build with `-DBUILD_TESTING=ON`; the baseline of which
+   tests must pass lives in `doc/TEST_BASELINE.md`.
+
+### Core-patch discipline
+
+8. Changes outside `src/plugins/vr/` must be documented in `doc/CORE_PATCHES.md` in the
+   same PR (audit command is in that file). Prefer keeping changes inside the plugin.
+9. No device names, vendor IDs, or output names in code — device specifics belong in
+   configuration profiles (`doc/ARCHITECTURE_PROFILES.md`). `if (vendor == "xreal")`
+   does not pass review.
+
+### WIP capture
+
+10. Non-trivial in-flight work keeps a WIP doc under `doc/` (see `doc/DOCK_AND_STACK_WIP.md`
+    for the format: current state, locked decisions, open hypotheses, debug notes). If you
+    stop mid-feature, the doc is what lets the next session resume without archaeology.
+
+---
+
+# Contributing to KWin (upstream guide)
 
 ## Chatting
 
