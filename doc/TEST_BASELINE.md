@@ -23,7 +23,16 @@ in a container; expected green there.
 |---|---|
 | `kwin-testMockDrm` (unit, **VR series' own lease test**) | aborted at 312s in batch; 18/18 pass in 136ms direct. **Also SIGSEGVs in the CI container** (SEGV_MAPERR at offset 0x18 right after initTestCase — null deref, likely assumes `/dev/dri` exists despite the mock). Quarantined in `ci/unit-quarantine.txt`; ticketed to make the mock truly device-free, since this is the test guarding the DRM-lease feature. |
 | `kwin-testXdgShellWindow` | 120s timeout in batch; 68/69 in 12s direct (the 1 fail is `testAppMenu`, which needs `dbus-run-session` — green with it) |
-| `kwin-testLockScreen`, `kwin-testOutputChanges`, `kwin-testPlasmaWindow`, `kwin-testX11Window`, `kwin-testActivities` | 120s timeouts in batch; **not yet individually rerun** — recheck before assuming this class |
+| `kwin-testLockScreen` | 120s timeout in batch; 20/20 in 63s direct |
+| `kwin-testOutputChanges` | 120s timeout in batch; 92/92 in 14s direct |
+| `kwin-testPlasmaWindow` | 120s timeout in batch; 7/7 in 3s direct |
+| `kwin-testX11Window` | 120s timeout in batch; 188/188 in 8s direct |
+| `kwin-testActivities` | 120s timeout in batch; 3/3 in 0.4s direct |
+
+All Class 1 entries are now verified: **zero real failures** — consecutive serial
+runs sharing one `XDG_RUNTIME_DIR`/session-bus appear to poison later tests.
+Worth trying per-test fresh `XDG_RUNTIME_DIR` in the runner scripts; if that
+stabilizes them, this whole class un-quarantines.
 
 ## Class 2 — Environment: effect plugins not loadable at runtime
 
