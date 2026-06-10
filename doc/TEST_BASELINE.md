@@ -79,6 +79,7 @@ kernel module and no live session. If they still fail, bisect against
 | `kwinvr-testFlatReplay` | Qt 6 `qml` runtime missing | Wayland-client placement section SKIPs (a Qt 5 `qml` in PATH is rejected — it loads nothing on versionless imports); interaction asserts still apply. |
 | `kwinvr-testFlatHudReplay` | Qt 6 `qml` runtime missing, or `org.kde.layershell` QML module not installed (layer-shell-qt) | Whole test SKIPs — it has no client-free section; the #17 lift math stays pinned by `kwinvr-testQmlLogic` regardless. |
 | `kwinvr-testFlatSnapReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. |
+| `kwinvr-testFlatFloatReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. The #26 allocator cone cap stays pinned by `kwinvr-testSpaceAllocator3D` regardless. |
 
 ## Reproduce
 

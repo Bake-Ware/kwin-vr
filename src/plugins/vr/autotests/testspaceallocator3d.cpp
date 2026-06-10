@@ -10,6 +10,9 @@
 #include <QTest>
 #include <QtQuick3D/private/qquick3dnode_p.h>
 
+#include <memory>
+#include <vector>
+
 using namespace KWin;
 
 // SpaceAllocator3D reads object size via QQmlProperty(sizePropertyName), which
@@ -107,6 +110,35 @@ private Q_SLOTS:
         }
         const QVector3D pos = alloc.findFreePosition(60, 40);
         QVERIFY((pos - QVector3D(0, 0, -150)).length() < 1.0f);
+    }
+
+    void allocationsNeverLandBehindTheViewer()
+    {
+        // #26 housekeeping: the candidate sweep is capped at 90° from forward,
+        // so windows never spawn behind the user's head as the front fills up.
+        // Saturate well past the front hemisphere's capacity for 60x40 items
+        // and require every returned position to stay in the front half-space
+        // (forward is -Z; "behind" means z > 0). Saturation overflow must take
+        // the VOC-PLACE-030 fallback (dead center) instead of wrapping around.
+        SpaceAllocator3D alloc;
+        alloc.setDistance(150.0);
+
+        std::vector<std::unique_ptr<SizedNode>> occupants;
+        bool sawFallback = false;
+        for (int i = 0; i < 100; ++i) {
+            const QVector3D pos = alloc.findFreePosition(60, 40);
+            QVERIFY2(pos.z() <= 0.5f,
+                     qPrintable(QStringLiteral("allocation %1 landed behind the viewer: z=%2").arg(i).arg(pos.z())));
+            if (i > 0 && (pos - QVector3D(0, 0, -150)).length() < 1.0f) {
+                sawFallback = true; // hemisphere exhausted, fallback reused the center
+            }
+            auto occupant = std::make_unique<SizedNode>();
+            occupant->setItemSize(QSizeF(60, 40));
+            occupant->setPosition(pos);
+            alloc.registerObject(occupant.get());
+            occupants.push_back(std::move(occupant));
+        }
+        QVERIFY2(sawFallback, "100 allocations never exhausted the front hemisphere — cap not effective");
     }
 
     void twoOccupantsLeaveDistinctFreeSpots()

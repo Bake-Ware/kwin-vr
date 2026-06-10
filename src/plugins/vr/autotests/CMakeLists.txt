@@ -113,3 +113,12 @@ set_tests_properties(kwinvr-testFlatHudReplay PROPERTIES TIMEOUT 180)
 add_test(NAME kwinvr-testFlatSnapReplay
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-snap-replay.sh ${CMAKE_BINARY_DIR}/bin)
 set_tests_properties(kwinvr-testFlatSnapReplay PROPERTIES TIMEOUT 180)
+
+# --- auto-float replay (M3, issue #26) ---
+# A real Wayland client lands on the VR virtual screen, whose pseudomirror is
+# hidden by default: the window must promote itself to vr-floating and get
+# allocator placement, and must stay floating when the mirror is re-shown
+# (one-way promotion). SKIPs without the Qt 6 qml runtime.
+add_test(NAME kwinvr-testFlatFloatReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-float-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatFloatReplay PROPERTIES TIMEOUT 180)

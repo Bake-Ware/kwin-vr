@@ -276,8 +276,11 @@ QVector3D SpaceAllocator3D::findFreePosition(qreal width, qreal height)
     // Angular step based on object size and search granularity
     const qreal angularStep = (std::atan(width / m_distance) + m_spacing) * m_searchGranularity;
 
-    // Generate all candidate positions on the sphere (sorted by distance from center)
-    const auto candidates = generateSpherePoints(angularStep, M_PI);
+    // Generate candidate positions (sorted by distance from center), capped at
+    // 90° from forward — new spawns stay in the front hemisphere where the user
+    // can at least see them peripherally, instead of landing behind the head as
+    // the front fills up. Overflow goes to the VOC-PLACE-030 fallback instead.
+    const auto candidates = generateSpherePoints(angularStep, M_PI_2);
 
     // Check each candidate position
     for (const auto &[az, el] : candidates) {

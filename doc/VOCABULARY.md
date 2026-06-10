@@ -433,6 +433,13 @@ retest, so commit-path behaviors are at best WIP.
 - Code: src/plugins/vr/qml/XrScene.qml:482-486,501-515
 - Status: Working
 
+### VOC-MIRROR-065: Hidden mirror releases its allocator/follow-mode slot
+**Given** a pseudomirror leaves the scene graph (hidden per VOC-MIRROR-060, or destroyed) **Then** it unregisters from the space allocator and follow mode, freeing its (typically front-center) angular slot for future placements; re-showing it re-registers.
+- Input source(s): n/a (config / output hotplug)
+- Config keys: `hideVirtualDisplay (true)`
+- Code: src/plugins/vr/qml/VrWorkspaceScene.qml:498-515
+- Status: Working
+
 ### VOC-MIRROR-070: Transient windows stack in front of their parent
 **Given** a window has transient children (menus, popups, dialogs) **Then** they render as planes Z-stacked in front of the parent window — menus first, then transient normal windows, each separated by computed Z margins; popups may extend beyond screen bounds for VR windows (custom popup bounds resolver unions the transient chain geometry).
 - Input source(s): n/a (window hierarchy)
@@ -440,12 +447,19 @@ retest, so commit-path behaviors are at best WIP.
 - Code: src/plugins/vr/qml/KwinTransientWindow.qml:93-135, src/plugins/vr/kwinvr.cpp:331-342, src/plugins/vr/windowmodelfilter.cpp:417-445
 - Status: Working
 
+### VOC-MIRROR-080: Windows auto-float when their host mirror disappears
+**Given** a toplevel with `vr == false` **When** its host output's pseudomirror is absent or detached from the scene graph (hidden virtual display, output not rendered) — at window birth or later **Then** the window promotes itself to `vr = true` and is placed in free space by the allocator (VOC-PLACE-010 path), facing the viewpoint. The promotion is **one-way**: re-showing the mirror does not snap the window back (auto-floated windows stay floating).
+- Input source(s): n/a (output/mirror state)
+- Config keys: `hideVirtualDisplay (true)`
+- Code: src/plugins/vr/qml/VrWorkspaceScene.qml:601-651
+- Status: Working
+
 ---
 
 ## PLACE — automatic 3D placement (SpaceAllocator3D)
 
 ### VOC-PLACE-010: New screens placed at the nearest free angular slot
-**Given** existing tracked objects (pseudomirrors, VR windows) **When** a new pseudomirror is created **Then** the allocator projects all tracked objects to angular bounds from the viewpoint and scans candidate positions on the viewing sphere — center first, then concentric rings — at `distance` cm, returning the first slot whose angular bounds (object size + `spacing` 0.1 rad) overlap nothing; the mirror is placed there facing the viewpoint.
+**Given** existing tracked objects (pseudomirrors, VR windows) **When** a new pseudomirror is created **Then** the allocator projects all tracked objects to angular bounds from the viewpoint and scans candidate positions on the viewing sphere — center first, then concentric rings, **capped at 90° from forward** (front hemisphere only; nothing ever spawns behind the user) — at `distance` cm, returning the first slot whose angular bounds (object size + `spacing` 0.1 rad) overlap nothing; the mirror is placed there facing the viewpoint.
 - Input source(s): n/a (automatic)
 - Config keys: `distance (100)`; spacing/granularity hardcoded (0.1 / 0.1) in XrScene
 - Code: src/plugins/vr/spaceallocator3d.cpp:265-301,225-263, src/plugins/vr/qml/XrScene.qml:468-475,488-495
@@ -459,7 +473,7 @@ retest, so commit-path behaviors are at best WIP.
 - Status: Working
 
 ### VOC-PLACE-030: Fallback placement straight ahead
-**Given** no free slot exists anywhere on the sphere **Then** the allocator returns the point directly forward at `distance` (overlapping whatever is there).
+**Given** no free slot exists anywhere in the front hemisphere **Then** the allocator returns the point directly forward at `distance` (overlapping whatever is there).
 - Input source(s): n/a (automatic)
 - Config keys: `distance (100)`
 - Code: src/plugins/vr/spaceallocator3d.cpp:299-300
@@ -955,11 +969,13 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-MIRROR-030 | Working | none — smoke only |
 | VOC-MIRROR-040 | Working | none — smoke only |
 | VOC-MIRROR-050 | Working | none — smoke only |
-| VOC-MIRROR-060 | Working | none — smoke only |
+| VOC-MIRROR-060 | Working | kwinvr-testFlatFloatReplay (Virtual-T mirror hidden at start) |
+| VOC-MIRROR-065 | Working | none — smoke only |
 | VOC-MIRROR-070 | Working | none — smoke only |
-| VOC-PLACE-010 | Working | none — smoke only |
+| VOC-MIRROR-080 | Working | kwinvr-testFlatFloatReplay (promotion on detach, birth-on-hidden, one-way) |
+| VOC-PLACE-010 | Working | kwinvr-testSpaceAllocator3D (front-hemisphere cap, slot scan) |
 | VOC-PLACE-020 | Working | none — smoke only |
-| VOC-PLACE-030 | Working | none — smoke only |
+| VOC-PLACE-030 | Working | kwinvr-testSpaceAllocator3D (fallback on hemisphere exhaustion) |
 | VOC-PLACE-040 | Working | none — smoke only |
 | VOC-FOLLOW-010 | Working | none — smoke only |
 | VOC-FOLLOW-020 | Working | none — smoke only |

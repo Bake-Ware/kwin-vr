@@ -497,6 +497,20 @@ Node {
                     }
                     Component.onDestruction: {
                         delete outputMirrorRepeater.outputMap[output.name]
+                        spaceAllocator.unregisterObject(pseudoOutput)
+                        followMode.unregisterObject(pseudoOutput)
+                    }
+                    // Free the mirror's allocator slot while it is hidden, so
+                    // auto-floated windows can claim the prime front-center
+                    // real estate instead of getting pushed to the fringe.
+                    onIsVirtualHiddenChanged: {
+                        if (isVirtualHidden) {
+                            spaceAllocator.unregisterObject(pseudoOutput)
+                            followMode.unregisterObject(pseudoOutput)
+                        } else {
+                            spaceAllocator.registerObject(pseudoOutput)
+                            followMode.registerObject(pseudoOutput)
+                        }
                     }
                 }
                 function findPseudoOutputByOutput(output: QtObject): KwinPseudoOutputMirror {
@@ -584,10 +598,56 @@ Node {
                         return Qt.size(sz.width / kwinAppWindow.ppu, sz.height / kwinAppWindow.ppu);
                     }
 
+                    // Pseudomirror for this window's host output. May be null if
+                    // the output has no mirror, and may have parent===null when
+                    // the mirror is hidden (e.g. hideVirtualDisplay). Either case
+                    // means the window would render into a detached subtree — we
+                    // promote it to vr=true so it floats instead (#26). Read
+                    // outputMap directly (not findPseudoOutputByOutput) because
+                    // the latter walks repeater.children, which feeds back into
+                    // this binding and produces a binding loop.
+                    readonly property QtObject hostMirror: {
+                        const name = kwinAppWindow.client.output ? kwinAppWindow.client.output.name : ""
+                        return outputMirrorRepeater.outputMap[name] ?? null
+                    }
+                    readonly property bool hostOutputHidden:
+                        !hostMirror || hostMirror.parent === null
+
                     function registerForSpaceAllocator() {
                         spaceAllocator.registerObject(kwinAppWindow)
                     }
-                    Component.onCompleted: Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+
+                    // Place this window in free 3D space via the shared allocator.
+                    // Used when the window auto-floats because its host output is
+                    // hidden / missing. turnToFace (not KeepRoll) because the
+                    // handle may carry arbitrary roll from prior follow-mode
+                    // activity, which would otherwise flip spawns upside down.
+                    function placeInFreeSpace() {
+                        if (itemSize.width <= 0 || itemSize.height <= 0) {
+                            return
+                        }
+                        const globalPos = spaceAllocator.findFreePosition(itemSize.width, itemSize.height)
+                        kwinAppWindow.position = allWindowsGrabHandle.mapPositionFromScene(globalPos)
+                        KwinVrHelpers.turnToFace(kwinAppWindow, spaceAllocator.viewpoint)
+                    }
+
+                    // One-way promotion: if this window's host output is not
+                    // renderable, flip it into vr-floating. Idempotent — once
+                    // client.vr is true the guard short-circuits, so re-showing
+                    // the host mirror does NOT snap the window back (per design:
+                    // auto-floated windows stay floating). Placement deferred so
+                    // the state-machine's parent swap (screen→vr) applies first.
+                    function maybeAutoFloat() {
+                        if (!kwinAppWindow.client.vr && kwinAppWindow.hostOutputHidden) {
+                            kwinAppWindow.client.vr = true
+                            Qt.callLater(kwinAppWindow.placeInFreeSpace)
+                        }
+                    }
+                    onHostOutputHiddenChanged: Qt.callLater(kwinAppWindow.maybeAutoFloat)
+                    Component.onCompleted: {
+                        Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
+                        Qt.callLater(kwinAppWindow.maybeAutoFloat)
+                    }
 
                     states: [
                         State {
