@@ -74,6 +74,18 @@ public:
     Q_INVOKABLE void registerObject(QQuick3DNode *node);
     Q_INVOKABLE void unregisterObject(QQuick3DNode *node);
 
+    // Force-pan to center `node`. Takes an explicit camera (the normal
+    // `camera` binding gets null'd during hover/grab/menu, which would
+    // otherwise suppress the pan). The override stays locked on `node`
+    // until stop-FOV is reached, `node` is destroyed, or unfocus(node).
+    Q_INVOKABLE void focusOn(QQuick3DNode *node, QQuick3DNode *camera);
+
+    // Cancel an in-flight focusOn pan for `node`. No-op when `node` is not
+    // the current focus target. Needed when the caller moves the node away
+    // mid-pan (e.g. pose restore on defocus) — otherwise the override keeps
+    // dragging the world after it.
+    Q_INVOKABLE void unfocus(QQuick3DNode *node);
+
 Q_SIGNALS:
     void cameraChanged();
     void rotationTargetChanged();
@@ -89,6 +101,10 @@ Q_SIGNALS:
 private:
     void onFrame();
     void updateConnections();
+    // The camera FOV/pan math should use right now: the explicit focusOn
+    // camera while an override is active, the normal binding otherwise.
+    QQuick3DNode *effectiveCamera() const;
+    void clearFocusOverride();
     QVector2D anglesToNode(const QQuick3DNode *node) const;
     bool anyNodeInFov() const;
     QQuick3DNode *findClosestNode() const;
@@ -99,6 +115,15 @@ private:
     QQuick3DNode *m_camera = nullptr;
     QQuick3DNode *m_rotationTarget = nullptr;
     QList<QQuick3DNode *> m_trackedNodes;
+    // When set, onFrame pans toward this node instead of the angularly-closest
+    // tracked node. Cleared once the node reaches the stop-FOV.
+    QQuick3DNode *m_focusOverride = nullptr;
+    // Camera used while an override is active. Separate from m_camera so
+    // focus-pan works even when the main `camera` binding is gated null
+    // during hover/grab/menu interactions.
+    QQuick3DNode *m_focusCamera = nullptr;
+    QMetaObject::Connection m_focusNodeDestroyed;
+    QMetaObject::Connection m_focusCameraDestroyed;
     bool m_worldUpAlignment = true;
 
     int m_fovH = 50;
