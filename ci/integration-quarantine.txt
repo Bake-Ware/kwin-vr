@@ -21,3 +21,4 @@ kwin-testDesktopSwitchingAnimation
 kwin-testMinimizeAnimation
 kwin-testDontCrashGlxgears
 kwin-testDebugConsole
+kwin-testXwaylandInput

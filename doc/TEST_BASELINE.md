@@ -71,6 +71,16 @@ kernel module and no live session. If they still fail, bisect against
 `upstream/6.6.3_vr` — that distinguishes "VR patch broke output config" from
 "can't modeset under a live session".
 
+## Class 5 — Intermittent CI-container flake
+
+Passes in most CI runs; fails occasionally on changes that cannot affect it.
+Quarantined to keep the required set honest; un-quarantine after the flake is
+understood (each entry has a tracking issue).
+
+| Test | Evidence |
+|---|---|
+| `kwin-testXwaylandInput` | Fast double-fail (~0.3s, fails the runner's retry too) of `testPointerEnterLeaveSsd` at `'!window->readyForPainting()' returned FALSE`, with "Failed to initialize glamor, falling back to sw" in the log — runs 27261660727 (main, 2026-06-10) and 27267626577 (stale-socket PR, same day, VR-plugin-only diff). Same test green in ≥5 other runs that day on sibling changes. Smells like Xwayland/glamor startup timing in the container. Tracking issue: #48. |
+
 ## VR-owned suites: environment-conditional asserts
 
 | Test | Condition | Behavior |
