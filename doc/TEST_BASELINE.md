@@ -80,6 +80,7 @@ kernel module and no live session. If they still fail, bisect against
 | `kwinvr-testFlatHudReplay` | Qt 6 `qml` runtime missing, or `org.kde.layershell` QML module not installed (layer-shell-qt) | Whole test SKIPs — it has no client-free section; the #17 lift math stays pinned by `kwinvr-testQmlLogic` regardless. |
 | `kwinvr-testFlatSnapReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. |
 | `kwinvr-testFlatFloatReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. The #26 allocator cone cap stays pinned by `kwinvr-testSpaceAllocator3D` regardless. |
+| `kwinvr-testFlatFocusReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it drives real activation edges with three Wayland clients (focus pull VOC-FOCUS-010/020). Boots with `followEnabled=false` so the pan can only come from `focusOn`'s explicit camera. The C++ pan override itself stays pinned by `kwinvr-testVrFollowMode` (unit, never skips). |
 
 ## Reproduce
 

@@ -55,7 +55,9 @@ boot_flat_kwin() {
     export HOME=$(mktemp -d) XDG_RUNTIME_DIR=$(mktemp -d)
     chmod 700 "$XDG_RUNTIME_DIR"
     mkdir -p "$HOME/.config"
-    printf '[General]\ndisplayMode=Flat\n' > "$HOME/.config/kwinvr"
+    # Tests may pre-set VRTEST_EXTRA_CONFIG with extra [General] kwinvr keys
+    # (newline-separated) to pin config-dependent behavior deterministically.
+    printf '[General]\ndisplayMode=Flat\n%s' "${VRTEST_EXTRA_CONFIG:-}" > "$HOME/.config/kwinvr"
 
     export QT_PLUGIN_PATH="$bin_dir"
     export QT_LOGGING_RULES="kwinvr.debug=true"
