@@ -75,7 +75,7 @@ kernel module and no live session. If they still fail, bisect against
 
 | Test | Condition | Behavior |
 |---|---|---|
-| `kwinvr-testFlatBoot` | No RHI scene graph (CI container has no `/dev/dri` → software compositing → "Qt Quick 3D is not functional") | Frame-render assertion SKIPs on that exact log marker only; boot/DBus/QML-error asserts still apply. Hard assertion anywhere GL exists. Tracked in #38. |
+| `kwinvr-testFlatBoot` | No RHI scene graph (no `/dev/dri` → software compositing → "Qt Quick 3D is not functional") | Frame-render assertion SKIPs on that exact log marker only; boot/DBus/QML-error asserts still apply. Hard assertion anywhere GL exists — **including CI since #38**: the workflow loads `vgem` (or `vkms` — the azure kernels ship only vkms; kwin's virtual backend special-cases both to use the primary node) on the runner host and passes `/dev/dri` into the container, so mesa's `kms_swrast` gives the virtual backend a real GL context. CI also sets `KWINVR_REQUIRE_RHI=1`, which turns the SKIP into a FAIL — a green CI run therefore *proves* the frame-render assertion executed. |
 | `kwinvr-testFlatReplay` | Qt 6 `qml` runtime missing | Wayland-client placement section SKIPs (a Qt 5 `qml` in PATH is rejected — it loads nothing on versionless imports); interaction asserts still apply. |
 | `kwinvr-testFlatHudReplay` | Qt 6 `qml` runtime missing, or `org.kde.layershell` QML module not installed (layer-shell-qt) | Whole test SKIPs — it has no client-free section; the #17 lift math stays pinned by `kwinvr-testQmlLogic` regardless. |
 | `kwinvr-testFlatSnapReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. |

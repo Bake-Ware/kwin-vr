@@ -15,81 +15,129 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:base-devel
-      options: --privileged
+    # The job runs on the host (not `container:`) so it can modprobe a virtual
+    # DRM module — a `container:` job cannot load kernel modules even with
+    # --privileged because the Arch image lacks the host kernel's .ko files.
+    # The build and tests still run in archlinux:base-devel, started manually
+    # below with /dev/dri passed through; mesa's kms_swrast driver on the
+    # vgem/vkms node gives kwin's virtual backend a real GL context, so
+    # kwinvr-testFlatBoot's frame-render assertion goes hard in CI instead of
+    # SKIPping (#38). KWINVR_REQUIRE_RHI=1 in the unit-test step makes that
+    # checkable: if GL ever silently regresses here, FlatBoot FAILS instead
+    # of skipping, so a green run proves the render assertion executed.
     steps:
-      - name: Install dependencies
-        run: |
-          pacman -Syu --noconfirm
-          # runtime + build deps (kept in sync with PKGBUILD depends/makedepends)
-          pacman -S --noconfirm --needed \
-            git cmake ninja extra-cmake-modules kdoctools krunner \
-            plasma-wayland-protocols wayland-protocols python xorg-xwayland \
-            aurorae breeze iio-sensor-proxy plasma-activities kauth kcmutils \
-            kcolorscheme kconfig kcoreaddons kcrash kdbusaddons kdeclarative \
-            kdecoration kglobalaccel kglobalacceld kguiaddons ki18n kidletime \
-            kirigami kitemmodels knewstuff knighttime knotifications kpackage \
-            kquickcharts kscreenlocker kservice ksvg kwayland kwidgetsaddons \
-            kwindowsystem kxmlgui layer-shell-qt lcms2 libcanberra libdisplay-info libdrm \
-            libei libepoxy libevdev libinput libpipewire \
-            libqaccessibilityclient-qt6 libxcb libxcvt libxkbcommon mesa milou \
-            pipewire-session-manager libplasma qt6-5compat qt6-base \
-            qt6-declarative qt6-svg qt6-tools systemd-libs wayland \
-            xcb-util-keysyms xcb-util-wm qt6-quick3d openxr mesa-demos \
-            xorg-server-xvfb dbus
-
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Load a virtual DRM module on the host
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)"
+          # The azure 6.17 kernels ship vkms but NOT vgem (verified on
+          # 6.17.0-1015-azure); try vgem first in case that ever changes,
+          # fall back to vkms. kwin's virtual backend special-cases both to
+          # use the primary node (vkms exposes no render node), where mesa's
+          # kms_swrast can allocate gbm dumb buffers.
+          uname -r
+          sudo modprobe vgem || sudo modprobe vkms
+          # Hard requirement: no node means render asserts silently degrade.
+          ls -la /dev/dri
+          test -e /dev/dri/card0 || test -e /dev/dri/card1
+
+      - name: Start build container
+        run: |
+          docker run -d --name ci --privileged \
+            --device /dev/dri \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            archlinux:base-devel sleep infinity
+
+      - name: Install dependencies
+        run: |
+          docker exec ci bash -ec '
+            pacman -Syu --noconfirm
+            # runtime + build deps (kept in sync with PKGBUILD depends/makedepends)
+            pacman -S --noconfirm --needed \
+              git cmake ninja extra-cmake-modules kdoctools krunner \
+              plasma-wayland-protocols wayland-protocols python xorg-xwayland \
+              aurorae breeze iio-sensor-proxy plasma-activities kauth kcmutils \
+              kcolorscheme kconfig kcoreaddons kcrash kdbusaddons kdeclarative \
+              kdecoration kglobalaccel kglobalacceld kguiaddons ki18n kidletime \
+              kirigami kitemmodels knewstuff knighttime knotifications kpackage \
+              kquickcharts kscreenlocker kservice ksvg kwayland kwidgetsaddons \
+              kwindowsystem kxmlgui layer-shell-qt lcms2 libcanberra libdisplay-info libdrm \
+              libei libepoxy libevdev libinput libpipewire \
+              libqaccessibilityclient-qt6 libxcb libxcvt libxkbcommon mesa milou \
+              pipewire-session-manager libplasma qt6-5compat qt6-base \
+              qt6-declarative qt6-svg qt6-tools systemd-libs wayland \
+              xcb-util-keysyms xcb-util-wm qt6-quick3d openxr mesa-demos \
+              xorg-server-xvfb dbus
+          '
+
       - name: Environment diagnostics
         run: |
-          # Breadcrumbs for quarantine triage (doc/TEST_BASELINE.md):
-          # glxgears exec fails in this container despite mesa-demos.
-          which glxgears || echo "glxgears NOT on PATH"
-          ls -la /usr/bin/glxgears 2>/dev/null || true
-          echo "PATH=$PATH"
+          docker exec ci bash -ec '
+            # Breadcrumbs for quarantine triage (doc/TEST_BASELINE.md):
+            # glxgears exec fails in this container despite mesa-demos.
+            which glxgears || echo "glxgears NOT on PATH"
+            ls -la /usr/bin/glxgears 2>/dev/null || true
+            echo "PATH=$PATH"
+            # #38: the vgem/vkms node must be visible in here for GL via kms_swrast.
+            ls -la /dev/dri
+          '
 
       - name: XR import fence
-        run: bash ci/check-xr-imports.sh
+        run: docker exec ci bash ci/check-xr-imports.sh
 
       - name: qmllint (advisory)
         # Advisory until the existing QML is lint-clean; the import fence above
         # is the blocking check. Tighten this once M2 lands.
         continue-on-error: true
         run: |
-          /usr/lib/qt6/bin/qmllint src/plugins/vr/qml/*.qml || true
+          docker exec ci bash -ec '/usr/lib/qt6/bin/qmllint src/plugins/vr/qml/*.qml || true'
 
       - name: Configure
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cmake -B build -G Ninja \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            -DCMAKE_INSTALL_LIBEXECDIR=lib \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DBUILD_TESTING=ON
+          docker exec ci bash -ec '
+            git config --global --add safe.directory /work
+            cmake -B build -G Ninja \
+              -DCMAKE_INSTALL_PREFIX=/usr \
+              -DCMAKE_INSTALL_LIBEXECDIR=lib \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DBUILD_TESTING=ON
+          '
 
       - name: Build
-        run: cmake --build build
+        run: docker exec ci cmake --build build
 
       - name: Unit tests
         run: |
-          export QT_QPA_PLATFORM=offscreen
-          export XDG_RUNTIME_DIR=$(mktemp -d)
-          xvfb-run -a dbus-run-session bash ci/run-unit-tests.sh build
+          docker exec ci bash -ec '
+            export QT_QPA_PLATFORM=offscreen
+            export XDG_RUNTIME_DIR=$(mktemp -d)
+            # #38: GL must exist here (vgem/vkms via kms_swrast) — refuse the
+            # soft SKIP so the FlatBoot frame-render assertion provably runs.
+            export KWINVR_REQUIRE_RHI=1
+            xvfb-run -a dbus-run-session bash ci/run-unit-tests.sh build
+          '
 
       - name: Integration tests (required subset)
         run: |
           # Quarantine list: ci/integration-quarantine.txt, triaged in
           # doc/TEST_BASELINE.md. Un-quarantining tests is progress.
-          export QT_QPA_PLATFORM=offscreen
-          export XDG_RUNTIME_DIR=$(mktemp -d)
-          xvfb-run -a dbus-run-session bash ci/run-integration-tests.sh build
+          docker exec ci bash -ec '
+            export QT_QPA_PLATFORM=offscreen
+            export XDG_RUNTIME_DIR=$(mktemp -d)
+            xvfb-run -a dbus-run-session bash ci/run-integration-tests.sh build
+          '
 
       - name: Install tree artifact
         run: |
-          DESTDIR="$PWD/install-tree" cmake --install build
-          tar -C install-tree -czf kwin-vr-install-tree.tar.gz .
+          docker exec ci bash -ec '
+            DESTDIR="$PWD/install-tree" cmake --install build
+            tar -C install-tree -czf kwin-vr-install-tree.tar.gz .
+          '
+          # Bind-mounted files are root-owned; make sure the runner user can read it.
+          sudo chmod a+r kwin-vr-install-tree.tar.gz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
