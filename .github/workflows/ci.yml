@@ -30,7 +30,7 @@ jobs:
             libqaccessibilityclient-qt6 libxcb libxcvt libxkbcommon mesa milou \
             pipewire-session-manager libplasma qt6-5compat qt6-base \
             qt6-declarative qt6-svg qt6-tools systemd-libs wayland \
-            xcb-util-keysyms xcb-util-wm qt6-quick3d openxr \
+            xcb-util-keysyms xcb-util-wm qt6-quick3d openxr mesa-demos \
             xorg-server-xvfb dbus
 
       - name: Checkout
