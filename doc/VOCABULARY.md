@@ -840,6 +840,52 @@ Unverified where the key sequence's out-of-box availability matters.
 
 ---
 
+## FLAT — flat-monitor mode (M2, no HMD)
+
+### VOC-FLAT-010: Flat displayMode enters the workspace without HMD or XR runtime
+**Given** `displayMode=Flat` **When** VR is activated (DBus `vrActive=true`, shortcut, or autostart) **Then** the 3D workspace starts directly — no OpenXR loader check, no Monado autostart, no DRM lease — by loading `MainFlat` instead of `Main`.
+- Input source(s): dbus / shortcut / config
+- Config keys: `displayMode (Auto)` — values `Auto`, `Xr`, `Flat`
+- Code: src/plugins/vr/kwinvr.cpp:252-267,363, src/plugins/vr/kwinvr.kcfg:220
+- Status: Working (verified headless 2026-06-09)
+
+### VOC-FLAT-020: Flat scene renders the identical workspace through a perspective camera
+**Given** flat mode active **Then** the same `VrWorkspaceScene` (virtual screen, pseudomirrors, ray, snap manager, radial menu, follow mode) renders into a fullscreen `View3D` with a `PerspectiveCamera` (`fieldOfView = flatFov`) against a sky-blue background.
+- Input source(s): automatic
+- Config keys: `flatFov (90.0)`
+- Code: src/plugins/vr/qml/FlatScene.qml:21-69, src/plugins/vr/qml/MainFlat.qml:19-62, src/plugins/vr/qml/VrWorkspaceScene.qml
+- Status: Working
+
+### VOC-FLAT-030: Middle-button drag turns the flat "head"
+**Given** flat mode active **When** the user drags with the middle mouse button **Then** the camera rig yaws by `-dx×flatLookSensitivity` and pitches by `-dy×flatLookSensitivity` degrees, pitch clamped to ±89°, so gaze-coupled behaviors (follow mode, gaze reclaim, head scroll) keep working with the rig as the head stand-in.
+- Input source(s): mouse
+- Config keys: `flatLookSensitivity (0.15 °/px)`
+- Code: src/plugins/vr/qml/FlatScene.qml:37-59, src/plugins/vr/qml/MainFlat.qml:52-61, src/plugins/vr/qml/VrInputSurface.qml (middleDragLook)
+- Status: Working
+
+### VOC-FLAT-040: Interaction grammar is shared, not forked
+**Given** flat mode active **Then** every non-head-pose vocabulary behavior (GRAB, WORLD, RESIZE, SNAP, MENU, GAZE pointer-offset…) runs through the same `VrInputSurface` + `VrWorkspaceScene` code paths as XR mode — there is no flat-specific reimplementation to drift out of sync.
+- Input source(s): all
+- Config keys: as per the referenced behaviors
+- Code: src/plugins/vr/qml/VrInputSurface.qml, src/plugins/vr/qml/VrWorkspaceScene.qml
+- Status: Implemented — interaction-level verification pending (M2 slice 3 input replay)
+
+### VOC-FLAT-050: Passthrough blend is unavailable flat
+**Given** flat mode active **Then** `blendSupported` is false and the blend toggle is inert (passthrough is an HMD concept).
+- Input source(s): n/a
+- Config keys: none
+- Code: src/plugins/vr/qml/FlatScene.qml:68
+- Status: Working
+
+### VOC-FLAT-060: Auto mode currently resolves to the XR path
+**Given** `displayMode=Auto` (the default) **Then** activation behaves exactly as `Xr` — HMD-presence detection to auto-fall-back to flat is **not yet implemented** (planned with M4 runtime profiles).
+- Input source(s): config
+- Config keys: `displayMode (Auto)`
+- Code: src/plugins/vr/kwinvr.cpp:252-257
+- Status: Working as documented (auto-detection TBD)
+
+---
+
 ## Appendix A — Status / coverage matrix
 
 | VOC-ID | Status | Test coverage |
@@ -951,6 +997,12 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-OUTPUT-030 | Working | none — smoke only |
 | VOC-OUTPUT-040 | Working | none — smoke only |
 | VOC-OUTPUT-050 | Working | none — smoke only |
+| VOC-FLAT-010 | Working | **kwinvr-testFlatBoot** (headless boot, vrActive, 0 QML errors) |
+| VOC-FLAT-020 | Working | kwinvr-testFlatBoot (load-level) — golden image pending |
+| VOC-FLAT-030 | Working | none — input replay pending |
+| VOC-FLAT-040 | Implemented | none — input replay pending |
+| VOC-FLAT-050 | Working | none — smoke only |
+| VOC-FLAT-060 | Working as documented | none |
 
 ## Appendix B — Known oddities discovered during enumeration
 
