@@ -5,7 +5,7 @@
 */
 // Pure pair-classification + landing math for WindowSnapManager (#14).
 // No QML/scene dependencies — every input is a scalar — so qmltest can pin
-// the dock/stack decision table directly (kwinvr-testSnapLogic).
+// the dock/stack decision table directly (kwinvr-testQmlLogic).
 .pragma library
 
 // Mirrors WindowSnapManager.Action (QML enums number in declaration order:

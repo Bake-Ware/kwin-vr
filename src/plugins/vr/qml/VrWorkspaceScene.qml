@@ -57,6 +57,7 @@ Node {
     readonly property alias outputMirrors: outputMirrorRepeater
     readonly property alias snap: snapManager
     readonly property alias allocator: spaceAllocator
+    readonly property alias hudWindows: hudWindowsRepeater
 
     property bool test1: false
     onTest1Changed: {

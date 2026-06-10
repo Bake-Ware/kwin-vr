@@ -557,6 +557,13 @@ retest, so commit-path behaviors are at best WIP.
 - Code: src/plugins/vr/qml/Main.qml:187, src/plugins/vr/qml/XrScene.qml:38,327-335, src/plugins/vr/qml/XrayHud.qml:10-45
 - Status: Working
 
+### VOC-HUD-070: HUD transients lift toward the viewer
+**Given** a HUD window has transient children (popup/menu over the dock, submenu over a menu) **Then** each child is placed one radial step (0.5 units) closer to the viewer per transient-chain level — on a concentric cylinder when curved — so it never z-fights or draws through its parent (chain depth ≤ 10, matching the filter's ancestor walk).
+- Input source(s): n/a (window type routing)
+- Config keys: `hudCurvature (0.0)`
+- Code: src/plugins/vr/qml/VrHudWindow.qml:51-71, src/plugins/vr/qml/HudPlacementLogic.js
+- Status: Working
+
 ---
 
 ## MENU — radial menu
@@ -921,9 +928,9 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-RESIZE-010 | Working | none — smoke only |
 | VOC-RESIZE-020 | Working | none — smoke only |
 | VOC-RESIZE-030 | Unverified | none — smoke only |
-| VOC-SNAP-010 | Working | kwinvr-testSnapLogic (edge-band UV decision table) |
-| VOC-SNAP-020 | Working | kwinvr-testSnapLogic (center zone → Stack, corner precedence) |
-| VOC-SNAP-030 | Working | kwinvr-testSnapLogic (landing-pose math) — ghost rendering smoke only |
+| VOC-SNAP-010 | Working | kwinvr-testQmlLogic (edge-band UV decision table) |
+| VOC-SNAP-020 | Working | kwinvr-testQmlLogic (center zone → Stack, corner precedence) |
+| VOC-SNAP-030 | Working | kwinvr-testQmlLogic (landing-pose math) — ghost rendering smoke only |
 | VOC-SNAP-040 | WIP | none — smoke only |
 | VOC-SNAP-050 | WIP | none — smoke only |
 | VOC-SNAP-060 | WIP | none — smoke only |
@@ -952,12 +959,13 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-FOLLOW-040 | Working | none — smoke only |
 | VOC-FOLLOW-050 | Working | none — smoke only |
 | VOC-FOLLOW-060 | Working | none — smoke only |
-| VOC-HUD-010 | Working | none — smoke only |
+| VOC-HUD-010 | Working | kwinvr-testFlatHudReplay (layer-shell dock + xdg-popup admitted to / leave the HUD; flat substrate) + kwinvr-testQmlLogic (cylinder placement math) |
 | VOC-HUD-020 | Working | none — smoke only |
 | VOC-HUD-030 | Working | none — smoke only |
 | VOC-HUD-040 | Working | none — smoke only |
 | VOC-HUD-050 | Working | none — smoke only |
 | VOC-HUD-060 | Working | none — smoke only |
+| VOC-HUD-070 | Working | kwinvr-testQmlLogic (lift ladder, radial-lift geometry, flat/curved) + kwinvr-testFlatHudReplay (live popup z > dock z) |
 | VOC-MENU-010 | Working | none — smoke only |
 | VOC-MENU-020 | Working | none — smoke only |
 | VOC-MENU-030 | Working | none — smoke only |

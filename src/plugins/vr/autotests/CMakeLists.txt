@@ -70,13 +70,15 @@ target_link_libraries(testVrConfig
 )
 add_test(NAME kwinvr-testConfig COMMAND testVrConfig)
 
-# --- dock+stack pair classification (pure WindowSnapLogic.js via qmltest) ---
-add_executable(testVrSnapLogic testsnaplogic.cpp)
-target_compile_definitions(testVrSnapLogic
+# --- pure QML/JS logic libraries (qmltest over autotests/qml/tst_*.qml) ---
+# Covers WindowSnapLogic.js (dock+stack pair classification) and
+# HudPlacementLogic.js (HUD cylinder placement + #17 transient lift).
+add_executable(testVrQmlLogic testqmllogic.cpp)
+target_compile_definitions(testVrQmlLogic
     PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
-target_link_libraries(testVrSnapLogic Qt::QuickTest)
-add_test(NAME kwinvr-testSnapLogic
-    COMMAND testVrSnapLogic -platform offscreen -input ${CMAKE_CURRENT_SOURCE_DIR}/qml)
+target_link_libraries(testVrQmlLogic Qt::QuickTest)
+add_test(NAME kwinvr-testQmlLogic
+    COMMAND testVrQmlLogic -platform offscreen -input ${CMAKE_CURRENT_SOURCE_DIR}/qml)
 
 # --- flat-mode boot smoke (M2 renderer seam) ---
 # Boots real kwin_wayland --virtual with displayMode=Flat, flips vrActive
@@ -94,3 +96,11 @@ set_tests_properties(kwinvr-testFlatBoot PROPERTIES TIMEOUT 120)
 add_test(NAME kwinvr-testFlatReplay
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-replay.sh ${CMAKE_BINARY_DIR}/bin)
 set_tests_properties(kwinvr-testFlatReplay PROPERTIES TIMEOUT 180)
+
+# --- HUD overlay replay (M3, issue #17) ---
+# Real layer-shell dock + xdg-popup land on the HUD; the popup must sit
+# strictly closer to the viewer than its dock (transientDepth radial lift).
+# SKIPs without the Qt 6 qml runtime or the org.kde.layershell QML module.
+add_test(NAME kwinvr-testFlatHudReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-hud-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatHudReplay PROPERTIES TIMEOUT 180)
