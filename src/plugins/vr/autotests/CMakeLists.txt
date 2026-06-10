@@ -10,6 +10,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     QuickTest
     Qml
     Gui GuiPrivate
+    Network
     Quick QuickPrivate
     Quick3D Quick3DPrivate
     Quick3DXr Quick3DXrPrivate)
@@ -48,6 +49,7 @@ target_link_libraries(testVrHelpers
     kwin
     Qt::Test
     Qt6::GuiPrivate
+    Qt6::Network
     Qt6::Quick
     Qt6::QuickPrivate
     Qt6::Quick3D
