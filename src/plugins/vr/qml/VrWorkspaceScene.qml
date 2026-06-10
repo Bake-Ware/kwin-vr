@@ -67,6 +67,115 @@ Node {
     function die() {  }
     function resetView() { allWindows.resetView() }
 
+    /* -------- focus pull (#26 follow-up, VOC-FOCUS-010/020) --------
+       On window activation (taskbar, alt+tab, scripts) a far-off vr-floating
+       window slides along its cam→window ray to the sibling-average depth and
+       faces the user; followMode pans the world so it ends up centered. On
+       defocus the window's prior pose is restored. */
+
+    // Saved scene pose of the focused window; null when no pull is active.
+    property var _focusedPullPose: null
+
+    function _restoreFocusedPullPose() {
+        if (!_focusedPullPose)
+            return
+        const pose = _focusedPullPose
+        _focusedPullPose = null
+        // Cancel any in-flight pan first — restoring the pose moves the
+        // window away mid-pan, and a live override would drag the world
+        // right back after it.
+        followMode.unfocus(pose.window)
+        if (pose.window && pose.window.client && pose.window.client.vr) {
+            KwinVrHelpers.setNodePositionFromScene(pose.window, pose.position)
+            KwinVrHelpers.setNodeRotationFromScene(pose.window, pose.rotation)
+        }
+    }
+
+    // Average distance from camera to every vr-floating window, excluding
+    // the target. Used as the depth target for the focus pull.
+    function _averageFloatingDistance(exclude) {
+        const camPos = root.camera.scenePosition
+        let total = 0.0
+        let count = 0
+        for (let i = 0; i < applicationWindowsRepeater.count; ++i) {
+            const w = applicationWindowsRepeater.objectAt(i)
+            if (!w || w === exclude) continue
+            if (!w.client || !w.client.vr || !w.visible) continue
+            if (w.stackedOnto) continue
+            total += w.scenePosition.minus(camPos).length()
+            count += 1
+        }
+        return count === 0 ? root.distance : total / count
+    }
+
+    // True if `w` participates in a dock/stack — those windows' poses belong
+    // to the snap manager, not the focus pull.
+    function _isSnapInvolved(w) {
+        if (w.stackedOnto)
+            return true
+        for (let i = 0; i < applicationWindowsRepeater.count; ++i) {
+            const other = applicationWindowsRepeater.objectAt(i)
+            if (other && other !== w && other.stackedOnto === w)
+                return true
+        }
+        return false
+    }
+
+    // Focus pull: slide the window along its cam→window direction to the
+    // sibling-average depth and re-face it to the user. Angular position in
+    // the user's surroundings is preserved (no teleport to center) — the
+    // world pan (followMode.focusOn) brings it the rest of the way.
+    function pullAppWinForward(appWin) {
+        if (!appWin || !appWin.client || !appWin.client.vr)
+            return
+        if (_isSnapInvolved(appWin))
+            return
+        if (_focusedPullPose && _focusedPullPose.window === appWin)
+            return
+        _restoreFocusedPullPose()
+
+        const camPos = root.camera.scenePosition
+        const windowPos = appWin.scenePosition
+        let dir = windowPos.minus(camPos)
+        const currentDist = dir.length()
+        if (currentDist < 0.0001)
+            return
+        dir = dir.times(1.0 / currentDist)
+
+        // Deep-copy the pose: scenePosition/sceneRotation are QML value-type
+        // *references* — stored raw they'd track the window through the pull
+        // and pan, making the restore a no-op.
+        const sceneRot = appWin.sceneRotation
+        _focusedPullPose = {
+            window: appWin,
+            position: Qt.vector3d(windowPos.x, windowPos.y, windowPos.z),
+            rotation: Qt.quaternion(sceneRot.scalar, sceneRot.x, sceneRot.y, sceneRot.z)
+        }
+
+        const newPos = camPos.plus(dir.times(_averageFloatingDistance(appWin)))
+        KwinVrHelpers.setNodePositionFromScene(appWin, newPos)
+        KwinVrHelpers.turnToFace(appWin, root.camera)
+
+        // Pan the world so the focused window ends up centered. Passes the
+        // camera explicitly because followMode.camera is null-gated during
+        // hover/grab/menu. No-op if already within the reactive FOV.
+        followMode.focusOn(appWin, root.camera)
+    }
+
+    // If the user grabs the focus-pulled window, grab becomes authoritative:
+    // drop the saved pose so defocus doesn't snap it back behind them.
+    Connections {
+        target: pickRay
+        function onGrabbedObjectChanged() {
+            if (root._focusedPullPose
+                && pickRay.grabbedObject === root._focusedPullPose.window) {
+                // The grab is authoritative over the pan too.
+                followMode.unfocus(root._focusedPullPose.window)
+                root._focusedPullPose = null
+            }
+        }
+    }
+
     Timer {
         id: autoAlignTimer
         onTriggered: allWindows.resetView()
@@ -647,6 +756,21 @@ Node {
                     Component.onCompleted: {
                         Qt.callLater(kwinAppWindow.registerForSpaceAllocator)
                         Qt.callLater(kwinAppWindow.maybeAutoFloat)
+                    }
+
+                    // Programmatic focus (taskbar click, alt+tab, scripts) —
+                    // pull a far-off floating window toward the user while
+                    // active, restore its prior pose when focus leaves.
+                    Connections {
+                        target: kwinAppWindow.client
+                        function onActiveChanged() {
+                            if (kwinAppWindow.client.active) {
+                                root.pullAppWinForward(kwinAppWindow)
+                            } else if (root._focusedPullPose
+                                       && root._focusedPullPose.window === kwinAppWindow) {
+                                root._restoreFocusedPullPose()
+                            }
+                        }
                     }
 
                     states: [

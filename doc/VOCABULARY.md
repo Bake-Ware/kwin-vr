@@ -534,6 +534,24 @@ retest, so commit-path behaviors are at best WIP.
 
 ---
 
+## FOCUS — focus pull (slide-and-pan on activation)
+
+### VOC-FOCUS-010: Activating a floating window pulls it to depth and pans the view
+**Given** a vr-floating window not involved in a dock/stack **When** its client becomes active programmatically (taskbar, alt+tab, scripts) **Then** its scene pose is saved and it slides along its camera→window ray to the average camera distance of the other floating windows (the configured `distance` if there are none), turns to face the camera, and `VrFollowMode.focusOn(window, camera)` pans the world until the window sits inside the stop-FOV — even while the followMode `camera` binding is null (follow disabled, hover/grab/menu gating): the explicit camera drives the pan. Angular position is preserved (no teleport to center); the pan covers the rest. Already-pulled and snap-involved windows are left alone.
+- Input source(s): window activation (any source)
+- Config keys: `distance (100)`, `followStopFovH/V (5)`
+- Code: src/plugins/vr/qml/VrWorkspaceScene.qml (pullAppWinForward, _averageFloatingDistance, _isSnapInvolved), src/plugins/vr/vrfollowmode.cpp (focusOn, effectiveCamera)
+- Status: Working (flat-validated)
+
+### VOC-FOCUS-020: Defocus restores the pulled window's pose; a grab cancels the restore
+**Given** a window pulled by VOC-FOCUS-010 **When** its client deactivates **Then** any in-flight pan for it is cancelled (`VrFollowMode.unfocus`) and its saved scene position and rotation are restored (only while it is still vr-floating). **When** instead the user grabs the pulled window **Then** the saved pose is dropped and the pan cancelled — manual placement wins; later defocus restores nothing. A destroyed or unregistered pan target stops the pan safely.
+- Input source(s): window deactivation; pick-ray grab
+- Config keys: none
+- Code: src/plugins/vr/qml/VrWorkspaceScene.qml (_restoreFocusedPullPose, grab Connections), src/plugins/vr/vrfollowmode.cpp (unfocus, clearFocusOverride)
+- Status: Working (flat-validated)
+
+---
+
 ## HUD — camera-pinned overlay surfaces
 
 ### VOC-HUD-010: Overlay windows pinned to the HUD plane
@@ -779,9 +797,9 @@ Unverified where the key sequence's out-of-box availability matters.
 - Status: Working
 
 ### VOC-LIFECYCLE-060: Auto-lease configured outputs (SBS gate)
-**Given** `autoLeaseOutputs` non-empty **When** outputs are (re)enumerated, once per session **Then** each named output that supports leasing, is not non-desktop, **and is in SBS mode (mode width ≥ 3840)** is marked leasable; outputs not in SBS mode are skipped. After committing, leases are refreshed (VOC-LIFECYCLE-080).
+**Given** `autoLeaseOutputs` non-empty **When** outputs are (re)enumerated, once per session **Then** each named output that supports leasing, is not non-desktop, **and is in SBS mode (mode width ≥ `autoLeaseMinWidth`)** is marked leasable; outputs not in SBS mode are skipped (`autoLeaseMinWidth=0` disables the SBS check entirely). After committing, leases are refreshed (VOC-LIFECYCLE-080).
 - Input source(s): automatic (output hotplug)
-- Config keys: `autoLeaseOutputs ()`
+- Config keys: `autoLeaseOutputs ()`, `autoLeaseMinWidth (3840)`
 - Code: src/plugins/vr/kwinvr.cpp:437-494
 - Status: Working
 
@@ -983,6 +1001,8 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-FOLLOW-040 | Working | none — smoke only |
 | VOC-FOLLOW-050 | Working | none — smoke only |
 | VOC-FOLLOW-060 | Working | none — smoke only |
+| VOC-FOCUS-010 | Working | kwinvr-testFlatFocusReplay (pull+pan on real activation edges; flat substrate) + kwinvr-testVrFollowMode (focusOn pan with null camera binding, no-op in FOV) |
+| VOC-FOCUS-020 | Working | kwinvr-testFlatFocusReplay (pose restore on defocus) + kwinvr-testVrFollowMode (unfocus cancel, destroy/unregister teardown) |
 | VOC-HUD-010 | Working | kwinvr-testFlatHudReplay (layer-shell dock + xdg-popup admitted to / leave the HUD; flat substrate) + kwinvr-testQmlLogic (cylinder placement math) |
 | VOC-HUD-020 | Working | none — smoke only |
 | VOC-HUD-030 | Working | none — smoke only |

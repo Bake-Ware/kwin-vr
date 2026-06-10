@@ -62,6 +62,40 @@ target_link_libraries(testVrHelpers
 )
 add_test(NAME kwinvr-testHelpers COMMAND testVrHelpers)
 
+# --- VrFollowMode focus pull (#26 follow-up, VOC-FOCUS-010/020) ---
+# Exercises focusOn(): the explicit-camera pan override used by the
+# focus-pull behavior, including teardown via destroy/unregister mid-pan.
+add_executable(testVrFollowMode
+    testvrfollowmode.cpp
+    ../vrfollowmode.cpp
+    ../kwinvrhelpers.cpp
+    ../kwinvirtualscreenhandle.cpp
+    ../kwingraphicshelpers.cpp
+)
+ecm_qt_declare_logging_category(testVrFollowMode
+    HEADER kwinvr_logging.h
+    IDENTIFIER KWINVR
+    CATEGORY_NAME kwinvr
+    DEFAULT_SEVERITY Warning
+)
+# Same epoxy ordering constraint as the plugin (see ../CMakeLists.txt)
+target_compile_options(testVrFollowMode PRIVATE -include epoxy/gl.h)
+target_link_libraries(testVrFollowMode
+    kwin
+    Qt::Test
+    Qt6::GuiPrivate
+    Qt6::Quick
+    Qt6::QuickPrivate
+    Qt6::Quick3D
+    Qt6::Quick3DPrivate
+    Qt6::Quick3DXr
+    Qt6::Quick3DXrPrivate
+    KF6::ConfigGui
+    KF6::WindowSystem
+    KDecoration3::KDecoration
+)
+add_test(NAME kwinvr-testVrFollowMode COMMAND testVrFollowMode)
+
 # --- kcfg defaults + persistence round-trip ---
 add_executable(testVrConfig testvrconfig.cpp)
 kconfig_add_kcfg_files(testVrConfig GENERATE_MOC ../kwinvrconfig.kcfgc)
@@ -124,3 +158,12 @@ set_tests_properties(kwinvr-testFlatSnapReplay PROPERTIES TIMEOUT 180)
 add_test(NAME kwinvr-testFlatFloatReplay
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-float-replay.sh ${CMAKE_BINARY_DIR}/bin)
 set_tests_properties(kwinvr-testFlatFloatReplay PROPERTIES TIMEOUT 180)
+
+# --- focus-pull replay (M3, #26 follow-up) ---
+# Real activation edges (new client steals focus, killing it hands focus
+# back): activating a far-off vr-floating window pulls it to depth, faces it,
+# and pans the world into stop-FOV; deactivation restores its saved pose.
+# SKIPs without the Qt 6 qml runtime.
+add_test(NAME kwinvr-testFlatFocusReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-focus-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatFocusReplay PROPERTIES TIMEOUT 180)
