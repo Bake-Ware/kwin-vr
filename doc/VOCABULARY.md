@@ -322,7 +322,7 @@ retest, so commit-path behaviors are at best WIP.
 - Input source(s): mouse (release of drag)
 - Config keys: `zSurfaceMarginTop (1.0 cm)`
 - Code: src/plugins/vr/qml/WindowSnapManager.qml:216-222,343-374
-- Status: WIP — same commit-path uncertainty as VOC-SNAP-050.
+- Status: Working — `_commitSnap` verified live on the flat substrate (kwinvr-testFlatSnapReplay); the release-trigger path (`_grabWatcher` firing at real drag end) still has the VOC-SNAP-050 uncertainty.
 
 ### VOC-SNAP-070: First snap snapshots original size
 **Given** a window that has never been snapped **When** a snap/stack commits **Then** its pre-snap frame size is stored in `preSnapGeom`.
@@ -379,6 +379,13 @@ retest, so commit-path behaviors are at best WIP.
 - Config keys: none
 - Code: src/plugins/vr/qml/KwinTransientWindow.qml:35-37, src/plugins/vr/qml/XrScene.qml:568
 - Status: Buggy — declared interaction with no emitter; either emit on `client.active` or remove.
+
+### VOC-SNAP-150: A stack stays one rigid container after commit
+**Given** a committed stack **Then** the container invariant persists past the commit: a root client resize propagates to every member (members re-match the root's full frame size); a member resizing itself is snapped back to the root size; and if the root's node moves or rotates outside a drag (e.g. the space allocator re-places it after a resize), members re-assert their cascade offset relative to it. Without this, any later client resize drifts the stack layout apart (#18).
+- Input source(s): n/a (client/compositor-driven geometry changes)
+- Config keys: `zSurfaceMarginTop (1.0)`
+- Code: src/plugins/vr/qml/KwinTransientWindow.qml:36-86
+- Status: Working
 
 ---
 
@@ -933,7 +940,7 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-SNAP-030 | Working | kwinvr-testQmlLogic (landing-pose math) — ghost rendering smoke only |
 | VOC-SNAP-040 | WIP | none — smoke only |
 | VOC-SNAP-050 | WIP | none — smoke only |
-| VOC-SNAP-060 | WIP | none — smoke only |
+| VOC-SNAP-060 | Working | kwinvr-testFlatSnapReplay (commit resizes member to root frame size, stackedOnto/stackIndex set; flat substrate) |
 | VOC-SNAP-070 | WIP | none — smoke only |
 | VOC-SNAP-080 | Unverified | none — smoke only |
 | VOC-SNAP-090 | Unverified | none — smoke only |
@@ -942,6 +949,7 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-SNAP-120 | WIP | none — smoke only |
 | VOC-SNAP-130 | Unverified | none — smoke only |
 | VOC-SNAP-140 | Buggy | none — smoke only |
+| VOC-SNAP-150 | Working | kwinvr-testFlatSnapReplay (root resize propagates, member self-resize snaps back, cascade pose survives re-placement) |
 | VOC-MIRROR-010 | Working | none — smoke only |
 | VOC-MIRROR-020 | Working | none — smoke only |
 | VOC-MIRROR-030 | Working | none — smoke only |
