@@ -12,6 +12,7 @@
 extern "C" {
 #include <libxcvt/libxcvt.h>
 }
+#include <gbm.h>
 #include <math.h>
 #include <unistd.h>
 
@@ -1346,4 +1347,68 @@ void drmModeFreePlane(drmModePlanePtr ptr)
         }
     }
     Q_UNREACHABLE();
+}
+
+// #36: DrmGpu::createNonMasterFd() asks libdrm for the device path behind
+// the fd, then re-opens it to marshal a non-master fd to lease clients.
+// Answer with the mock's devNode so that path keeps producing a valid fd
+// even when the "device" is /dev/null.
+char *drmGetDeviceNameFromFd2(int fd)
+{
+    GPU(fd, nullptr);
+    return strdup(gpu->devNode.toLocal8Bit().constData());
+}
+
+// The re-opened lease fd points at the mock devNode (/dev/null), where the
+// real drmIsMaster() reads ENOTTY as "is master" and the follow-up
+// drmDropMaster() fails. Nothing in this process ever holds real DRM
+// master, so always report non-master.
+int drmIsMaster(int fd)
+{
+    return 0;
+}
+
+// gbm mocks (#36): DrmDevice::open() in libkwin creates a gbm device for the
+// node it is handed. These tests never allocate through it — the QPainter
+// path only reaches gbm for dumb buffers, which go through
+// gbm_device_get_fd() + the mocked drmIoctl() — so a stub carrying the fd is
+// enough, and the whole suite runs with no /dev/dri node at all.
+//
+// NOTE: these calls (and DrmDevice's drmGetCap) come from libkwin.so, not
+// from the backend sources compiled into LibDrmTest, so they only resolve
+// here because the test executable exports its symbols (ENABLE_EXPORTS in
+// CMakeLists.txt). The drm mocks above get interposed the same way.
+
+struct gbm_device
+{
+    int fd;
+};
+
+gbm_device *gbm_create_device(int fd)
+{
+    return new gbm_device{fd};
+}
+
+void gbm_device_destroy(gbm_device *gbm)
+{
+    delete gbm;
+}
+
+int gbm_device_get_fd(gbm_device *gbm)
+{
+    return gbm->fd;
+}
+
+// Defensive: if a test ever reaches dmabuf allocation, fail it gracefully
+// instead of handing the stub device to the real libgbm.
+gbm_bo *gbm_bo_create(gbm_device *gbm, uint32_t width, uint32_t height, uint32_t format, uint32_t flags)
+{
+    errno = ENOTSUP;
+    return nullptr;
+}
+
+gbm_bo *gbm_bo_create_with_modifiers(gbm_device *gbm, uint32_t width, uint32_t height, uint32_t format, const uint64_t *modifiers, unsigned int count)
+{
+    errno = ENOTSUP;
+    return nullptr;
 }

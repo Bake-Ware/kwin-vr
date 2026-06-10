@@ -11,7 +11,15 @@ cd "$(dirname "$0")/.."
 
 integration_regex=$(grep -rhoP 'integrationTest\(NAME\s+\K\w+' autotests/integration/ \
     | sed 's/^/^kwin-/;s/$/$/' | paste -sd'|')
+# `|| true`: an empty quarantine list must not abort under pipefail, and an
+# empty $quarantine_regex must not leave a trailing `|` (an empty alternation
+# branch matches every test name, excluding everything).
 quarantine_regex=$(grep -v '^#' ci/unit-quarantine.txt | grep -v '^$' \
-    | sed 's/^/^/;s/$/$/' | paste -sd'|')
+    | sed 's/^/^/;s/$/$/' | paste -sd'|' || true)
 
-ctest --test-dir "$BUILD_DIR" --output-on-failure -E "$integration_regex|$quarantine_regex" "$@"
+exclude_regex="$integration_regex"
+if [ -n "$quarantine_regex" ]; then
+    exclude_regex="$exclude_regex|$quarantine_regex"
+fi
+
+ctest --test-dir "$BUILD_DIR" --output-on-failure -E "$exclude_regex" "$@"

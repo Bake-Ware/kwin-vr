@@ -21,7 +21,7 @@ in a container; expected green there.
 
 | Test | Evidence |
 |---|---|
-| `kwin-testMockDrm` (unit, **VR series' own lease test**) | aborted at 312s in batch; 18/18 pass in 136ms direct. **Also SIGSEGVs in the CI container** (SEGV_MAPERR at offset 0x18 right after initTestCase — null deref, likely assumes `/dev/dri` exists despite the mock). Quarantined in `ci/unit-quarantine.txt`; ticketed to make the mock truly device-free, since this is the test guarding the DRM-lease feature. |
+| `kwin-testMockDrm` (unit, **VR series' own lease test**) | **Un-quarantined (#36, CI-required).** Was: aborted at 312s in batch, SIGSEGV in the CI container (`findPrimaryDevice` returned null with no `/dev/dri`, then derefed). The mock is now truly device-free — the GPU "node" is `/dev/null`, with `gbm_create_device`/`drmGetDeviceNameFromFd2`/`drmIsMaster` interposed alongside the drm mocks (test built with `ENABLE_EXPORTS` so interposition reaches calls from libkwin.so). 18/18 in ~160ms, verified with `/dev/dri` bind-mounted empty; it no longer touches real DRM at all, so the batch-contention abort mode is gone too. |
 | `kwin-testXdgShellWindow` | 120s timeout in batch; 68/69 in 12s direct (the 1 fail is `testAppMenu`, which needs `dbus-run-session` — green with it) |
 | `kwin-testLockScreen` | 120s timeout in batch; 20/20 in 63s direct |
 | `kwin-testOutputChanges` | 120s timeout in batch; 92/92 in 14s direct |

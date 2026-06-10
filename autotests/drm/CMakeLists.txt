@@ -63,6 +63,11 @@ target_include_directories(LibDrmTest
 # Tests
 ########################################################
 add_executable(testMockDrm mockDrmTest.cpp)
+# Export the executable's symbols (-rdynamic) so the drm/gbm mocks in
+# mock_drm.cpp also interpose calls made from inside libkwin.so (e.g.
+# DrmDevice::open()'s gbm_create_device/drmGetCap) — that is what lets the
+# test run with no /dev/dri node at all (#36).
+set_target_properties(testMockDrm PROPERTIES ENABLE_EXPORTS ON)
 target_link_libraries(testMockDrm LibDrmTest Qt::Test)
 add_test(NAME kwin-testMockDrm COMMAND testMockDrm)
 ecm_mark_as_test(testMockDrm)

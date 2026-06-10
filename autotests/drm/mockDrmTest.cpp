@@ -44,43 +44,15 @@ Q_LOGGING_CATEGORY(KWIN_VIRTUALKEYBOARD, "kwin_virtualkeyboard", QtWarningMsg)
 
 static std::unique_ptr<MockGpu> findPrimaryDevice(int crtcCount)
 {
-#if !HAVE_LIBDRM_FAUX
-#if defined(Q_OS_LINUX)
-    // Workaround for libdrm being unaware of faux bus.
-    if (qEnvironmentVariableIsSet("CI")) {
-        int fd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
-        if (fd == -1) {
-            return nullptr;
-        } else {
-            return std::make_unique<MockGpu>(fd, "/dev/dri/card1", crtcCount);
-        }
-    }
-#endif
-#endif
-
-    const int deviceCount = drmGetDevices2(0, nullptr, 0);
-    if (deviceCount <= 0) {
+    // Fully device-free (#36): every drm*/gbm call the backend makes on this
+    // GPU is interposed by mock_drm.cpp, keyed on the fd — so any open fd
+    // works and no /dev/dri node (nor the old CI vgem workaround) is needed.
+    // This also stops the test contending with a live session's real DRM.
+    int fd = open("/dev/null", O_RDWR | O_CLOEXEC);
+    if (fd == -1) {
         return nullptr;
     }
-
-    QList<drmDevice *> devices(deviceCount);
-    if (drmGetDevices2(0, devices.data(), devices.size()) < 0) {
-        return nullptr;
-    }
-    auto deviceCleanup = qScopeGuard([&devices]() {
-        drmFreeDevices(devices.data(), devices.size());
-    });
-
-    for (drmDevice *device : std::as_const(devices)) {
-        if (device->available_nodes & (1 << DRM_NODE_PRIMARY)) {
-            int fd = open(device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC);
-            if (fd != -1) {
-                return std::make_unique<MockGpu>(fd, device->nodes[DRM_NODE_PRIMARY], crtcCount);
-            }
-        }
-    }
-
-    return nullptr;
+    return std::make_unique<MockGpu>(fd, QStringLiteral("/dev/null"), crtcCount);
 }
 
 class DrmTest : public QObject
