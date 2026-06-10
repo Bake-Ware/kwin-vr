@@ -9,6 +9,8 @@ import QtQuick3D
 import org.kde.kwin as KWinC
 import org.kde.kwin.vr
 
+import "HudPlacementLogic.js" as HudPlacement
+
 /*
  * A HUD overlay window rendered on a curved surface matching the HUD plane.
  * Uses CurvedPlaneGeometry + WindowThumbnail for correct curvature wrapping.
@@ -46,32 +48,27 @@ Node {
     readonly property real windowWorldW: (client.frameGeometry.width / outputGeo.width) * hudSurfaceW
     readonly property real windowWorldH: (client.frameGeometry.height / outputGeo.height) * hudSurfaceH
 
-    // Place on HUD cylinder
-    position: {
-        const theta = hudCurvature
-        const y = -screenNy * hudSurfaceH
-
-        if (theta < 0.001)
-            return Qt.vector3d(screenNx * hudSurfaceW, y, 0.5)
-
-        const t = screenNx + 0.5
-        const radius = hudSurfaceW / theta
-        const angle = -theta / 2.0 + t * theta
-        return Qt.vector3d(
-            Math.sin(angle) * radius,
-            y,
-            -Math.cos(angle) * radius + radius + 0.5)
+    // Transient-chain depth: 0 = root HUD window, 1 = its popup/menu,
+    // 2 = submenu… (chains are fixed at map time, capped like
+    // HudWindowFilter's ancestor walk).
+    readonly property int transientDepth: {
+        let d = 0
+        let a = client ? client.transientFor : null
+        while (a && d < 10) { d++; a = a.transientFor }
+        return d
     }
+
+    // Place on HUD cylinder, lifted one radial step per transient level so
+    // popups/menus never z-fight the window they belong to (#17). Math in
+    // HudPlacementLogic.js (pure, qmltest-pinned).
+    readonly property var hudPose: HudPlacement.placeOnHud(
+        screenNx, screenNy, hudSurfaceW, hudSurfaceH, hudCurvature,
+        HudPlacement.surfaceLift(transientDepth))
+
+    position: Qt.vector3d(hudPose.x, hudPose.y, hudPose.z)
 
     // Rotate to match cylinder tangent
-    eulerRotation: {
-        const theta = hudCurvature
-        if (theta < 0.001)
-            return Qt.vector3d(0, 0, 0)
-        const t = screenNx + 0.5
-        const angle = -theta / 2.0 + t * theta
-        return Qt.vector3d(0, -angle * 180 / Math.PI, 0)
-    }
+    eulerRotation: Qt.vector3d(0, hudPose.yawDeg, 0)
 
     visible: client && !client.minimized
              && (!KwinVrHelpers.screenLocked

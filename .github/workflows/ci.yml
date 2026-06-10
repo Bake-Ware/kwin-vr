@@ -31,7 +31,7 @@ jobs:
             kdecoration kglobalaccel kglobalacceld kguiaddons ki18n kidletime \
             kirigami kitemmodels knewstuff knighttime knotifications kpackage \
             kquickcharts kscreenlocker kservice ksvg kwayland kwidgetsaddons \
-            kwindowsystem kxmlgui lcms2 libcanberra libdisplay-info libdrm \
+            kwindowsystem kxmlgui layer-shell-qt lcms2 libcanberra libdisplay-info libdrm \
             libei libepoxy libevdev libinput libpipewire \
             libqaccessibilityclient-qt6 libxcb libxcvt libxkbcommon mesa milou \
             pipewire-session-manager libplasma qt6-5compat qt6-base \
