@@ -104,3 +104,12 @@ set_tests_properties(kwinvr-testFlatReplay PROPERTIES TIMEOUT 180)
 add_test(NAME kwinvr-testFlatHudReplay
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-hud-replay.sh ${CMAKE_BINARY_DIR}/bin)
 set_tests_properties(kwinvr-testFlatHudReplay PROPERTIES TIMEOUT 180)
+
+# --- stack-size replay (M3, issue #18) ---
+# Two real Wayland clients, one stack-committed onto the other: the stack
+# must act as one rigid container — member matches root size at commit and
+# keeps matching through later resizes; cascade pose survives allocator
+# re-placement. SKIPs without the Qt 6 qml runtime.
+add_test(NAME kwinvr-testFlatSnapReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-snap-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatSnapReplay PROPERTIES TIMEOUT 180)

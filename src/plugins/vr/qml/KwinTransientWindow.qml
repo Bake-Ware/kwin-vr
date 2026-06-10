@@ -8,6 +8,8 @@ import QtQuick
 import QtQuick3D
 import org.kde.kwin.vr
 
+import "WindowSnapLogic.js" as SnapLogic
+
 Node {
     id: root
     visible: !root.client.minimized && root.client.opacity > 0 && (!KwinVrHelpers.screenLocked || client.lockScreen || client.lockScreenOverlay || client.inputMethod)
@@ -31,6 +33,54 @@ Node {
     // cascade (1 = first child, 2 = second, etc.).
     property var stackedOnto: null
     property int stackIndex: 0
+
+    // A stack is one rigid container: members match the root's full frame
+    // size (VOC-SNAP-060) and KEEP matching it (#18) — otherwise any later
+    // client resize drifts the layout apart. Watch both the root's geometry
+    // (propagate down) and our own (a member resizing itself snaps back).
+    // Converges: once sizes match the delta is zero and nothing is issued.
+    // Cascade offsets are size-independent, so no reposition is needed.
+    function _matchStackRootSize() {
+        if (!stackedOnto || !stackedOnto.client || !client)
+            return
+        const rg = stackedOnto.client.frameGeometry
+        const mg = client.frameGeometry
+        const dw = rg.width - mg.width
+        const dh = rg.height - mg.height
+        if (Math.abs(dw) > 0.5 || Math.abs(dh) > 0.5)
+            KwinVrHelpers.windowResize(client, dw, dh)
+    }
+    Connections {
+        // ?? null: undefined would not coerce to QObject*
+        target: (root.stackedOnto ? root.stackedOnto.client : null) ?? null
+        function onFrameGeometryChanged() { root._matchStackRootSize() }
+    }
+    Connections {
+        target: root.client
+        enabled: root.stackedOnto !== null
+        function onFrameGeometryChanged() { root._matchStackRootSize() }
+    }
+
+    // Same container rigidity for POSE (#18): if the root's node moves
+    // outside a drag (e.g. the space allocator re-places it after a resize),
+    // members must keep their cascade offset relative to it. During a root
+    // drag members are reparented under the root (VOC-SNAP-080) — transform
+    // inheritance already carries them, so skip while we're its child.
+    // Converges: a no-op write doesn't re-emit scenePositionChanged.
+    function _followStackRootPose() {
+        if (!stackedOnto || parent === stackedOnto)
+            return
+        const r = SnapLogic.landingPose(0, 0, 0, 0, KWinVRConfig.zSurfaceMarginTop,
+                                        SnapLogic.ActionStack, Math.max(stackIndex, 1))
+        KwinVrHelpers.setNodePositionFromScene(
+            root, stackedOnto.mapPositionToScene(Qt.vector3d(r.x, r.y, r.z)))
+        KwinVrHelpers.setNodeRotationFromScene(root, stackedOnto.sceneRotation)
+    }
+    Connections {
+        target: root.stackedOnto ?? null
+        function onScenePositionChanged() { root._followStackRootPose() }
+        function onSceneRotationChanged() { root._followStackRootPose() }
+    }
 
     // Emitted when this window becomes active and is part of a stack — so
     // WindowSnapManager can promote it to top of cascade.

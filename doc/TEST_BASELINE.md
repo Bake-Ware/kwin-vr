@@ -78,6 +78,7 @@ kernel module and no live session. If they still fail, bisect against
 | `kwinvr-testFlatBoot` | No RHI scene graph (CI container has no `/dev/dri` → software compositing → "Qt Quick 3D is not functional") | Frame-render assertion SKIPs on that exact log marker only; boot/DBus/QML-error asserts still apply. Hard assertion anywhere GL exists. Tracked in #38. |
 | `kwinvr-testFlatReplay` | Qt 6 `qml` runtime missing | Wayland-client placement section SKIPs (a Qt 5 `qml` in PATH is rejected — it loads nothing on versionless imports); interaction asserts still apply. |
 | `kwinvr-testFlatHudReplay` | Qt 6 `qml` runtime missing, or `org.kde.layershell` QML module not installed (layer-shell-qt) | Whole test SKIPs — it has no client-free section; the #17 lift math stays pinned by `kwinvr-testQmlLogic` regardless. |
+| `kwinvr-testFlatSnapReplay` | Qt 6 `qml` runtime missing | Whole test SKIPs — it is built around two real Wayland clients. |
 
 ## Reproduce
 
