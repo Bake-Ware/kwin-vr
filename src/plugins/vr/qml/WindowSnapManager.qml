@@ -426,8 +426,10 @@ QtObject {
     // before its state machine reparents to the pseudo output, otherwise
     // members get dragged into the screen frame.
     readonly property Connections _grabbedVrWatcher: Connections {
-        target: root.xray && root.xray.grabbedObject
-                ? root.xray.grabbedObject.client : null
+        // ?? null: world-grab handle has no `client` — undefined would not
+        // coerce to QObject* ("Unable to assign [undefined]").
+        target: (root.xray && root.xray.grabbedObject
+                ? root.xray.grabbedObject.client : null) ?? null
         enabled: root.xray && root.xray.grabbedObject !== null
                  && root._stackDragMembers !== null
         function onVrChanged() {

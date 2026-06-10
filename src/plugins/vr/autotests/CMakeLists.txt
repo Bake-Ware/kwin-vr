@@ -77,3 +77,11 @@ add_test(NAME kwinvr-testConfig COMMAND testVrConfig)
 add_test(NAME kwinvr-testFlatBoot
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flatboot-smoke.sh ${CMAKE_BINARY_DIR}/bin)
 set_tests_properties(kwinvr-testFlatBoot PROPERTIES TIMEOUT 120)
+
+# --- input-replay harness v0 (M2) ---
+# Scripted interaction sequences via the evalInWorkspace test hook, asserting
+# scene end-state: look, world-grab, scroll depth, release, reset view, and a
+# real Wayland client landing in (and leaving) the workspace.
+add_test(NAME kwinvr-testFlatReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatReplay PROPERTIES TIMEOUT 180)

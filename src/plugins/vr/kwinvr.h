@@ -38,6 +38,7 @@ public Q_SLOTS:
     bool setOutputLeasable(const QString &outputName, bool leasable);
     void refreshLeases();
     bool captureWorkspaceFrame(const QString &filePath);
+    QString evalInWorkspace(const QString &expression);
 
 Q_SIGNALS:
     void vrActiveChanged();

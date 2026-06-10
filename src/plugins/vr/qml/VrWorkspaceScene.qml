@@ -51,6 +51,13 @@ Node {
     property alias headScroll: headScroll
     property alias desktopOrDockHovered: focusTracking.desktopOrDockHovered
 
+    /* Introspection for the replay harness (evalInWorkspace test hook):
+       read-only window/mirror access, no behavior. */
+    readonly property alias appWindows: applicationWindowsRepeater
+    readonly property alias outputMirrors: outputMirrorRepeater
+    readonly property alias snap: snapManager
+    readonly property alias allocator: spaceAllocator
+
     property bool test1: false
     onTest1Changed: {
         KwinVrHelpers.activateOutput(kvs.output, KWinVRConfig.scale)

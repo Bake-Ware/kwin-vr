@@ -80,6 +80,11 @@ Model {
 
     function grabMove(value: real): void {
         root.grabbedObjectPose.position = root.grabbedObjectPose.position.plus(Qt.vector3d(0,0, value))
+        // Apply immediately: the pose is otherwise only re-applied when the
+        // ray transform changes — fine with head jitter in XR, but with a
+        // stationary camera (flat mode) depth changes would not show until
+        // the next pointer move.
+        root.applyGrab()
     }
 
     function grabMoveClamped(value: real, minDist: real, maxDist: real): void {
@@ -91,6 +96,7 @@ Model {
             return
         }
         root.grabbedObjectPose.position = newPos
+        root.applyGrab()  // see grabMove
     }
 
     function grabbedObjectDistance(): real {

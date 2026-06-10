@@ -29,6 +29,8 @@
 #include <QLibrary>
 #include <QProcess>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlExpression>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
@@ -480,6 +482,31 @@ bool KwinVr::captureWorkspaceFrame(const QString &filePath)
     }
     qCWarning(KWINVR) << "captureWorkspaceFrame: no QQuickWindow root (XR mode is windowless)";
     return false;
+}
+
+QString KwinVr::evalInWorkspace(const QString &expression)
+{
+    // Test hook for the input-replay harness (M2): evaluates a QML/JS
+    // expression in the root component's creation context (so ids like
+    // flatScene resolve) and returns the result as a string — wrap complex
+    // results in JSON.stringify(...) on the caller side.
+    // Hard-gated behind an env var so a session bus peer can't script the
+    // compositor in normal operation.
+    if (qEnvironmentVariableIntValue("KWINVR_TEST_HOOKS") != 1) {
+        qCWarning(KWINVR) << "evalInWorkspace: refused — set KWINVR_TEST_HOOKS=1 (test sessions only)";
+        return QStringLiteral("ERROR: test hooks disabled");
+    }
+    if (!m_engine || m_engine->rootObjects().isEmpty()) {
+        return QStringLiteral("ERROR: no QML scene (VR not active?)");
+    }
+    QObject *root = m_engine->rootObjects().first();
+    QQmlExpression expr(qmlContext(root), root, expression);
+    bool undefined = false;
+    const QVariant result = expr.evaluate(&undefined);
+    if (expr.hasError()) {
+        return QStringLiteral("ERROR: ") + expr.error().toString();
+    }
+    return undefined ? QStringLiteral("undefined") : result.toString();
 }
 
 void KwinVr::tryAutoLease()

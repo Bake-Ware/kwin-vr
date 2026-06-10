@@ -26,6 +26,9 @@ View3D {
     property KwinVrInputFilter kwinInputFilter
 
     readonly property VrWorkspaceScene workspace: ws
+    /* Introspection for the replay harness. */
+    readonly property real lookYaw: headRig.yaw
+    readonly property real lookPitch: headRig.pitch
 
     environment: SceneEnvironment {
         clearColor: "skyblue"
