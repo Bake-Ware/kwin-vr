@@ -7,6 +7,7 @@
 
 find_package(Qt6 REQUIRED COMPONENTS
     Test
+    QuickTest
     Qml
     Gui GuiPrivate
     Quick QuickPrivate
@@ -68,3 +69,28 @@ target_link_libraries(testVrConfig
     KF6::ConfigGui
 )
 add_test(NAME kwinvr-testConfig COMMAND testVrConfig)
+
+# --- dock+stack pair classification (pure WindowSnapLogic.js via qmltest) ---
+add_executable(testVrSnapLogic testsnaplogic.cpp)
+target_compile_definitions(testVrSnapLogic
+    PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+target_link_libraries(testVrSnapLogic Qt::QuickTest)
+add_test(NAME kwinvr-testSnapLogic
+    COMMAND testVrSnapLogic -platform offscreen -input ${CMAKE_CURRENT_SOURCE_DIR}/qml)
+
+# --- flat-mode boot smoke (M2 renderer seam) ---
+# Boots real kwin_wayland --virtual with displayMode=Flat, flips vrActive
+# over DBus, asserts zero QML load/type errors. Pins the seam against
+# runtime-only QML failures (e.g. XrCamera-typed properties in shared scene
+# files). Spawns its own private dbus session; ~15-40s.
+add_test(NAME kwinvr-testFlatBoot
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flatboot-smoke.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatBoot PROPERTIES TIMEOUT 120)
+
+# --- input-replay harness v0 (M2) ---
+# Scripted interaction sequences via the evalInWorkspace test hook, asserting
+# scene end-state: look, world-grab, scroll depth, release, reset view, and a
+# real Wayland client landing in (and leaving) the workspace.
+add_test(NAME kwinvr-testFlatReplay
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flat-replay.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatReplay PROPERTIES TIMEOUT 180)

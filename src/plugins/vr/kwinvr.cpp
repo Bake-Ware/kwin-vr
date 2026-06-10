@@ -29,6 +29,9 @@
 #include <QLibrary>
 #include <QProcess>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlExpression>
+#include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -242,11 +245,19 @@ void KwinVr::proceedWithVrActivation()
     m_active = true;
     Q_EMIT vrActiveChanged();
 
-    if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
+    if (!useFlatMode() && KWinVRConfigWrapper::instance()->xrTestEnabled()) {
         m_xrTest.start();
     } else {
         start();
     }
+}
+
+bool KwinVr::useFlatMode() const
+{
+    // M2 renderer seam: Flat renders the workspace into a plain fullscreen
+    // window — no OpenXR loader, no Monado, no DRM lease. Auto currently
+    // behaves as Xr; runtime-availability fallback is a follow-up.
+    return KWinVRConfigWrapper::instance()->displayMode() == KWinVRConfig::EnumDisplayMode::Flat;
 }
 
 void KwinVr::setVrActive(bool active)
@@ -256,6 +267,11 @@ void KwinVr::setVrActive(bool active)
     }
 
     if (active) {
+        if (useFlatMode()) {
+            proceedWithVrActivation();
+            return;
+        }
+
         const QString runtimeJsonPath = KWinVRConfigWrapper::instance()->openXrRuntimeJson().trimmed();
 
         if (!runtimeJsonPath.isEmpty() && (!m_openXRLoaderInitialized || m_openXRLoaderRuntimePath != runtimeJsonPath)) {
@@ -311,18 +327,20 @@ void KwinVr::start()
     QObject::connect(m_engine, &QQmlApplicationEngine::objectCreated,
                      this, onObjectCreated, Qt::QueuedConnection);
 
-    qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
-    qputenv("QT_QUICK3D_XR_ASYNC_RENDER", KWinVRConfigWrapper::instance()->threadedRendering() ? "1" : "0");
+    if (!useFlatMode()) {
+        qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
+        qputenv("QT_QUICK3D_XR_ASYNC_RENDER", KWinVRConfigWrapper::instance()->threadedRendering() ? "1" : "0");
 
-    // Force multiview off on NVIDIA proprietary driver: Qt's auto-generated
-    // multiview shader uses #version 140, which NVIDIA's GLSL compiler rejects
-    // for GL_OVR_multiview2 (needs 330+). Result is a black VR screen.
-    bool multiviewEnabled = KWinVRConfigWrapper::instance()->multiview();
-    if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
-        qCWarning(KWINVR) << "NVIDIA proprietary driver detected; forcing multiview off (GLSL 140 incompatibility)";
-        multiviewEnabled = false;
+        // Force multiview off on NVIDIA proprietary driver: Qt's auto-generated
+        // multiview shader uses #version 140, which NVIDIA's GLSL compiler rejects
+        // for GL_OVR_multiview2 (needs 330+). Result is a black VR screen.
+        bool multiviewEnabled = KWinVRConfigWrapper::instance()->multiview();
+        if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
+            qCWarning(KWINVR) << "NVIDIA proprietary driver detected; forcing multiview off (GLSL 140 incompatibility)";
+            multiviewEnabled = false;
+        }
+        qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
     }
-    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
 
     input()->pointer()->setPositionLimiter([](const QPointF &pos, const QPointF &, std::chrono::microseconds) {
         return pos;
@@ -344,7 +362,8 @@ void KwinVr::start()
     workspace()->setVrMode(true);
     KwinVrHelpers::setDmabufFormatFilterForQt(true);
 
-    m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"), QStringLiteral("Main"));
+    m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"),
+                             useFlatMode() ? QStringLiteral("MainFlat") : QStringLiteral("Main"));
 }
 
 void KwinVr::stop()
@@ -432,6 +451,62 @@ void KwinVr::refreshLeases()
             Workspace::self()->applyOutputConfiguration(onConfig);
         }
     }
+}
+
+bool KwinVr::captureWorkspaceFrame(const QString &filePath)
+{
+    // Grabs the rendered workspace to an image file. Used by the golden-image
+    // regression tests (M2): a frame that fails to grab, or grabs all-black,
+    // means the scene never rendered — the black-screen regression class.
+    // Flat mode only for now: Main.qml's root is a windowless Item, while
+    // MainFlat.qml's root is a QQuickWindow we can grab.
+    if (!m_engine) {
+        qCWarning(KWINVR) << "captureWorkspaceFrame: no QML engine (VR not active?)";
+        return false;
+    }
+    const auto roots = m_engine->rootObjects();
+    for (QObject *root : roots) {
+        if (auto *window = qobject_cast<QQuickWindow *>(root)) {
+            const QImage frame = window->grabWindow();
+            if (frame.isNull()) {
+                qCWarning(KWINVR) << "captureWorkspaceFrame: grabWindow returned null";
+                return false;
+            }
+            if (!frame.save(filePath)) {
+                qCWarning(KWINVR) << "captureWorkspaceFrame: failed to save" << filePath;
+                return false;
+            }
+            qCDebug(KWINVR) << "captureWorkspaceFrame: saved" << frame.size() << "to" << filePath;
+            return true;
+        }
+    }
+    qCWarning(KWINVR) << "captureWorkspaceFrame: no QQuickWindow root (XR mode is windowless)";
+    return false;
+}
+
+QString KwinVr::evalInWorkspace(const QString &expression)
+{
+    // Test hook for the input-replay harness (M2): evaluates a QML/JS
+    // expression in the root component's creation context (so ids like
+    // flatScene resolve) and returns the result as a string — wrap complex
+    // results in JSON.stringify(...) on the caller side.
+    // Hard-gated behind an env var so a session bus peer can't script the
+    // compositor in normal operation.
+    if (qEnvironmentVariableIntValue("KWINVR_TEST_HOOKS") != 1) {
+        qCWarning(KWINVR) << "evalInWorkspace: refused — set KWINVR_TEST_HOOKS=1 (test sessions only)";
+        return QStringLiteral("ERROR: test hooks disabled");
+    }
+    if (!m_engine || m_engine->rootObjects().isEmpty()) {
+        return QStringLiteral("ERROR: no QML scene (VR not active?)");
+    }
+    QObject *root = m_engine->rootObjects().first();
+    QQmlExpression expr(qmlContext(root), root, expression);
+    bool undefined = false;
+    const QVariant result = expr.evaluate(&undefined);
+    if (expr.hasError()) {
+        return QStringLiteral("ERROR: ") + expr.error().toString();
+    }
+    return undefined ? QStringLiteral("undefined") : result.toString();
 }
 
 void KwinVr::tryAutoLease()

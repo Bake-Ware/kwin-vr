@@ -49,6 +49,10 @@ qt6_add_qml_module(vr
 
         qml/XrItemHacked.qml
         qml/XrScene.qml
+        qml/VrWorkspaceScene.qml
+        qml/FlatScene.qml
+        qml/MainFlat.qml
+        qml/VrInputSurface.qml
         qml/VrKwinCursor.qml
         qml/VrOsdWindows.qml
         qml/KwinWindowThumbnail3D.qml
@@ -79,6 +83,7 @@ qt6_add_qml_module(vr
         qml/VrBarrierConstraint.qml
         qml/KwinPseudoOutputMirror.qml
         qml/WindowSnapManager.qml
+        qml/WindowSnapLogic.js
         qml/VrHudPlane.qml
         qml/VrHudWindow.qml
         qml/Logger.qml

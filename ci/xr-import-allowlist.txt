@@ -4,15 +4,12 @@ src/plugins/vr/qml/KwinWaylandSubSurface3DRecursive.qml
 src/plugins/vr/qml/KwinWaylandSurface3D.qml
 src/plugins/vr/qml/KwinWindowThumbnail3D.qml
 src/plugins/vr/qml/KwinWindowThumbnailXrItem.qml
-src/plugins/vr/qml/Main.qml
-src/plugins/vr/qml/VrFocusControl.qml
 src/plugins/vr/qml/VrInputBindings.qml
 src/plugins/vr/qml/VrOsdWindows.qml
-src/plugins/vr/qml/VrPicking.qml
 src/plugins/vr/qml/VrRay.qml
 src/plugins/vr/qml/VrWindowManipulation.qml
 src/plugins/vr/qml/VRWindow.qml
-src/plugins/vr/qml/Xray.qml
+src/plugins/vr/qml/VrWorkspaceScene.qml
 src/plugins/vr/qml/XrItemHacked.qml
 src/plugins/vr/qml/XrScene.qml
 src/plugins/vr/xrtest/XrTest.qml

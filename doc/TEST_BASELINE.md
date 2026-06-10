@@ -71,6 +71,13 @@ kernel module and no live session. If they still fail, bisect against
 `upstream/6.6.3_vr` — that distinguishes "VR patch broke output config" from
 "can't modeset under a live session".
 
+## VR-owned suites: environment-conditional asserts
+
+| Test | Condition | Behavior |
+|---|---|---|
+| `kwinvr-testFlatBoot` | No RHI scene graph (CI container has no `/dev/dri` → software compositing → "Qt Quick 3D is not functional") | Frame-render assertion SKIPs on that exact log marker only; boot/DBus/QML-error asserts still apply. Hard assertion anywhere GL exists. Tracked in #38. |
+| `kwinvr-testFlatReplay` | Qt 6 `qml` runtime missing | Wayland-client placement section SKIPs (a Qt 5 `qml` in PATH is rejected — it loads nothing on versionless imports); interaction asserts still apply. |
+
 ## Reproduce
 
 ```bash

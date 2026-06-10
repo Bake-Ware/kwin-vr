@@ -49,8 +49,6 @@
 
 // Private Qt headers
 #include <QtQuick3D/private/qquick3dquaternionutils_p.h>
-#include <QtQuick3DXr/private/qquick3dxrmanager_openxr_p.h>
-#include <QtQuick3DXr/private/qquick3dxrmanager_p.h>
 
 namespace KWin
 {

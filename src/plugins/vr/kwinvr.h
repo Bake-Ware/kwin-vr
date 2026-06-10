@@ -37,6 +37,8 @@ public Q_SLOTS:
     QVariantList leasableOutputs() const;
     bool setOutputLeasable(const QString &outputName, bool leasable);
     void refreshLeases();
+    bool captureWorkspaceFrame(const QString &filePath);
+    QString evalInWorkspace(const QString &expression);
 
 Q_SIGNALS:
     void vrActiveChanged();
@@ -47,6 +49,7 @@ private:
 
     void start();
     void stop();
+    bool useFlatMode() const;
 
     void showNotification(const QString &title, const QString &text,
                           KNotification::NotificationFlags flags);
