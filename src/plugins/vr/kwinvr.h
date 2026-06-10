@@ -47,6 +47,7 @@ private:
 
     void start();
     void stop();
+    bool useFlatMode() const;
 
     void showNotification(const QString &title, const QString &text,
                           KNotification::NotificationFlags flags);

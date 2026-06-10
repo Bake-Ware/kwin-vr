@@ -242,11 +242,19 @@ void KwinVr::proceedWithVrActivation()
     m_active = true;
     Q_EMIT vrActiveChanged();
 
-    if (KWinVRConfigWrapper::instance()->xrTestEnabled()) {
+    if (!useFlatMode() && KWinVRConfigWrapper::instance()->xrTestEnabled()) {
         m_xrTest.start();
     } else {
         start();
     }
+}
+
+bool KwinVr::useFlatMode() const
+{
+    // M2 renderer seam: Flat renders the workspace into a plain fullscreen
+    // window — no OpenXR loader, no Monado, no DRM lease. Auto currently
+    // behaves as Xr; runtime-availability fallback is a follow-up.
+    return KWinVRConfigWrapper::instance()->displayMode() == KWinVRConfig::EnumDisplayMode::Flat;
 }
 
 void KwinVr::setVrActive(bool active)
@@ -256,6 +264,11 @@ void KwinVr::setVrActive(bool active)
     }
 
     if (active) {
+        if (useFlatMode()) {
+            proceedWithVrActivation();
+            return;
+        }
+
         const QString runtimeJsonPath = KWinVRConfigWrapper::instance()->openXrRuntimeJson().trimmed();
 
         if (!runtimeJsonPath.isEmpty() && (!m_openXRLoaderInitialized || m_openXRLoaderRuntimePath != runtimeJsonPath)) {
@@ -311,18 +324,20 @@ void KwinVr::start()
     QObject::connect(m_engine, &QQmlApplicationEngine::objectCreated,
                      this, onObjectCreated, Qt::QueuedConnection);
 
-    qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
-    qputenv("QT_QUICK3D_XR_ASYNC_RENDER", KWinVRConfigWrapper::instance()->threadedRendering() ? "1" : "0");
+    if (!useFlatMode()) {
+        qputenv("QT_QUICK3D_XR_OVERLAY_PLACEMENT", QByteArray::number(KWinVRConfigWrapper::instance()->overlayPlacement()));
+        qputenv("QT_QUICK3D_XR_ASYNC_RENDER", KWinVRConfigWrapper::instance()->threadedRendering() ? "1" : "0");
 
-    // Force multiview off on NVIDIA proprietary driver: Qt's auto-generated
-    // multiview shader uses #version 140, which NVIDIA's GLSL compiler rejects
-    // for GL_OVR_multiview2 (needs 330+). Result is a black VR screen.
-    bool multiviewEnabled = KWinVRConfigWrapper::instance()->multiview();
-    if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
-        qCWarning(KWINVR) << "NVIDIA proprietary driver detected; forcing multiview off (GLSL 140 incompatibility)";
-        multiviewEnabled = false;
+        // Force multiview off on NVIDIA proprietary driver: Qt's auto-generated
+        // multiview shader uses #version 140, which NVIDIA's GLSL compiler rejects
+        // for GL_OVR_multiview2 (needs 330+). Result is a black VR screen.
+        bool multiviewEnabled = KWinVRConfigWrapper::instance()->multiview();
+        if (multiviewEnabled && QFileInfo::exists(QStringLiteral("/sys/module/nvidia"))) {
+            qCWarning(KWINVR) << "NVIDIA proprietary driver detected; forcing multiview off (GLSL 140 incompatibility)";
+            multiviewEnabled = false;
+        }
+        qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
     }
-    qputenv("QT_QUICK3D_XR_DISABLE_MULTIVIEW", multiviewEnabled ? "0" : "1");
 
     input()->pointer()->setPositionLimiter([](const QPointF &pos, const QPointF &, std::chrono::microseconds) {
         return pos;
@@ -344,7 +359,8 @@ void KwinVr::start()
     workspace()->setVrMode(true);
     KwinVrHelpers::setDmabufFormatFilterForQt(true);
 
-    m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"), QStringLiteral("Main"));
+    m_engine->loadFromModule(QStringLiteral("org.kde.kwin.vr"),
+                             useFlatMode() ? QStringLiteral("MainFlat") : QStringLiteral("Main"));
 }
 
 void KwinVr::stop()

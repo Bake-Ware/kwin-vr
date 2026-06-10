@@ -217,6 +217,29 @@
       <label>Enable depth testing</label>
       <default>true</default>
     </entry>
+    <entry name="displayMode" type="Enum">
+      <label>How the 3D workspace is displayed</label>
+      <choices>
+        <choice name="Auto">
+          <label>Automatic (XR when a runtime is available)</label>
+        </choice>
+        <choice name="Xr">
+          <label>OpenXR headset</label>
+        </choice>
+        <choice name="Flat">
+          <label>Flat monitor (no HMD)</label>
+        </choice>
+      </choices>
+      <default>Auto</default>
+    </entry>
+    <entry name="flatFov" type="Double">
+      <label>Flat mode camera field of view (degrees)</label>
+      <default>90.0</default>
+    </entry>
+    <entry name="flatLookSensitivity" type="Double">
+      <label>Flat mode middle-drag look sensitivity (degrees per pixel)</label>
+      <default>0.15</default>
+    </entry>
     <entry name="windowMode" type="Enum">
       <label>Window rendering mode</label>
       <choices>
