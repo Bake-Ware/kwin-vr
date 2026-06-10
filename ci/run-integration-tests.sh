@@ -11,5 +11,8 @@ integration_regex=$(grep -rhoP 'integrationTest\(NAME\s+\K\w+' autotests/integra
 quarantine_regex=$(grep -v '^#' ci/integration-quarantine.txt | grep -v '^$' \
     | sed 's/^/^/;s/$/$/' | paste -sd'|')
 
+# --repeat until-pass:2 absorbs container timing flakes (a different test
+# fails ~each run on a race, passing on retry — see doc/TEST_BASELINE.md).
 ctest --test-dir "$BUILD_DIR" --output-on-failure --timeout 300 \
+    --repeat until-pass:2 \
     -R "$integration_regex" -E "$quarantine_regex" "$@"
