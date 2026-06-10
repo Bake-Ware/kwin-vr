@@ -87,6 +87,15 @@ public:
     Q_INVOKABLE void windowResize(Window *window, qreal dw, qreal dh);
     Q_INVOKABLE QSizeF windowSize(Window *window);
 
+    /**
+     * True when a unix socket at @p path has a live listener (a connect
+     * succeeds within @p timeoutMs). A socket file left behind by a crashed
+     * process exists but refuses connections — mere existence checks mistake
+     * it for a running service (#23 custodian lesson). A systemd
+     * socket-activated unit counts as alive: systemd accepts the connection.
+     */
+    Q_INVOKABLE static bool isUnixSocketAlive(const QString &path, int timeoutMs = 250);
+
     // Key helpers
     Q_INVOKABLE static bool keyMatch(int key, int modifiers, const QString &binding);
     Q_INVOKABLE static QString keyToString(int key, int modifiers);

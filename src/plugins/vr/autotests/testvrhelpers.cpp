@@ -6,9 +6,17 @@
 
 #include "../kwinvrhelpers.h"
 
+#include <QFile>
+#include <QFileInfo>
+#include <QLocalServer>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QVector2D>
 #include <QVector3D>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 using namespace KWin;
 
@@ -178,6 +186,58 @@ private Q_SLOTS:
         const QString s = KwinVrHelpers::keyToString(Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
         QVERIFY(!s.isEmpty());
         QVERIFY(KwinVrHelpers::keyMatch(Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier, s));
+    }
+
+    // --- isUnixSocketAlive (#23 stale-socket detection) ---
+
+    void socketAliveWhenListenerAccepts()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("live.sock"));
+
+        QLocalServer server;
+        QVERIFY(server.listen(path));
+        QVERIFY(KwinVrHelpers::isUnixSocketAlive(path));
+    }
+
+    void socketStaleWhenFileHasNoListener()
+    {
+        // Simulate a crashed runtime: bind a unix socket, then close the fd
+        // without unlinking — the file survives but refuses connections.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("stale.sock"));
+
+        const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        QVERIFY(fd >= 0);
+        sockaddr_un addr{};
+        addr.sun_family = AF_UNIX;
+        const QByteArray pathBytes = QFile::encodeName(path);
+        QVERIFY(pathBytes.size() < int(sizeof(addr.sun_path)));
+        ::memcpy(addr.sun_path, pathBytes.constData(), pathBytes.size() + 1);
+        QVERIFY(::bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0);
+        ::close(fd);
+
+        QVERIFY(QFileInfo::exists(path)); // the trap an existence check falls into
+        QVERIFY(!KwinVrHelpers::isUnixSocketAlive(path));
+    }
+
+    void socketStaleWhenPathIsPlainFile()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("not-a-socket"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.close();
+
+        QVERIFY(!KwinVrHelpers::isUnixSocketAlive(path));
+    }
+
+    void socketStaleWhenPathMissing()
+    {
+        QVERIFY(!KwinVrHelpers::isUnixSocketAlive(QStringLiteral("/nonexistent/nowhere.sock")));
     }
 };
 

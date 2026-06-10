@@ -170,13 +170,18 @@ bool KwinVr::initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString
 
 void KwinVr::ensureMonadoRunning()
 {
-    // Check if the OpenXR runtime's IPC socket exists.
-    // For Monado, this is monado_comp_ipc in XDG_RUNTIME_DIR.
+    // Check if the OpenXR runtime's IPC socket is live.
+    // For Monado, this is monado_comp_ipc in XDG_RUNTIME_DIR. A connect-test,
+    // not an existence check: a crashed Monado leaves the socket file behind,
+    // and proceeding against a stale socket fails deep in XR init (#23
+    // custodian lesson). The stale file is NOT removed — under systemd socket
+    // activation the connect itself starts the service, and deleting a
+    // socket-activated path breaks activation.
     const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     const QString ipcSocket = runtimeDir + QStringLiteral("/monado_comp_ipc");
 
-    if (QFileInfo::exists(ipcSocket)) {
-        qCDebug(KWINVR) << "OpenXR runtime IPC socket found:" << ipcSocket;
+    if (KwinVrHelpers::isUnixSocketAlive(ipcSocket)) {
+        qCDebug(KWINVR) << "OpenXR runtime IPC socket is live:" << ipcSocket;
         proceedWithVrActivation();
         return;
     }
@@ -185,19 +190,24 @@ void KwinVr::ensureMonadoRunning()
         return; // Already waiting
     }
 
+    if (QFileInfo::exists(ipcSocket)) {
+        qCWarning(KWINVR) << "Stale OpenXR runtime IPC socket (exists but refuses connections):" << ipcSocket;
+    }
+
     qCDebug(KWINVR) << "OpenXR runtime not running, starting monado.service...";
 
     // Start the runtime via systemd user service (non-blocking)
     QProcess::startDetached(QStringLiteral("systemctl"),
                             {QStringLiteral("--user"), QStringLiteral("start"), QStringLiteral("monado.service")});
 
-    // Poll for the IPC socket to appear
+    // Poll for the IPC socket to come alive (liveness, not existence —
+    // a stale file must not satisfy the wait)
     m_waitingForMonado = true;
     auto *timer = new QTimer(this);
     int *attempts = new int(0);
     connect(timer, &QTimer::timeout, this, [this, timer, attempts, ipcSocket]() {
         (*attempts)++;
-        if (QFileInfo::exists(ipcSocket)) {
+        if (KwinVrHelpers::isUnixSocketAlive(ipcSocket)) {
             qCDebug(KWINVR) << "OpenXR runtime ready after" << *attempts * 500 << "ms";
             timer->stop();
             timer->deleteLater();
@@ -205,7 +215,10 @@ void KwinVr::ensureMonadoRunning()
             m_waitingForMonado = false;
             proceedWithVrActivation();
         } else if (*attempts >= 30) { // 15 seconds timeout
-            qCWarning(KWINVR) << "Timed out waiting for OpenXR runtime";
+            qCWarning(KWINVR) << "Timed out waiting for OpenXR runtime"
+                              << (QFileInfo::exists(ipcSocket)
+                                      ? "- socket file exists but never accepted a connection (stale?)"
+                                      : "- socket never appeared");
             timer->stop();
             timer->deleteLater();
             delete attempts;

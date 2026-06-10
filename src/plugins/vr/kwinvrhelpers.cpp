@@ -39,6 +39,7 @@
 #include "workspace.h"
 #include "xdgshellwindow.h"
 
+#include <QLocalSocket>
 #include <QQmlProperty>
 #include <QQuick3DObject>
 #include <QQuickItem>
@@ -146,6 +147,17 @@ QSizeF KwinVrHelpers::windowSize(Window *window)
         return QSizeF();
     }
     return window->frameGeometry().size();
+}
+
+bool KwinVrHelpers::isUnixSocketAlive(const QString &path, int timeoutMs)
+{
+    QLocalSocket socket;
+    socket.connectToServer(path);
+    if (!socket.waitForConnected(timeoutMs)) {
+        return false;
+    }
+    socket.disconnectFromServer();
+    return true;
 }
 
 bool KwinVrHelpers::keyMatch(int key, int modifiers, const QString &binding)

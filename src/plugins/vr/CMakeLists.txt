@@ -26,6 +26,7 @@ ecm_qt_declare_logging_category(vr
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui GuiPrivate
+    Network
     Quick QuickPrivate
     Quick3D Quick3DPrivate
     Quick3DXr Quick3DXrPrivate)
@@ -156,6 +157,7 @@ target_link_libraries(vr
     Qt6::Core
     Qt6::Gui
     Qt6::GuiPrivate
+    Qt6::Network
     Qt6::Quick
     Qt6::QuickPrivate
     Qt6::Quick3D

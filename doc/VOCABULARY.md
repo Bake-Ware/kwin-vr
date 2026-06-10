@@ -757,12 +757,12 @@ Unverified where the key sequence's out-of-box availability matters.
 - Code: src/plugins/vr/kwinvr.cpp:218-348
 - Status: Working
 
-### VOC-LIFECYCLE-030: Monado auto-start with socket poll
-**Given** the Monado IPC socket (`$XDG_RUNTIME_DIR/monado_comp_ipc`) is absent at activation **Then** `systemctl --user start monado.service` is spawned and the socket is polled every 500 ms; activation proceeds when it appears, or fails with a notification after 15 s.
+### VOC-LIFECYCLE-030: Monado auto-start with socket liveness poll
+**Given** the Monado IPC socket (`$XDG_RUNTIME_DIR/monado_comp_ipc`) is not **live** (no listener accepts a connection — a stale file left by a crashed Monado does not count, and is logged but never deleted: under systemd socket activation the connect itself starts the service) at activation **Then** `systemctl --user start monado.service` is spawned and the socket is connect-polled every 500 ms; activation proceeds when a connection is accepted, or fails with a notification after 15 s.
 - Input source(s): automatic
 - Config keys: none
-- Code: src/plugins/vr/kwinvr.cpp:168-216
-- Status: Working
+- Code: src/plugins/vr/kwinvr.cpp:171-235, src/plugins/vr/kwinvrhelpers.cpp (`isUnixSocketAlive`)
+- Status: Working (liveness check pinned by `kwinvr-testHelpers`; full path needs hardware)
 
 ### VOC-LIFECYCLE-040: VR exit restores the 2D session
 **When** VR deactivates (toggle off, XR failure, session end) **Then** the QML engine is destroyed and on destruction: `setVrMode(false)`, every window's `vr` flag cleared (all windows return to screens), dmabuf filter off, pointer limiter and popup resolver removed, `vrActive` notifies false. The virtual output is removed by its handle's destructor.
