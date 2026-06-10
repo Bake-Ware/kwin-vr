@@ -46,17 +46,19 @@ static std::unique_ptr<DrmDevice> findRenderDevice()
     });
 
     for (drmDevice *device : std::as_const(devices)) {
-        // If it's a vgem device, prefer the primary node because gbm will attempt to allocate
-        // dumb buffers and they can be allocated only on the primary node.
+        // If it's a vgem or vkms device, prefer the primary node because gbm will attempt
+        // to allocate dumb buffers and they can be allocated only on the primary node.
+        // (vkms added for kwin-vr #38: CI kernels without vgem still ship vkms, and
+        // mesa's kms_swrast works on any dumb-buffer-capable primary node.)
         int nodeType = DRM_NODE_RENDER;
         if (device->bustype == DRM_BUS_PLATFORM) {
-            if (strcmp(device->businfo.platform->fullname, "vgem") == 0) {
+            if (strcmp(device->businfo.platform->fullname, "vgem") == 0 || strcmp(device->businfo.platform->fullname, "vkms") == 0) {
                 nodeType = DRM_NODE_PRIMARY;
             }
         }
 #if HAVE_LIBDRM_FAUX
         if (device->bustype == DRM_BUS_FAUX) {
-            if (strcmp(device->businfo.faux->name, "vgem") == 0) {
+            if (strcmp(device->businfo.faux->name, "vgem") == 0 || strcmp(device->businfo.faux->name, "vkms") == 0) {
                 nodeType = DRM_NODE_PRIMARY;
             }
         }

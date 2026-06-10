@@ -43,11 +43,17 @@ for _ in $(seq 1 10); do
 done
 
 if [ "$grabbed" != 1 ]; then
-    # Quick3D needs an RHI-backed scene graph; the CI container has no
-    # /dev/dri and kwin falls back to software compositing, so View3D
-    # renders nothing there by design. Skip ONLY on that exact marker —
-    # anywhere GL exists this stays a hard assertion. Tracked in #38.
+    # Quick3D needs an RHI-backed scene graph; without /dev/dri kwin falls
+    # back to software compositing and View3D renders nothing by design.
+    # Skip ONLY on that exact marker — anywhere GL exists this stays a hard
+    # assertion. CI sets KWINVR_REQUIRE_RHI=1 (#38: the workflow loads a
+    # virtual DRM module on the runner host precisely so GL exists there),
+    # which turns this skip into a failure: a green CI run then PROVES the
+    # frame-render assertion ran, instead of silently degrading.
     if grep -q 'Qt Quick 3D is not functional' "$LOG"; then
+        if [ "${KWINVR_REQUIRE_RHI:-0}" = 1 ]; then
+            fail "no RHI scene graph, but KWINVR_REQUIRE_RHI=1 — GL was required in this environment (#38)"
+        fi
         echo "SKIP: no RHI scene graph in this environment — render assertion skipped (boot asserts still apply)"
     else
         fail "captureWorkspaceFrame never produced a frame"

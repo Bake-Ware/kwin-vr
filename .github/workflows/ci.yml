@@ -15,25 +15,30 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    # The job runs on the host (not `container:`) so it can modprobe vgem —
-    # a `container:` job cannot load kernel modules even with --privileged
-    # because the Arch image lacks the host kernel's .ko files. The build and
-    # tests still run in archlinux:base-devel, started manually below with
-    # /dev/dri passed through; mesa's kms_swrast driver on the vgem node gives
-    # kwin's virtual backend a real GL context, so kwinvr-testFlatBoot's
-    # frame-render assertion goes hard in CI instead of SKIPping (#38).
+    # The job runs on the host (not `container:`) so it can modprobe a virtual
+    # DRM module — a `container:` job cannot load kernel modules even with
+    # --privileged because the Arch image lacks the host kernel's .ko files.
+    # The build and tests still run in archlinux:base-devel, started manually
+    # below with /dev/dri passed through; mesa's kms_swrast driver on the
+    # vgem/vkms node gives kwin's virtual backend a real GL context, so
+    # kwinvr-testFlatBoot's frame-render assertion goes hard in CI instead of
+    # SKIPping (#38). KWINVR_REQUIRE_RHI=1 in the unit-test step makes that
+    # checkable: if GL ever silently regresses here, FlatBoot FAILS instead
+    # of skipping, so a green run proves the render assertion executed.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Load vgem DRM node on the host
+      - name: Load a virtual DRM module on the host
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)"
-          # Ground truth on what DRM drivers the azure kernel actually ships
-          # (vgem was missing on 6.17.0-1015-azure — find a substitute).
+          # The azure 6.17 kernels ship vkms but NOT vgem (verified on
+          # 6.17.0-1015-azure); try vgem first in case that ever changes,
+          # fall back to vkms. kwin's virtual backend special-cases both to
+          # use the primary node (vkms exposes no render node), where mesa's
+          # kms_swrast can allocate gbm dumb buffers.
           uname -r
-          find "/lib/modules/$(uname -r)" -path '*drivers/gpu*' -o -name 'vgem*' -o -name 'vkms*' | sort
           sudo modprobe vgem || sudo modprobe vkms
           # Hard requirement: no node means render asserts silently degrade.
           ls -la /dev/dri
@@ -76,7 +81,7 @@ jobs:
             which glxgears || echo "glxgears NOT on PATH"
             ls -la /usr/bin/glxgears 2>/dev/null || true
             echo "PATH=$PATH"
-            # #38: the vgem node must be visible in here for GL via kms_swrast.
+            # #38: the vgem/vkms node must be visible in here for GL via kms_swrast.
             ls -la /dev/dri
           '
 
@@ -109,6 +114,9 @@ jobs:
           docker exec ci bash -ec '
             export QT_QPA_PLATFORM=offscreen
             export XDG_RUNTIME_DIR=$(mktemp -d)
+            # #38: GL must exist here (vgem/vkms via kms_swrast) — refuse the
+            # soft SKIP so the FlatBoot frame-render assertion provably runs.
+            export KWINVR_REQUIRE_RHI=1
             xvfb-run -a dbus-run-session bash ci/run-unit-tests.sh build
           '
 
