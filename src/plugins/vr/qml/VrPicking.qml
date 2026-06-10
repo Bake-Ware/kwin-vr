@@ -6,7 +6,6 @@
 
 import QtQuick
 import QtQuick3D
-import QtQuick3D.Xr
 
 import org.kde.kwin.vr
 
@@ -14,7 +13,8 @@ QtObject {
     id: root
 
     required property Xray xray
-    required property XrView xrView
+    // Anything with rayPickAll(pos, dir): XrView or View3D (renderer seam)
+    required property QtObject xrView
 
     // we can't create empty pick, so this value is used as a source of emptiness
     property pickResult emptyPick

@@ -5,9 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick3D.Helpers
-//! [XrView]
 import QtQuick3D
-import QtQuick3D.Xr
 
 import org.kde.kwin as KWinC
 import org.kde.kwin.vr
@@ -31,7 +29,7 @@ Item {
     }
 
     VrHeadScrollFilter {
-        headScroll: xrView.headScroll
+        headScroll: ws.headScroll
         inputDevice: kwinInput
     }
 
@@ -40,25 +38,25 @@ Item {
         id: mouseArea
         focus: true
         Keys.onPressed: (event) => {
-                            xrView.closeRadialMenu();
+                            ws.closeRadialMenu();
 
-                            if(xrView.grabbed) {
+                            if(ws.grabbed) {
                                 if(event.key === Qt.Key_Up) {
-                                    xrView.pushGrabbed = true
+                                    ws.pushGrabbed = true
                                     event.accepted = true
                                 } else if(event.key === Qt.Key_Down) {
-                                    xrView.pullGrabbed = true
+                                    ws.pullGrabbed = true
                                     event.accepted = true
                                 }
                             }
                         }
         Keys.onReleased: (event) => {
-                             if(xrView.grabbed) {
+                             if(ws.grabbed) {
                                  if(event.key === Qt.Key_Up) {
-                                     xrView.pushGrabbed = false
+                                     ws.pushGrabbed = false
                                      event.accepted = true
                                  } else if(event.key === Qt.Key_Down) {
-                                     xrView.pullGrabbed = false
+                                     ws.pullGrabbed = false
                                      event.accepted = true
                                  }
                              }
@@ -73,41 +71,41 @@ Item {
         property real worldPressX: 0
         property real worldPressY: 0
         onPressed: (event) => {
-                       const wasWorldLatched = xrView.worldGrabbed
+                       const wasWorldLatched = ws.worldGrabbed
                        /* Release grabbed object on any button press */
-                       if(xrView.release()) {
+                       if(ws.release()) {
                            if(wasWorldLatched) {
                                /* Latch release — if clicked a window, let it through */
-                               if(xrView.cursorHoverObject) {
+                               if(ws.cursorHoverObject) {
                                    event.accepted = false
                                }
                                return;
                            }
                             /* Nedd to send key press further for kwin to release thw window */
-                           if(xrView.currentMovingResizingWindow) {
+                           if(ws.currentMovingResizingWindow) {
                                event.accepted = false
                            }
                            return;
                        }
 
                        if(event.modifiers & Qt.MetaModifier) {
-                           desktopGrabbed = xrView.grabDesktop()
+                           desktopGrabbed = ws.grabDesktop()
                            if(desktopGrabbed) {
                                return;
                            }
                        }
 
-                       if(!xrView.cursorHoverObject) {
+                       if(!ws.cursorHoverObject) {
                            if(event.button === Qt.LeftButton) {
                                /* Begin grab immediately; release decides drag vs latch */
                                worldGrabbing = true
                                worldPressX = event.x
                                worldPressY = event.y
-                               xrView.grab(true)
+                               ws.grab(true)
                                return;
                            }
                            if(event.button === Qt.RightButton) {
-                               if(xrView.radialMenuActivate(true)) {
+                               if(ws.radialMenuActivate(true)) {
                                    return;
                                }
                            }
@@ -117,7 +115,7 @@ Item {
                    }
         onReleased: (event) => {
                         if(desktopGrabbed) {
-                            xrView.grab(false)
+                            ws.grab(false)
                             desktopGrabbed = false
                             return;
                         }
@@ -125,14 +123,14 @@ Item {
                         if(worldGrabbing) {
                             const moved = (event.x !== worldPressX) || (event.y !== worldPressY)
                             if(moved) {
-                                xrView.release()
+                                ws.release()
                             }
                             worldGrabbing = false
                             return;
                         }
 
-                        if(event.button === Qt.RightButton && !xrView.cursorHoverObject) {
-                            if(xrView.radialMenuActivate(false)) {
+                        if(event.button === Qt.RightButton && !ws.cursorHoverObject) {
+                            if(ws.radialMenuActivate(false)) {
                                 return;
                             }
                         }
@@ -144,11 +142,11 @@ Item {
                      const direction = dy > 0 ? 1.0 : -1.0
                      const step = direction * KWinVRConfig.grabResizeSensitivity
                      if (event.modifiers & Qt.ShiftModifier) {
-                         xrView.resizeGrabbed(step, 0)
+                         ws.resizeGrabbed(step, 0)
                      } else if (event.modifiers & Qt.ControlModifier) {
-                         xrView.resizeGrabbed(0, step)
+                         ws.resizeGrabbed(0, step)
                      } else {
-                         xrView.scrollGrab(dy)
+                         ws.scrollGrab(dy)
                      }
                  }
     }
@@ -158,6 +156,10 @@ Item {
         kwinInput: kwinInput
         kwinInputFilter: kwinInputFIlter
     }
+
+    /* The renderer-agnostic workspace — all interaction goes through this,
+       never through the scene root, so flat/XR scene roots stay swappable. */
+    readonly property VrWorkspaceScene ws: xrView.workspace
 
     // Pinch-to-resize: track cumulative scale and apply per-update deltas
     QtObject {
@@ -173,7 +175,7 @@ Item {
             // scale is cumulative from gesture start; compute incremental ratio
             if (pinchState.lastScale > 0.001) {
                 const ratio = scale / pinchState.lastScale
-                xrView.pinchResizeGrabbed(ratio)
+                ws.pinchResizeGrabbed(ratio)
             }
             pinchState.lastScale = scale
         }
@@ -181,14 +183,14 @@ Item {
 
     Connections {
         target: KWinVrShortcuts
-        function onRealignWindowTriggered() { xrView.realignItem() }
-        function onGrabWindowTriggered() { xrView.grab(false) }
-        function onGrabAllWindowsTriggered() { xrView.grab(true) }
-        function onToggleHudTriggered() { xrView.hudEnabled = !xrView.hudEnabled }
-        function onTestAction1Triggered() { xrView.test1 = !xrView.test1 }
-        function onTestAction2Triggered() { xrView.die() }
-        function onToggleRayTriggered() { xrView.rayEnabled = !xrView.rayEnabled }
-        function onToggleCursorTriggered() { xrView.cursorEnabled = !xrView.cursorEnabled }
-        function onResetViewTriggered() { xrView.resetView() }
+        function onRealignWindowTriggered() { ws.realignItem() }
+        function onGrabWindowTriggered() { ws.grab(false) }
+        function onGrabAllWindowsTriggered() { ws.grab(true) }
+        function onToggleHudTriggered() { ws.hudEnabled = !ws.hudEnabled }
+        function onTestAction1Triggered() { ws.test1 = !ws.test1 }
+        function onTestAction2Triggered() { ws.die() }
+        function onToggleRayTriggered() { ws.rayEnabled = !ws.rayEnabled }
+        function onToggleCursorTriggered() { ws.cursorEnabled = !ws.cursorEnabled }
+        function onResetViewTriggered() { ws.resetView() }
     }
 }

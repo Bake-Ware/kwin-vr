@@ -7,7 +7,6 @@
 import QtQuick
 import QtQuick3D
 import QtQuick3D.Helpers
-import QtQuick3D.Xr
 
 import org.kde.kwin as KWinC
 import org.kde.kwin.vr
@@ -19,7 +18,8 @@ QtObject {
     required property KwinVrInputFilter kwinInputFilter
     required property VrHeadScroll headScroll
     required property Xray xray
-    required property XrView xrView
+    // Anything with rayPickAll(pos, dir): XrView or View3D (renderer seam)
+    required property QtObject xrView
     required property Node cursor3d
 
     // == Sub-components ==
