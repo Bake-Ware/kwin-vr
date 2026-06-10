@@ -5,7 +5,6 @@
 */
 
 import QtQuick3D
-import QtQuick3D.Xr
 import QtQuick3D.Helpers
 import QtQuick
 
@@ -29,7 +28,9 @@ Model {
     property color currentColor: grabbedObject ? grabbedColor : idleColor
 
     property VrRay vrRay: null
-    required property XrCamera camera
+    // Duck-typed: XrCamera in XR mode, PerspectiveCamera in flat mode —
+    // only Node-level APIs are used (scenePosition, mapPositionFromScene, sceneRotation).
+    required property Node camera
 
     property Node grabbedObject: null
     property relativePose grabbedObjectPose
