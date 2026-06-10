@@ -68,3 +68,12 @@ target_link_libraries(testVrConfig
     KF6::ConfigGui
 )
 add_test(NAME kwinvr-testConfig COMMAND testVrConfig)
+
+# --- flat-mode boot smoke (M2 renderer seam) ---
+# Boots real kwin_wayland --virtual with displayMode=Flat, flips vrActive
+# over DBus, asserts zero QML load/type errors. Pins the seam against
+# runtime-only QML failures (e.g. XrCamera-typed properties in shared scene
+# files). Spawns its own private dbus session; ~15-40s.
+add_test(NAME kwinvr-testFlatBoot
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/flatboot-smoke.sh ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(kwinvr-testFlatBoot PROPERTIES TIMEOUT 120)
