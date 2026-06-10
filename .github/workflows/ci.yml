@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# A push superseding an in-flight run on the same ref cancels it — these runs
+# take ~45 min and stack up fast during iteration. Never cancel main runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
