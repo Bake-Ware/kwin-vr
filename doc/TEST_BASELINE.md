@@ -45,6 +45,12 @@ these green.
 `kwin-testDesktopSwitchingAnimation`, `kwin-testMinimizeAnimation`,
 `kwin-testDontCrashReinitializeCompositor`
 
+**CI-container only:** `kwin-testDontCrashGlxgears` and
+`kwin-testDebugConsole` pass locally but `glxgears.waitForStarted()`
+fails instantly in the Actions container even with mesa-demos installed
+(exec-time failure, not missing window). The workflow's "Environment
+diagnostics" step records `which glxgears` per run for triage.
+
 ## Class 3 — Environment: missing device/service in this run
 
 | Test | Needs |

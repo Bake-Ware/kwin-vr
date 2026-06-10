@@ -36,6 +36,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Environment diagnostics
+        run: |
+          # Breadcrumbs for quarantine triage (doc/TEST_BASELINE.md):
+          # glxgears exec fails in this container despite mesa-demos.
+          which glxgears || echo "glxgears NOT on PATH"
+          ls -la /usr/bin/glxgears 2>/dev/null || true
+          echo "PATH=$PATH"
+
       - name: XR import fence
         run: bash ci/check-xr-imports.sh
 

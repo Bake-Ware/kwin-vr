@@ -19,3 +19,5 @@ kwin-testSlidingPopups
 kwin-testToplevelOpenCloseAnimation
 kwin-testDesktopSwitchingAnimation
 kwin-testMinimizeAnimation
+kwin-testDontCrashGlxgears
+kwin-testDebugConsole
