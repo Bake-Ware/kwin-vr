@@ -361,6 +361,10 @@
       <label>Output names to automatically lease on startup</label>
       <default></default>
     </entry>
+    <entry name="autoLeaseMinWidth" type="Int">
+      <label>Minimum mode width (px) treated as SBS for auto-lease; 0 disables the check</label>
+      <default>3840</default>
+    </entry>
     <entry name="autostartVr" type="Bool">
       <label>Automatically start VR mode after auto-leased outputs are leased</label>
       <default>false</default>

@@ -34,6 +34,8 @@ private Q_SLOTS:
         QCOMPARE(config.distance(), 100);
         QCOMPARE(config.hudEnabled(), false);
         QCOMPARE(config.followEnabled(), true);
+        // SBS auto-lease gate: 3840 = double-wide 1080p; 0 disables the check
+        QCOMPARE(config.autoLeaseMinWidth(), 3840);
     }
 
     void defaultValueGettersAgreeWithDefaults()

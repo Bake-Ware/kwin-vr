@@ -533,11 +533,14 @@ void KwinVr::tryAutoLease()
             if (output->name() == name
                 && (output->capabilities() & BackendOutput::Capability::Leasing)
                 && !output->isNonDesktop()) {
-                // Only auto-lease when the display is in SBS mode (double-wide resolution)
+                // Only auto-lease when the display is in SBS mode (double-wide
+                // resolution). The threshold is configurable; 0 disables the check.
+                const int minWidth = config->autoLeaseMinWidth();
                 const int width = output->modeSize().width();
-                if (width < 3840) {
+                if (minWidth > 0 && width < minWidth) {
                     qCDebug(KWINVR) << "Auto-lease: skipping" << name
-                                    << "- not in SBS mode (width=" << width << ")";
+                                    << "- not in SBS mode (width=" << width
+                                    << "< autoLeaseMinWidth=" << minWidth << ")";
                     break;
                 }
                 anyConfigured = true;
