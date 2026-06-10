@@ -1,3 +1,2 @@
 # Unit tests excluded from the required CI set (one name per line).
 # Every entry must have a class + note in doc/TEST_BASELINE.md.
-kwin-testMockDrm
