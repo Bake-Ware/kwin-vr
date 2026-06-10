@@ -83,6 +83,7 @@ qt6_add_qml_module(vr
         qml/VrBarrierConstraint.qml
         qml/KwinPseudoOutputMirror.qml
         qml/WindowSnapManager.qml
+        qml/WindowSnapLogic.js
         qml/VrHudPlane.qml
         qml/VrHudWindow.qml
         qml/Logger.qml

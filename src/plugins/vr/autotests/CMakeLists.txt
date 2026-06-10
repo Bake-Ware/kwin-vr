@@ -7,6 +7,7 @@
 
 find_package(Qt6 REQUIRED COMPONENTS
     Test
+    QuickTest
     Qml
     Gui GuiPrivate
     Quick QuickPrivate
@@ -68,6 +69,14 @@ target_link_libraries(testVrConfig
     KF6::ConfigGui
 )
 add_test(NAME kwinvr-testConfig COMMAND testVrConfig)
+
+# --- dock+stack pair classification (pure WindowSnapLogic.js via qmltest) ---
+add_executable(testVrSnapLogic testsnaplogic.cpp)
+target_compile_definitions(testVrSnapLogic
+    PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+target_link_libraries(testVrSnapLogic Qt::QuickTest)
+add_test(NAME kwinvr-testSnapLogic
+    COMMAND testVrSnapLogic -platform offscreen -input ${CMAKE_CURRENT_SOURCE_DIR}/qml)
 
 # --- flat-mode boot smoke (M2 renderer seam) ---
 # Boots real kwin_wayland --virtual with displayMode=Flat, flips vrActive

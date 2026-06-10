@@ -19,9 +19,13 @@ import QtQuick3D
 
 import org.kde.kwin.vr
 
+import "WindowSnapLogic.js" as SnapLogic
+
 QtObject {
     id: root
 
+    // Values mirror WindowSnapLogic.js Action* constants (pure logic +
+    // qmltest live there; this enum is the QML-facing name).
     enum Action { None, SnapLeft, SnapRight, SnapAbove, SnapBelow, Stack }
 
     required property Xray xray
@@ -205,39 +209,15 @@ QtObject {
         }
         const tg = target.client.frameGeometry
         const dg = dragged.client.frameGeometry
-        const tw = tg.width / target.ppu, th = tg.height / target.ppu
-        const dw = dg.width / dragged.ppu, dh = dg.height / dragged.ppu
         // Use zSurfaceMarginTop for both plane lift and stack cascade step
         // — keeps offsets small and consistent with surface separation unit.
-        const step = KWinVRConfig.zSurfaceMarginTop
-
-        let off = Qt.vector3d(0, 0, 0)
-        let landW = 0, landH = 0
-        switch (action) {
-        case WindowSnapManager.Action.Stack:
-            const k = Math.max(stackIdx || 1, 1)
-            // Cascade right + down + forward.
-            off = Qt.vector3d(step * k, -step * k, step * k)
-            landW = tw; landH = th
-            break
-        case WindowSnapManager.Action.SnapRight:
-            off = Qt.vector3d(tw / 2 + dw / 2, 0, 0)
-            landW = dw; landH = th
-            break
-        case WindowSnapManager.Action.SnapLeft:
-            off = Qt.vector3d(-(tw / 2 + dw / 2), 0, 0)
-            landW = dw; landH = th
-            break
-        case WindowSnapManager.Action.SnapAbove:
-            off = Qt.vector3d(0, th / 2 + dh / 2, 0)
-            landW = tw; landH = dh
-            break
-        case WindowSnapManager.Action.SnapBelow:
-            off = Qt.vector3d(0, -(th / 2 + dh / 2), 0)
-            landW = tw; landH = dh
-            break
-        }
-        return { offset: off, size: Qt.size(landW, landH), landW: landW, landH: landH }
+        // Math lives in WindowSnapLogic.js (pure, qmltest-pinned).
+        const r = SnapLogic.landingPose(
+            tg.width / target.ppu, tg.height / target.ppu,
+            dg.width / dragged.ppu, dg.height / dragged.ppu,
+            KWinVRConfig.zSurfaceMarginTop, action, stackIdx)
+        return { offset: Qt.vector3d(r.x, r.y, r.z), size: Qt.size(r.landW, r.landH),
+                 landW: r.landW, landH: r.landH }
     }
 
     function _computeLanding() {
@@ -273,13 +253,9 @@ QtObject {
     }
 
     // UV → snap action. UV here has y=0 at BOTTOM (texture convention here).
+    // Decision table in WindowSnapLogic.js (pure, qmltest-pinned).
     function _actionFromUv(u, v) {
-        const e = root.edgeBand
-        if (u < e)        return WindowSnapManager.Action.SnapLeft
-        if (u > 1 - e)    return WindowSnapManager.Action.SnapRight
-        if (v < e)        return WindowSnapManager.Action.SnapBelow
-        if (v > 1 - e)    return WindowSnapManager.Action.SnapAbove
-        return WindowSnapManager.Action.Stack
+        return SnapLogic.actionFromUv(u, v, root.edgeBand)
     }
 
     function _scan() {
