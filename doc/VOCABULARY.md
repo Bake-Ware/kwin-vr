@@ -797,9 +797,9 @@ Unverified where the key sequence's out-of-box availability matters.
 - Status: Working
 
 ### VOC-LIFECYCLE-060: Auto-lease configured outputs (SBS gate)
-**Given** `autoLeaseOutputs` non-empty **When** outputs are (re)enumerated, once per session **Then** each named output that supports leasing, is not non-desktop, **and is in SBS mode (mode width ≥ 3840)** is marked leasable; outputs not in SBS mode are skipped. After committing, leases are refreshed (VOC-LIFECYCLE-080).
+**Given** `autoLeaseOutputs` non-empty **When** outputs are (re)enumerated, once per session **Then** each named output that supports leasing, is not non-desktop, **and is in SBS mode (mode width ≥ `autoLeaseMinWidth`)** is marked leasable; outputs not in SBS mode are skipped (`autoLeaseMinWidth=0` disables the SBS check entirely). After committing, leases are refreshed (VOC-LIFECYCLE-080).
 - Input source(s): automatic (output hotplug)
-- Config keys: `autoLeaseOutputs ()`
+- Config keys: `autoLeaseOutputs ()`, `autoLeaseMinWidth (3840)`
 - Code: src/plugins/vr/kwinvr.cpp:437-494
 - Status: Working
 
