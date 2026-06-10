@@ -29,6 +29,7 @@
 #include <QLibrary>
 #include <QProcess>
 #include <QQmlApplicationEngine>
+#include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -448,6 +449,37 @@ void KwinVr::refreshLeases()
             Workspace::self()->applyOutputConfiguration(onConfig);
         }
     }
+}
+
+bool KwinVr::captureWorkspaceFrame(const QString &filePath)
+{
+    // Grabs the rendered workspace to an image file. Used by the golden-image
+    // regression tests (M2): a frame that fails to grab, or grabs all-black,
+    // means the scene never rendered — the black-screen regression class.
+    // Flat mode only for now: Main.qml's root is a windowless Item, while
+    // MainFlat.qml's root is a QQuickWindow we can grab.
+    if (!m_engine) {
+        qCWarning(KWINVR) << "captureWorkspaceFrame: no QML engine (VR not active?)";
+        return false;
+    }
+    const auto roots = m_engine->rootObjects();
+    for (QObject *root : roots) {
+        if (auto *window = qobject_cast<QQuickWindow *>(root)) {
+            const QImage frame = window->grabWindow();
+            if (frame.isNull()) {
+                qCWarning(KWINVR) << "captureWorkspaceFrame: grabWindow returned null";
+                return false;
+            }
+            if (!frame.save(filePath)) {
+                qCWarning(KWINVR) << "captureWorkspaceFrame: failed to save" << filePath;
+                return false;
+            }
+            qCDebug(KWINVR) << "captureWorkspaceFrame: saved" << frame.size() << "to" << filePath;
+            return true;
+        }
+    }
+    qCWarning(KWINVR) << "captureWorkspaceFrame: no QQuickWindow root (XR mode is windowless)";
+    return false;
 }
 
 void KwinVr::tryAutoLease()

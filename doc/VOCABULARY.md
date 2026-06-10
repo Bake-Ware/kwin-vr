@@ -998,7 +998,7 @@ Unverified where the key sequence's out-of-box availability matters.
 | VOC-OUTPUT-040 | Working | none — smoke only |
 | VOC-OUTPUT-050 | Working | none — smoke only |
 | VOC-FLAT-010 | Working | **kwinvr-testFlatBoot** (headless boot, vrActive, 0 QML errors) |
-| VOC-FLAT-020 | Working | kwinvr-testFlatBoot (load-level) — golden image pending |
+| VOC-FLAT-020 | Working | kwinvr-testFlatBoot (renders non-black frame at real geometry) — golden diff pending |
 | VOC-FLAT-030 | Working | none — input replay pending |
 | VOC-FLAT-040 | Implemented | none — input replay pending |
 | VOC-FLAT-050 | Working | none — smoke only |

@@ -20,6 +20,10 @@ Window {
     id: flatWindow
     visible: true
     visibility: Window.FullScreen
+    /* KWin's internal QPA doesn't size windows from FullScreen visibility
+       alone — without explicit geometry the window stays 1x1. */
+    width: Screen.width
+    height: Screen.height
     color: "black"
     title: "kwin-vr flat workspace"
 
