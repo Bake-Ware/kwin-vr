@@ -30,7 +30,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)"
-          sudo modprobe vgem
+          # Ground truth on what DRM drivers the azure kernel actually ships
+          # (vgem was missing on 6.17.0-1015-azure — find a substitute).
+          uname -r
+          find "/lib/modules/$(uname -r)" -path '*drivers/gpu*' -o -name 'vgem*' -o -name 'vkms*' | sort
+          sudo modprobe vgem || sudo modprobe vkms
           # Hard requirement: no node means render asserts silently degrade.
           ls -la /dev/dri
           test -e /dev/dri/card0 || test -e /dev/dri/card1
