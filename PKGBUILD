@@ -30,6 +30,7 @@ optdepends=('plasma-keyboard: virtual keyboard')
 
 provides=(kwin=$pkgver)
 conflicts=(kwin)
+install=kwin.install
 
 # Build from the local source tree — no download needed
 source=()
@@ -47,6 +48,6 @@ build() {
 
 package() {
   DESTDIR="$pkgdir" cmake --install build
-  # KWin wayland needs CAP_SYS_NICE for realtime scheduling
-  setcap CAP_SYS_NICE=+ep "$pkgdir/usr/bin/kwin_wayland"
+  # CAP_SYS_NICE is applied in kwin.install (post_install/post_upgrade):
+  # setcap here would silently not survive fakeroot packaging.
 }
