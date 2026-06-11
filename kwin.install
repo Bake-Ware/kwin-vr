@@ -1,0 +1,11 @@
+post_install() {
+  # KWin wayland needs CAP_SYS_NICE for realtime scheduling.
+  # This cannot live in package(): file capabilities set under fakeroot
+  # are not preserved in the package, so they must be (re)applied on the
+  # live filesystem after every install/upgrade.
+  setcap CAP_SYS_NICE=+ep /usr/bin/kwin_wayland
+}
+
+post_upgrade() {
+  post_install
+}
