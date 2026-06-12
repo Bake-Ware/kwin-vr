@@ -6,6 +6,7 @@
 
 #include "kwinvr.h"
 
+#include "autoleasepolicy.h"
 #include "core/backendoutput.h"
 #include "core/outputbackend.h"
 #include "core/outputconfiguration.h"
@@ -57,6 +58,10 @@ KwinVr::KwinVr()
     // Auto-lease configured outputs once they become available
     connect(kwinApp()->outputBackend(), &OutputBackend::outputsQueried, this, &KwinVr::tryAutoLease);
     connect(kwinApp()->outputBackend(), &OutputBackend::outputLeaseStateChanged, this, &KwinVr::checkAutoStartVr);
+    // Auto-stop: a lease-backed VR session exits when its last lease is gone
+    // (glasses unplugged while in VR mode)
+    connect(kwinApp()->outputBackend(), &OutputBackend::outputsQueried, this, &KwinVr::checkAutoStopVr);
+    connect(kwinApp()->outputBackend(), &OutputBackend::outputLeaseStateChanged, this, &KwinVr::checkAutoStopVr);
     // Outputs may already be available if plugin loaded after initial enumeration
     QTimer::singleShot(0, this, &KwinVr::tryAutoLease);
 
@@ -252,11 +257,15 @@ void KwinVr::proceedWithVrActivation()
         workspace()->setPopupBoundsResolver(nullptr);
 
         m_active = false;
+        m_sawLeaseWhileActive = false;
         Q_EMIT vrActiveChanged();
     });
     // m_active will be set to false only when engine is deleted
     m_active = true;
     Q_EMIT vrActiveChanged();
+    // Seed the lease-backed marker: if a lease is already live at activation
+    // (the auto-start path), losing it later must exit VR mode.
+    checkAutoStopVr();
 
     if (!useFlatMode() && KWinVRConfigWrapper::instance()->xrTestEnabled()) {
         m_xrTest.start();
@@ -522,58 +531,68 @@ QString KwinVr::evalInWorkspace(const QString &expression)
     return undefined ? QStringLiteral("undefined") : result.toString();
 }
 
+static QList<AutoLeasePolicy::OutputSnapshot> snapshotOutputs()
+{
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    QList<AutoLeasePolicy::OutputSnapshot> snapshot;
+    snapshot.reserve(outputs.size());
+    for (BackendOutput *output : outputs) {
+        snapshot.append(AutoLeasePolicy::OutputSnapshot{
+            .name = output->name(),
+            .leasingCapable = bool(output->capabilities() & BackendOutput::Capability::Leasing),
+            .nonDesktop = output->isNonDesktop(),
+            .leasable = output->isLeasable(),
+            .leased = output->isLeased() || output->isLeasePending(),
+            .width = output->modeSize().width(),
+        });
+    }
+    return snapshot;
+}
+
 void KwinVr::tryAutoLease()
 {
-    if (m_autoLeaseTriggered || m_active) {
-        return;
-    }
-
     auto config = KWinVRConfigWrapper::instance();
     const QStringList autoOutputs = config->autoLeaseOutputs();
     if (autoOutputs.isEmpty()) {
         return;
     }
 
-    const auto outputs = kwinApp()->outputBackend()->outputs();
-    if (outputs.isEmpty()) {
+    const auto outputs = snapshotOutputs();
+
+    // The latch below is one-shot per *connection*, not per session: when
+    // every configured output has disappeared from the backend (glasses
+    // unplugged), re-arm so the next hotplug runs the full lease+autostart
+    // chain again instead of short-circuiting forever (#54).
+    if (m_autoLeaseTriggered && AutoLeasePolicy::shouldRearm(autoOutputs, outputs)) {
+        qCDebug(KWINVR) << "Auto-lease: configured outputs disconnected, re-arming for next hotplug";
+        m_autoLeaseTriggered = false;
+        m_autoStartPending = false;
+    }
+
+    if (m_autoLeaseTriggered || m_active) {
         return;
     }
 
-    bool anyConfigured = false;
+    // The width threshold gates on SBS mode; 0 disables the check.
+    const QStringList eligible = AutoLeasePolicy::eligibleOutputs(autoOutputs, outputs, config->autoLeaseMinWidth());
+    if (eligible.isEmpty()) {
+        qCDebug(KWINVR) << "Auto-lease: no outputs in SBS mode for:" << autoOutputs;
+        return;
+    }
 
-    for (const QString &name : autoOutputs) {
-        for (BackendOutput *output : outputs) {
-            if (output->name() == name
-                && (output->capabilities() & BackendOutput::Capability::Leasing)
-                && !output->isNonDesktop()) {
-                // Only auto-lease when the display is in SBS mode (double-wide
-                // resolution). The threshold is configurable; 0 disables the check.
-                const int minWidth = config->autoLeaseMinWidth();
-                const int width = output->modeSize().width();
-                if (minWidth > 0 && width < minWidth) {
-                    qCDebug(KWINVR) << "Auto-lease: skipping" << name
-                                    << "- not in SBS mode (width=" << width
-                                    << "< autoLeaseMinWidth=" << minWidth << ")";
-                    break;
-                }
-                anyConfigured = true;
-                if (!output->isLeasable()) {
-                    setOutputLeasable(name, true);
-                }
+    for (const QString &name : eligible) {
+        for (const AutoLeasePolicy::OutputSnapshot &output : outputs) {
+            if (output.name == name && !output.leasable) {
+                setOutputLeasable(name, true);
                 break;
             }
         }
     }
 
-    if (!anyConfigured) {
-        qCDebug(KWINVR) << "Auto-lease: no outputs in SBS mode for:" << autoOutputs;
-        return;
-    }
-
     // Only set the flag once we've actually committed to leasing
     m_autoLeaseTriggered = true;
 
-    qCDebug(KWINVR) << "Auto-lease: leasing configured outputs:" << autoOutputs;
+    qCDebug(KWINVR) << "Auto-lease: leasing configured outputs:" << eligible;
 
     if (config->autostartVr()) {
         m_autoStartPending = true;
@@ -601,13 +620,45 @@ void KwinVr::checkAutoStartVr()
                 m_autoStartPending = false;
                 // Give KWin time to finish output reconfiguration after lease grant
                 QTimer::singleShot(3000, this, [this] {
-                    if (!m_active) {
-                        setVrActive(true);
+                    if (m_active) {
+                        return;
                     }
+                    // The glasses may have been unplugged during the settle
+                    // delay — never start VR against a lease that is gone.
+                    if (!AutoLeasePolicy::anyLeased(snapshotOutputs())) {
+                        qCDebug(KWINVR) << "Auto-start: lease vanished during settle delay, aborting";
+                        return;
+                    }
+                    setVrActive(true);
                 });
                 return;
             }
         }
+    }
+}
+
+void KwinVr::checkAutoStopVr()
+{
+    using AutoLeasePolicy::AutoStopAction;
+    switch (AutoLeasePolicy::autoStopAction(m_active, m_sawLeaseWhileActive, snapshotOutputs())) {
+    case AutoStopAction::RememberLease:
+        // This session is lease-backed: only such sessions auto-exit on lease
+        // loss, so a manually activated flat/no-lease session is never killed.
+        m_sawLeaseWhileActive = true;
+        break;
+    case AutoStopAction::Stop: // #55: glasses unplugged while in VR mode
+        qCInfo(KWINVR) << "Auto-stop: no leased outputs remain, exiting VR mode";
+        m_sawLeaseWhileActive = false;
+        // Defer out of the signal handler — stop() tears down the QML engine
+        // and touches output state.
+        QTimer::singleShot(0, this, [this] {
+            if (m_active) {
+                setVrActive(false);
+            }
+        });
+        break;
+    case AutoStopAction::None:
+        break;
     }
 }
 

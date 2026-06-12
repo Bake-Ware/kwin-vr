@@ -113,6 +113,7 @@ qt6_add_qml_module(vr
         geometrytypes.h
         zstacker.h zstacker.cpp
         spaceallocator3d.h spaceallocator3d.cpp
+        autoleasepolicy.h autoleasepolicy.cpp
         kwinvrbridge.h kwinvrbridge.cpp
         openxrtest.h openxrtest.cpp
         kwinvrinputdevice.h kwinvrinputdevice.cpp

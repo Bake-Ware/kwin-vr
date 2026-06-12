@@ -61,11 +61,13 @@ private:
     void proceedWithVrActivation();
     void tryAutoLease();
     void checkAutoStartVr();
+    void checkAutoStopVr();
 
     bool m_active = false;
     bool m_waitingForMonado = false;
     bool m_autoLeaseTriggered = false;
     bool m_autoStartPending = false;
+    bool m_sawLeaseWhileActive = false;
     QQmlApplicationEngine *m_engine = nullptr;
     OpenXRTest m_xrTest;
     KConfigWatcher::Ptr m_watcher;

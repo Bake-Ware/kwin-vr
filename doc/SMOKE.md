@@ -12,7 +12,8 @@ session unless an item says otherwise.
 ## 1. Lifecycle (≈2 min)
 - [ ] S1 — Glasses plugged in pre-login: session reaches the 3D workspace without manual DBus calls (VOC-LIFECYCLE: auto-lease + autostart)
 - [ ] S2 — `qdbus org.kde.kwinvr` exit/re-enter VR twice: no freeze, no black screen, windows return to their layout
-- [ ] S3 — Hot-unplug glasses while VR active: compositor survives, desktop usable on remaining outputs
+- [ ] S3 — Hot-unplug glasses while VR active: compositor survives, desktop usable on remaining outputs, **VR mode auto-exits** (lease-backed sessions only — manual flat-mode VR must NOT exit on output churn)
+- [ ] S3b — Replug glasses after S3 (and again after a clean exit): auto-lease + autostart run again — Monado restarts, lease lands, VR re-enters without any DBus/manual step. Repeat twice; the latch must re-arm every cycle
 
 ## 2. Gaze + cursor (≈1 min)
 - [ ] S4 — Head movement steers the cursor; small offsets via mouse work (VOC-GAZE: pointer offset)
