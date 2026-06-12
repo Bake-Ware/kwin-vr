@@ -5,8 +5,9 @@ Arch (CachyOS) host, Qt 6.11.1, `QT_QPA_PLATFORM=offscreen`, `dbus-run-session`,
 run as root alongside a live Plasma session (which matters — see classes below).
 
 **Headline: 142/161 green** (67/68 unit, 75/93 integration) on a fork whose tests
-had never been built. The 19 failures triage into four classes; none is a confirmed
-VR regression so far, but the DRM trio is a real suspect until proven otherwise.
+had never been built. The 19 failures triage into four classes; **none is a
+VR regression** — the last suspect (the DRM trio) was cleared by A/B on idle
+hardware 2026-06-12 (see Class 4).
 
 CI policy: unit set (`ci/run-unit-tests.sh`) + non-quarantined integration set
 (`ci/run-integration-tests.sh`) are **required**. The quarantine list is
@@ -60,16 +61,34 @@ diagnostics" step records `which glxgears` per run for triage.
 | `kwin-testInputMethod` | input-method service |
 | `kwin-testFifo` | timing-sensitive (24Hz frame pacing spies) — likely flaky under load |
 
-## Class 4 — Reproducible failure, VR-patch suspect ⚠
+## Class 4 — ~~VR-patch suspect~~ RESOLVED: not a VR regression (2026-06-12)
 
-| Test | Failure | Why suspect |
+| Test | Original failure | Verdict |
 |---|---|---|
-| `kwin-testDrm`, `kwin-testDrmLegacy`, `kwin-testDrmNoModifiers` | `initTestCase` fails at `QCOMPARE(workspace()->applyOutputConfiguration(cfg), OutputConfigurationError::None)` (drm_test.cpp:347), reproducible in direct rerun | `applyOutputConfiguration` / output-config path is exactly where the VR leasable-output core patches live (`doc/CORE_PATCHES.md`). BUT: these tests open real `/dev/dri` while a live session holds DRM master, which can also explain the failure. |
+| `kwin-testDrm`, `kwin-testDrmLegacy`, `kwin-testDrmNoModifiers` | `initTestCase` fails at `applyOutputConfiguration` (drm_test.cpp:347) | **Not VR.** Substrate-sensitive upstream tests; see evidence below. Remain quarantined as environment-dependent. |
 
-**Action (ticketed):** rerun the DRM trio on an idle machine or with the vkms
-kernel module and no live session. If they still fail, bisect against
-`upstream/6.6.3_vr` — that distinguishes "VR patch broke output config" from
-"can't modeset under a live session".
+**Verification run (idle ThinkPad i5-6200U/HD 520, no session, root + `CI=true`
+noop session, 2026-06-12):**
+
+- The original :347 failure (`OutputConfigurationError::Unknown`) was DRM-master
+  acquisition: without a seat session (or with any live compositor holding the
+  node) every atomic commit gets EACCES. With a true idle device it disappears.
+- `testDrmLegacy`: **full pass** on both i915 and vkms.
+- `testDrm` on i915: new failure — after disabling the 2nd output its connector
+  still reports a CRTC (drm_test.cpp:356). **Identical failure with all VR DRM
+  backend patches reverted** (A/B with a reverted `libkwin.so` on the same
+  hardware) — that is the exonerating data point.
+- `testDrm` on vkms (same machine): fails the *opposite* assert — the enabled
+  output has *no* CRTC. `testDrmNoModifiers` on vkms gets through 8/11 and fails
+  only direct-scanout scaling baselines. The failure set is different on every
+  substrate; upstream CI green presumably depends on their exact vkms/kernel.
+
+**Gotchas for anyone re-running this:**
+- The test framework only uses the noop session when `CI=true` is set; without
+  it, a logind session without a seat can't get DRM master (EACCES everywhere).
+- A live KWin session (even on another GPU) hotplug-grabs a freshly loaded vkms
+  device and holds master — vkms is only uncontended on a machine with no
+  compositor running at all.
 
 ## Class 5 — Intermittent CI-container flake
 
