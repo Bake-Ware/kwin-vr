@@ -30,6 +30,20 @@ target_link_libraries(testVrSpaceAllocator3D
 )
 add_test(NAME kwinvr-testSpaceAllocator3D COMMAND testVrSpaceAllocator3D)
 
+# --- auto-lease/auto-start/auto-stop policy (replug lifecycle) ---
+# Pure decision logic, no kwin link: pins the latch re-arm after unplug and
+# the lease-backed auto-stop gating that need a physical hotplug to exercise
+# end-to-end.
+add_executable(testVrAutoLeasePolicy
+    testautoleasepolicy.cpp
+    ../autoleasepolicy.cpp
+)
+target_include_directories(testVrAutoLeasePolicy PRIVATE ..)
+target_link_libraries(testVrAutoLeasePolicy
+    Qt::Test
+)
+add_test(NAME kwinvr-testAutoLeasePolicy COMMAND testVrAutoLeasePolicy)
+
 # --- helper math + key bindings (compiles the real kwinvrhelpers.cpp) ---
 add_executable(testVrHelpers
     testvrhelpers.cpp
