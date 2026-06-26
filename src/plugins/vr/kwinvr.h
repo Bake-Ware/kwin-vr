@@ -57,14 +57,14 @@ private:
 
     void registerDBusService();
     bool initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString *errorMessage) const;
-    void ensureMonadoRunning();
+    void ensureRuntimeRunning();
     void proceedWithVrActivation();
     void tryAutoLease();
     void checkAutoStartVr();
     void checkAutoStopVr();
 
     bool m_active = false;
-    bool m_waitingForMonado = false;
+    bool m_waitingForRuntime = false;
     bool m_autoLeaseTriggered = false;
     bool m_autoStartPending = false;
     bool m_sawLeaseWhileActive = false;
