@@ -173,17 +173,29 @@ bool KwinVr::initOpenXRLoaderWithRuntime(const QString &runtimeJsonPath, QString
     return true;
 }
 
-void KwinVr::ensureMonadoRunning()
+void KwinVr::ensureRuntimeRunning()
 {
-    // Check if the OpenXR runtime's IPC socket is live.
-    // For Monado, this is monado_comp_ipc in XDG_RUNTIME_DIR. A connect-test,
-    // not an existence check: a crashed Monado leaves the socket file behind,
-    // and proceeding against a stale socket fails deep in XR init (#23
-    // custodian lesson). The stale file is NOT removed — under systemd socket
-    // activation the connect itself starts the service, and deleting a
-    // socket-activated path breaks activation.
+    // Check if the OpenXR runtime's compositor IPC socket is live, and start
+    // the runtime's systemd user service if not. Which socket and which
+    // service depend on the configured runtime (openXrRuntimeJson):
+    //   - Monado: $XDG_RUNTIME_DIR/monado_comp_ipc  -> monado.service
+    //   - WiVRn:  $XDG_RUNTIME_DIR/wivrn/comp_ipc    -> wivrn.service
+    // This is a connect-test, not an existence check: a crashed runtime leaves
+    // the socket file behind, and proceeding against a stale socket fails deep
+    // in XR init (#23 custodian lesson). The stale file is NOT removed — under
+    // systemd socket activation the connect itself starts the service, and
+    // deleting a socket-activated path breaks activation.
     const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    const QString ipcSocket = runtimeDir + QStringLiteral("/monado_comp_ipc");
+
+    // WiVRn ships its runtime JSON as openxr_wivrn.json (and its library under
+    // .../lib/wivrn/...), so a case-insensitive "wivrn" match on the configured
+    // path reliably distinguishes it from Monado.
+    const QString runtimeJson = KWinVRConfigWrapper::instance()->openXrRuntimeJson().trimmed();
+    const bool isWivrn = runtimeJson.contains(QLatin1String("wivrn"), Qt::CaseInsensitive);
+
+    const QString ipcSocket = runtimeDir
+        + (isWivrn ? QStringLiteral("/wivrn/comp_ipc") : QStringLiteral("/monado_comp_ipc"));
+    const QString runtimeService = isWivrn ? QStringLiteral("wivrn.service") : QStringLiteral("monado.service");
 
     if (KwinVrHelpers::isUnixSocketAlive(ipcSocket)) {
         qCDebug(KWINVR) << "OpenXR runtime IPC socket is live:" << ipcSocket;
@@ -191,7 +203,7 @@ void KwinVr::ensureMonadoRunning()
         return;
     }
 
-    if (m_waitingForMonado) {
+    if (m_waitingForRuntime) {
         return; // Already waiting
     }
 
@@ -199,15 +211,15 @@ void KwinVr::ensureMonadoRunning()
         qCWarning(KWINVR) << "Stale OpenXR runtime IPC socket (exists but refuses connections):" << ipcSocket;
     }
 
-    qCDebug(KWINVR) << "OpenXR runtime not running, starting monado.service...";
+    qCDebug(KWINVR) << "OpenXR runtime not running, starting" << runtimeService;
 
     // Start the runtime via systemd user service (non-blocking)
     QProcess::startDetached(QStringLiteral("systemctl"),
-                            {QStringLiteral("--user"), QStringLiteral("start"), QStringLiteral("monado.service")});
+                            {QStringLiteral("--user"), QStringLiteral("start"), runtimeService});
 
     // Poll for the IPC socket to come alive (liveness, not existence —
     // a stale file must not satisfy the wait)
-    m_waitingForMonado = true;
+    m_waitingForRuntime = true;
     auto *timer = new QTimer(this);
     int *attempts = new int(0);
     connect(timer, &QTimer::timeout, this, [this, timer, attempts, ipcSocket]() {
@@ -217,7 +229,7 @@ void KwinVr::ensureMonadoRunning()
             timer->stop();
             timer->deleteLater();
             delete attempts;
-            m_waitingForMonado = false;
+            m_waitingForRuntime = false;
             proceedWithVrActivation();
         } else if (*attempts >= 30) { // 15 seconds timeout
             qCWarning(KWINVR) << "Timed out waiting for OpenXR runtime"
@@ -227,7 +239,7 @@ void KwinVr::ensureMonadoRunning()
             timer->stop();
             timer->deleteLater();
             delete attempts;
-            m_waitingForMonado = false;
+            m_waitingForRuntime = false;
             showNotification(i18n("Failed to Activate VR mode"),
                              i18n("OpenXR runtime did not start in time"),
                              KNotification::CloseOnTimeout);
@@ -314,7 +326,7 @@ void KwinVr::setVrActive(bool active)
         // Ensure the OpenXR runtime is running before proceeding.
         // This avoids deadlocks from socket-activated startup where
         // Monado's Wayland roundtrip blocks on KWin while KWin blocks on Monado's IPC.
-        ensureMonadoRunning();
+        ensureRuntimeRunning();
     } else {
         stop();
         closeNotification();
