@@ -1,9 +1,13 @@
+# NOTE: We intentionally do NOT setcap CAP_SYS_NICE on kwin_wayland.
+# A file capability makes glibc run the process in secure-execution mode
+# (AT_SECURE=1), which makes the OpenXR loader ignore XR_RUNTIME_JSON and
+# XDG runtime discovery — so xrCreateInstance fails with "no OpenXR runtime
+# found" and VR mode cannot start with ANY runtime (Monado or WiVRn).
+# For a VR compositor that trade-off is unacceptable; we forgo the realtime
+# scheduling boost so VR can load its runtime. (A future option is to grant
+# CAP_SYS_NICE via systemd ambient capabilities, which does not set AT_SECURE.)
 post_install() {
-  # KWin wayland needs CAP_SYS_NICE for realtime scheduling.
-  # This cannot live in package(): file capabilities set under fakeroot
-  # are not preserved in the package, so they must be (re)applied on the
-  # live filesystem after every install/upgrade.
-  setcap CAP_SYS_NICE=+ep /usr/bin/kwin_wayland
+  :
 }
 
 post_upgrade() {
