@@ -153,6 +153,7 @@ private:
     QList<std::shared_ptr<DrmConnectorMode>> m_modes;
     uint32_t m_possibleCrtcs = 0;
     QByteArray m_mstPath;
+    bool m_forcedNonDesktop = false;
 
     friend QDebug &operator<<(QDebug &s, const KWin::DrmConnector *obj);
 };

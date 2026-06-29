@@ -16,6 +16,8 @@
 #include "drm_pipeline.h"
 #include "drm_pointer.h"
 
+#include <QStringList>
+
 #include <cerrno>
 #include <cstring>
 #include <libxcvt/libxcvt.h>
@@ -169,6 +171,9 @@ bool DrmConnector::init()
     if (!updateProperties()) {
         return false;
     }
+
+    static const QStringList s_forcedNonDesktopConnectors = qEnvironmentVariable("KWIN_NON_DESKTOP_CONNECTORS").split(QLatin1Char(','), Qt::SkipEmptyParts);
+    m_forcedNonDesktop = s_forcedNonDesktopConnectors.contains(connectorName());
 
     m_possibleCrtcs = drmModeConnectorGetPossibleCrtcs(gpu()->fd(), m_conn.get());
 
@@ -340,7 +345,7 @@ bool DrmConnector::isCrtcSupported(DrmCrtc *crtc) const
 
 bool DrmConnector::isNonDesktop() const
 {
-    return nonDesktop.isValid() && nonDesktop.value() == 1;
+    return m_forcedNonDesktop || (nonDesktop.isValid() && nonDesktop.value() == 1);
 }
 
 const Edid *DrmConnector::edid() const
