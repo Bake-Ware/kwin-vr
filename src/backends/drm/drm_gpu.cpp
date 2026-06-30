@@ -482,13 +482,19 @@ void DrmGpu::releaseUnusedBuffers()
 
 DrmPipeline::Error DrmGpu::testPipelines()
 {
-    if (m_pipelines.empty()) {
+    auto pipelines = m_pipelines;
+    for (const DrmOutput *output : std::as_const(m_drmOutputs)) {
+        if (output->lease()) {
+            pipelines.removeOne(output->pipeline());
+        }
+    }
+    if (pipelines.empty()) {
         // nothing to do
         return DrmPipeline::Error::None;
     }
     assignOutputLayers();
-    for (DrmPipeline *pipeline : m_pipelines) {
-        if (pipeline->output()->lease() || !pipeline->enabled()) {
+    for (DrmPipeline *pipeline : std::as_const(pipelines)) {
+        if (!pipeline->enabled()) {
             continue;
         }
         // reset all outputs to their most basic configuration (primary plane without scaling)
@@ -508,7 +514,7 @@ DrmPipeline::Error DrmGpu::testPipelines()
             }
         }
     }
-    return DrmPipeline::commitPipelines(m_pipelines, DrmPipeline::CommitMode::TestAllowModeset, unusedModesetObjects());
+    return DrmPipeline::commitPipelines(pipelines, DrmPipeline::CommitMode::TestAllowModeset, unusedModesetObjects());
 }
 
 DrmOutput *DrmGpu::findOutput(quint32 connector)
@@ -647,20 +653,46 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         }
     }
 
-    // disable non-primary planes (cursor, overlay) that were in use on the
-    // leased outputs, so stale content like the cursor doesn't stay on screen
+    // also lease the non-primary planes (cursor, overlay) usable only by the
+    // leased CRTCs, so the lessee gets them instead of just the primary plane
+    uint32_t leasedCrtcMask = 0;
+    for (DrmOutput *output : outputs) {
+        leasedCrtcMask |= 1 << output->pipeline()->crtc()->pipeIndex();
+    }
+    QList<DrmPlane *> leasedPlanes;
     if (m_atomicModeSetting) {
-        auto commit = std::make_unique<DrmAtomicCommit>(this);
+        for (const auto &plane : m_planes) {
+            if (plane->type.enumValue() == DrmPlane::TypeIndex::Primary) {
+                continue; // already added by addLeaseObjects
+            }
+            const uint32_t possible = plane->possibleCrtcs();
+            if (possible != 0 && (possible & ~leasedCrtcMask) == 0) {
+                leasedPlanes.push_back(plane.get());
+            }
+        }
+    }
+
+    // blank these planes (and any other non-primary plane on the leased CRTCs)
+    // so stale content like the hardware cursor doesn't stay visible
+    if (m_atomicModeSetting) {
+        QList<DrmPlane *> planesToDisable = leasedPlanes;
         for (DrmOutput *output : outputs) {
             for (const auto layer : output->pipeline()->layers()) {
-                if (auto plane = layer->plane(); plane && plane != output->pipeline()->crtc()->primaryPlane()) {
-                    qCDebug(KWIN_DRM) << "Disabling non-primary plane" << plane->id() << "on crtc" << output->pipeline()->crtc()->id() << "before lease";
-                    plane->disable(commit.get());
+                if (auto plane = layer->plane(); plane && plane != output->pipeline()->crtc()->primaryPlane() && !planesToDisable.contains(plane)) {
+                    planesToDisable.push_back(plane);
                 }
             }
         }
-        if (!commit->commitModeset()) {
-            qCWarning(KWIN_DRM) << "Failed to disable non-primary planes before creating lease:" << strerror(errno);
+        if (!planesToDisable.isEmpty()) {
+            auto commit = std::make_unique<DrmAtomicCommit>(this);
+            for (DrmPlane *plane : std::as_const(planesToDisable)) {
+                qCDebug(KWIN_DRM) << "Disabling non-primary plane" << plane->id() << "before lease";
+                plane->disable(commit.get());
+            }
+            if (!commit->commitModeset()) {
+                qCWarning(KWIN_DRM) << "Failed to disable non-primary planes before creating lease:" << strerror(errno);
+                return nullptr;
+            }
         }
     } else {
         for (DrmOutput *output : outputs) {
@@ -668,6 +700,10 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
                 drmModeSetCursor(m_fd, output->pipeline()->crtc()->id(), 0, 0, 0);
             }
         }
+    }
+
+    for (DrmPlane *plane : std::as_const(leasedPlanes)) {
+        objects << plane->id();
     }
 
     // Ensure we have DRM master before creating the lease.
@@ -693,7 +729,7 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         for (const uint32_t res : std::as_const(objects)) {
             qCDebug(KWIN_DRM) << res;
         }
-        return std::make_unique<DrmLease>(this, std::move(fd), lesseeId, outputs);
+        return std::make_unique<DrmLease>(this, std::move(fd), lesseeId, outputs, leasedPlanes);
     }
 }
 
@@ -905,6 +941,13 @@ QList<DrmObject *> DrmGpu::unusedModesetObjects() const
             ret.removeOne(pipeline->crtc()->primaryPlane());
         }
     }
+    for (const DrmOutput *output : std::as_const(m_drmOutputs)) {
+        if (const DrmLease *lease = output->lease()) {
+            for (DrmPlane *plane : lease->leasedPlanes()) {
+                ret.removeOne(plane);
+            }
+        }
+    }
     return ret;
 }
 
@@ -1105,11 +1148,12 @@ QList<OutputLayer *> DrmGpu::compatibleOutputLayers(BackendOutput *output) const
     return static_cast<DrmOutput *>(output)->pipeline()->layers() | std::ranges::to<QList<OutputLayer *>>();
 }
 
-DrmLease::DrmLease(DrmGpu *gpu, FileDescriptor &&fd, uint32_t lesseeId, const QList<DrmOutput *> &outputs)
+DrmLease::DrmLease(DrmGpu *gpu, FileDescriptor &&fd, uint32_t lesseeId, const QList<DrmOutput *> &outputs, const QList<DrmPlane *> &planes)
     : m_gpu(gpu)
     , m_fd(std::move(fd))
     , m_lesseeId(lesseeId)
     , m_outputs(outputs)
+    , m_planes(planes)
 {
     for (const auto output : m_outputs) {
         output->leased(this);
@@ -1134,6 +1178,11 @@ FileDescriptor &DrmLease::fd()
 uint32_t DrmLease::lesseeId() const
 {
     return m_lesseeId;
+}
+
+const QList<DrmPlane *> &DrmLease::leasedPlanes() const
+{
+    return m_planes;
 }
 }
 

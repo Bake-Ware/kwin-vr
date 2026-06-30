@@ -47,11 +47,12 @@ class DrmLease : public QObject
 {
     Q_OBJECT
 public:
-    DrmLease(DrmGpu *gpu, FileDescriptor &&fd, uint32_t lesseeId, const QList<DrmOutput *> &outputs);
+    DrmLease(DrmGpu *gpu, FileDescriptor &&fd, uint32_t lesseeId, const QList<DrmOutput *> &outputs, const QList<DrmPlane *> &planes = {});
     ~DrmLease();
 
     FileDescriptor &fd();
     uint32_t lesseeId() const;
+    const QList<DrmPlane *> &leasedPlanes() const;
 
 Q_SIGNALS:
     void revokeRequested();
@@ -61,6 +62,7 @@ private:
     FileDescriptor m_fd;
     const uint32_t m_lesseeId;
     const QList<DrmOutput *> m_outputs;
+    const QList<DrmPlane *> m_planes;
 };
 
 class KWIN_EXPORT DrmGpu : public QObject

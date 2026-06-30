@@ -38,6 +38,7 @@ public:
     void disable(DrmAtomicCommit *commit) override;
 
     bool isCrtcSupported(int pipeIndex) const;
+    uint32_t possibleCrtcs() const;
     QHash<uint32_t, QList<uint64_t>> lowBandwidthFormats() const;
     QHash<uint32_t, QList<uint64_t>> formats() const;
     QHash<uint32_t, QList<uint64_t>> tearingFormats() const;

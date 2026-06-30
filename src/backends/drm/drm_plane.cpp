@@ -220,6 +220,11 @@ bool DrmPlane::isCrtcSupported(int pipeIndex) const
     return (m_possibleCrtcs & (1 << pipeIndex));
 }
 
+uint32_t DrmPlane::possibleCrtcs() const
+{
+    return m_possibleCrtcs;
+}
+
 QHash<uint32_t, QList<uint64_t>> DrmPlane::lowBandwidthFormats() const
 {
     return m_lowBandwidthFormats;
