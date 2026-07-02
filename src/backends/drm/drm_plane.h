@@ -39,6 +39,8 @@ public:
 
     bool isCrtcSupported(int pipeIndex) const;
     uint32_t possibleCrtcs() const;
+    bool isLeased() const;
+    void setLeased(bool leased);
     QHash<uint32_t, QList<uint64_t>> lowBandwidthFormats() const;
     QHash<uint32_t, QList<uint64_t>> formats() const;
     QHash<uint32_t, QList<uint64_t>> tearingFormats() const;
@@ -117,6 +119,7 @@ private:
     QHash<uint32_t, QList<uint64_t>> m_lowBandwidthFormats;
     QHash<uint32_t, QList<uint64_t>> m_supportedTearingFormats;
     uint32_t m_possibleCrtcs = 0;
+    bool m_leased = false;
     QList<QSize> m_sizeHints;
 
     std::vector<std::unique_ptr<DrmColorOp>> m_colorPipelineObjects;

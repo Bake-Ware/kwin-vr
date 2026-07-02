@@ -186,6 +186,9 @@ DrmPipeline::Error DrmPipeline::prepareAtomicCommit(DrmAtomicCommit *commit, Com
             return err;
         }
         for (const auto &layer : m_pending.layers) {
+            if (layer->plane() && layer->plane()->isLeased()) {
+                continue;
+            }
             if (Error err = prepareAtomicPlane(commit, layer->plane(), layer, frame); err != Error::None) {
                 return err;
             }
@@ -329,7 +332,7 @@ void DrmPipeline::prepareAtomicDisable(DrmAtomicCommit *commit)
     if (m_pending.crtc) {
         m_pending.crtc->disable(commit);
         for (const auto layer : m_pending.layers) {
-            if (DrmPlane *plane = layer->plane()) {
+            if (DrmPlane *plane = layer->plane(); plane && !plane->isLeased()) {
                 plane->disable(commit);
             }
         }

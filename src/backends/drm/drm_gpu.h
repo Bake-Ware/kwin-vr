@@ -129,6 +129,7 @@ public:
     FileDescriptor createNonMasterFd() const;
     std::unique_ptr<DrmLease> leaseOutputs(const QList<DrmOutput *> &outputs);
     bool isIdle() const;
+    bool waitIdle(std::chrono::milliseconds timeout);
     void dispatchEvents();
 
     void addDefunctCommit(std::unique_ptr<DrmCommit> &&commit);

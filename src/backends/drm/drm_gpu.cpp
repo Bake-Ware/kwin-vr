@@ -57,6 +57,7 @@ namespace KWin
 {
 
 static const std::optional<bool> s_modifiersEnv = environmentVariableBoolValue("KWIN_DRM_USE_MODIFIERS");
+static const bool s_leaseAllPlanes = environmentVariableBoolValue("KWIN_LEASE_ALL_PLANES").value_or(false);
 
 DrmGpu::DrmGpu(DrmBackend *backend, int fd, std::unique_ptr<DrmDevice> &&device)
     : m_fd(fd)
@@ -535,6 +536,25 @@ bool DrmGpu::isIdle() const
     });
 }
 
+bool DrmGpu::waitIdle(std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!isIdle()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        pollfd pfd{
+            .fd = m_fd,
+            .events = POLLIN,
+            .revents = 0,
+        };
+        if (poll(&pfd, 1, 5) > 0 && (pfd.revents & POLLIN)) {
+            dispatchEvents();
+        }
+    }
+    return true;
+}
+
 static std::chrono::nanoseconds convertTimestamp(const timespec &timestamp)
 {
     return std::chrono::seconds(timestamp.tv_sec) + std::chrono::nanoseconds(timestamp.tv_nsec);
@@ -636,63 +656,111 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         return nullptr;
     }
 
+    // drain the commit threads before touching any state: processing the pageflip
+    // events can trigger arbitrary slots, which must not interleave with the lease
+    // setup. Afterwards no commits can be queued while we stay on the main thread,
+    // so in-flight commits can't re-attach planes before the lease creation either
+    if (!waitIdle(std::chrono::milliseconds(200))) {
+        qCWarning(KWIN_DRM) << "Timed out waiting for pending pageflips before creating lease";
+        return nullptr;
+    }
+
+    // planes that may still be attached to the leased crtcs, snapshotted before
+    // testPendingConfiguration reassigns the layers
+    QList<DrmPlane *> previouslyAttachedPlanes;
+    for (DrmOutput *output : outputs) {
+        for (const auto layer : output->pipeline()->layers()) {
+            DrmPlane *plane = layer->plane();
+            if (plane && plane->type.enumValue() != DrmPlane::TypeIndex::Primary && !plane->isLeased() && !previouslyAttachedPlanes.contains(plane)) {
+                previouslyAttachedPlanes.push_back(plane);
+            }
+        }
+    }
+
     // allocate crtcs for the outputs
     for (DrmOutput *output : outputs) {
         output->pipeline()->setEnable(true);
         output->pipeline()->setActive(false);
     }
+    const auto revertPipelines = [this]() {
+        // crtcs of other pipelines may have been reassigned to make room for the lease,
+        // so revert all of them. For pipelines of active leases the pending state matches
+        // the applied state, which makes this a no-op for them
+        for (DrmPipeline *pipeline : std::as_const(m_pipelines)) {
+            pipeline->revertPendingChanges();
+        }
+    };
     const auto testError = testPendingConfiguration();
     if (testError != DrmPipeline::Error::None && testError != DrmPipeline::Error::NoPermission) {
+        revertPipelines();
         return nullptr;
     }
 
     QList<uint32_t> objects;
     for (DrmOutput *output : outputs) {
         if (!output->addLeaseObjects(objects)) {
+            revertPipelines();
             return nullptr;
         }
     }
 
-    // also lease the non-primary planes (cursor, overlay) usable only by the
-    // leased CRTCs, so the lessee gets them instead of just the primary plane
+    // lease the planes belonging to the leased CRTCs: their primary planes,
+    // the non-primary planes only they can drive, and with KWIN_LEASE_ALL_PLANES
+    // also all the overlay planes they can drive
     uint32_t leasedCrtcMask = 0;
     for (DrmOutput *output : outputs) {
         leasedCrtcMask |= 1 << output->pipeline()->crtc()->pipeIndex();
     }
     QList<DrmPlane *> leasedPlanes;
     if (m_atomicModeSetting) {
+        for (DrmOutput *output : outputs) {
+            if (DrmPlane *primary = output->pipeline()->crtc()->primaryPlane()) {
+                leasedPlanes.push_back(primary);
+            }
+        }
         for (const auto &plane : m_planes) {
-            if (plane->type.enumValue() == DrmPlane::TypeIndex::Primary) {
-                continue; // already added by addLeaseObjects
+            if (plane->type.enumValue() == DrmPlane::TypeIndex::Primary || plane->isLeased()) {
+                continue;
             }
             const uint32_t possible = plane->possibleCrtcs();
-            if (possible != 0 && (possible & ~leasedCrtcMask) == 0) {
+            const bool exclusive = possible != 0 && (possible & ~leasedCrtcMask) == 0;
+            const bool leasableOverlay = s_leaseAllPlanes
+                && plane->type.enumValue() == DrmPlane::TypeIndex::Overlay
+                && (possible & leasedCrtcMask) != 0;
+            if (exclusive || leasableOverlay) {
                 leasedPlanes.push_back(plane.get());
             }
         }
     }
 
-    // blank these planes (and any other non-primary plane on the leased CRTCs)
-    // so stale content like the hardware cursor doesn't stay visible
+    // blank the non-primary planes so stale content like the hardware cursor
+    // doesn't stay visible. The connectors, CRTCs and primary planes are handed
+    // over live: turning them off would drop the display link, and detaching
+    // only the primary from an active CRTC is invalid
     if (m_atomicModeSetting) {
-        QList<DrmPlane *> planesToDisable = leasedPlanes;
-        for (DrmOutput *output : outputs) {
-            for (const auto layer : output->pipeline()->layers()) {
-                if (auto plane = layer->plane(); plane && plane != output->pipeline()->crtc()->primaryPlane() && !planesToDisable.contains(plane)) {
-                    planesToDisable.push_back(plane);
-                }
+        QList<DrmPlane *> planesToDisable;
+        for (DrmPlane *plane : std::as_const(leasedPlanes)) {
+            if (plane->type.enumValue() != DrmPlane::TypeIndex::Primary) {
+                planesToDisable.push_back(plane);
+            }
+        }
+        for (DrmPlane *plane : std::as_const(previouslyAttachedPlanes)) {
+            if (!planesToDisable.contains(plane)) {
+                planesToDisable.push_back(plane);
             }
         }
         if (!planesToDisable.isEmpty()) {
             auto commit = std::make_unique<DrmAtomicCommit>(this);
             for (DrmPlane *plane : std::as_const(planesToDisable)) {
-                qCDebug(KWIN_DRM) << "Disabling non-primary plane" << plane->id() << "before lease";
+                qCDebug(KWIN_DRM) << "Disabling plane" << plane->id() << "before lease";
                 plane->disable(commit.get());
             }
             if (!commit->commitModeset()) {
-                qCWarning(KWIN_DRM) << "Failed to disable non-primary planes before creating lease:" << strerror(errno);
+                qCWarning(KWIN_DRM) << "Failed to disable planes before creating lease:" << strerror(errno);
+                revertPipelines();
                 return nullptr;
             }
+            commit->pageFlipped(std::chrono::steady_clock::now().time_since_epoch());
         }
     } else {
         for (DrmOutput *output : outputs) {
@@ -723,13 +791,22 @@ std::unique_ptr<DrmLease> DrmGpu::leaseOutputs(const QList<DrmOutput *> &outputs
         for (const uint32_t res : std::as_const(objects)) {
             qCWarning(KWIN_DRM) << res;
         }
+        revertPipelines();
         return nullptr;
     } else {
         qCDebug(KWIN_DRM) << "Created lease for" << objects.count() << "resources:";
         for (const uint32_t res : std::as_const(objects)) {
             qCDebug(KWIN_DRM) << res;
         }
-        return std::make_unique<DrmLease>(this, std::move(fd), lesseeId, outputs, leasedPlanes);
+        auto lease = std::make_unique<DrmLease>(this, std::move(fd), lesseeId, outputs, leasedPlanes);
+        // drop the leased planes from the layers, and apply the pending state
+        // (including crtc reassignments made to fit the lease), so that reverts
+        // during the lifetime of the lease can't corrupt it
+        assignOutputLayers();
+        for (DrmPipeline *pipeline : std::as_const(m_pipelines)) {
+            pipeline->applyPendingChanges();
+        }
+        return lease;
     }
 }
 
@@ -997,13 +1074,25 @@ void DrmGpu::assignOutputLayers()
         QList<DrmPlane *> freePlanes = m_planes | std::views::transform([](const auto &plane) {
             return plane.get();
         }) | std::ranges::to<QList>();
-        const size_t enabledPipelinesCount = std::ranges::count_if(m_pipelines, &DrmPipeline::enabled);
+        freePlanes.removeIf(std::mem_fn(&DrmPlane::isLeased));
+        const auto isLeasedPipeline = [](DrmPipeline *pipeline) {
+            return pipeline->output()->isLeased() || pipeline->output()->isLeasePending();
+        };
+        const size_t enabledPipelinesCount = std::ranges::count_if(m_pipelines, [&isLeasedPipeline](DrmPipeline *pipeline) {
+            return pipeline->enabled() && !isLeasedPipeline(pipeline);
+        });
         for (DrmPipeline *pipeline : std::as_const(m_pipelines)) {
             if (!pipeline->enabled()) {
                 pipeline->setLayers({});
                 continue;
             }
             QList<DrmPipelineLayer *> layers = {m_planeLayerMap[pipeline->crtc()->primaryPlane()].get()};
+            if (isLeasedPipeline(pipeline)) {
+                // the lessee drives the non-primary planes; kwin only needs the
+                // primary layer for the crtc allocation test
+                pipeline->setLayers(layers);
+                continue;
+            }
             for (DrmPlane *plane : freePlanes) {
                 if (plane->isCrtcSupported(pipeline->crtc()->pipeIndex())
                     && plane->type.enumValue() == DrmPlane::TypeIndex::Cursor) {
@@ -1158,6 +1247,9 @@ DrmLease::DrmLease(DrmGpu *gpu, FileDescriptor &&fd, uint32_t lesseeId, const QL
     for (const auto output : m_outputs) {
         output->leased(this);
     }
+    for (DrmPlane *plane : m_planes) {
+        plane->setLeased(true);
+    }
 }
 
 DrmLease::~DrmLease()
@@ -1167,6 +1259,10 @@ DrmLease::~DrmLease()
     for (DrmOutput *output : m_outputs) {
         output->leaseEnded();
         output->pipeline()->setEnable(false);
+        output->pipeline()->applyPendingChanges();
+    }
+    for (DrmPlane *plane : m_planes) {
+        plane->setLeased(false);
     }
 }
 

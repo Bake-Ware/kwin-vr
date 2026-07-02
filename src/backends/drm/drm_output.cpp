@@ -87,9 +87,6 @@ bool DrmOutput::addLeaseObjects(QList<uint32_t> &objectList)
     qCDebug(KWIN_DRM) << "adding connector" << m_pipeline->connector()->id() << "to lease";
     objectList << m_pipeline->connector()->id();
     objectList << m_pipeline->crtc()->id();
-    if (m_pipeline->crtc()->primaryPlane()) {
-        objectList << m_pipeline->crtc()->primaryPlane()->id();
-    }
     return true;
 }
 

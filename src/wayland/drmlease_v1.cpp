@@ -456,6 +456,9 @@ bool DrmLeaseRequestV1Interface::tryGrantLease(DrmLeaseV1Interface *lease)
     }
 
     lease->grant(std::move(drmLease));
+    // the lease may have taken planes or CRTCs KWin was using; announce the state
+    // change so the compositor rebuilds its output layer views
+    Q_EMIT m_device->gpu()->platform()->outputLeaseStateChanged();
     return true;
 }
 

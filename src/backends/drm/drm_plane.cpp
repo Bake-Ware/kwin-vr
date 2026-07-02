@@ -225,6 +225,16 @@ uint32_t DrmPlane::possibleCrtcs() const
     return m_possibleCrtcs;
 }
 
+bool DrmPlane::isLeased() const
+{
+    return m_leased;
+}
+
+void DrmPlane::setLeased(bool leased)
+{
+    m_leased = leased;
+}
+
 QHash<uint32_t, QList<uint64_t>> DrmPlane::lowBandwidthFormats() const
 {
     return m_lowBandwidthFormats;
