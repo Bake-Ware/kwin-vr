@@ -112,6 +112,11 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
+    // Exclude the VR compositor window to prevent recursive rendering
+    if (window->resourceClass() == QLatin1String("openxr")) {
+        return false;
+    }
+
     switch (window->windowType()) {
     case WindowType::OnScreenDisplay:
     case WindowType::Notification:
