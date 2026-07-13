@@ -70,7 +70,7 @@ KwinVr::KwinVr()
     cycleAction->setObjectName(QStringLiteral("Activate VR Mode"));
     cycleAction->setText(i18nc("@action Activate VR Mode", "Activate VR Mode"));
     KGlobalAccel::self()->setDefaultShortcut(cycleAction, {{Qt::CTRL | Qt::META | Qt::Key_J}});
-    KGlobalAccel::self()->setShortcut(cycleAction, {});
+    KGlobalAccel::self()->setShortcut(cycleAction, {{Qt::CTRL | Qt::META | Qt::Key_J}});
 
     connect(KwinVrBridge::instance(), &KwinVrBridge::xrFailed, this, [this](const QString &errorString) {
         qCWarning(KWINVR) << "XR failed signal received:" << errorString;

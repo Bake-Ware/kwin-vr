@@ -112,7 +112,10 @@ void KWinVrShortcuts::registerShortcut(const QString &name, const QString &text,
     action->setObjectName(name);
     action->setText(text);
     KGlobalAccel::self()->setDefaultShortcut(action, {defaultSequence});
-    KGlobalAccel::self()->setShortcut(action, {});
+    // Autoloading: a user-customized binding saved in kglobalshortcutsrc wins;
+    // otherwise the default becomes the active binding (upstream registered
+    // these with no active binding at all, leaving every shortcut inert).
+    KGlobalAccel::self()->setShortcut(action, {defaultSequence});
     connect(action, &QAction::triggered, this, signal);
 }
 
