@@ -3,7 +3,7 @@ pkgname=kwin
 pkgver=6.6.3
 pkgrel=1
 pkgdesc='KDE Window Manager with VR support (custom build)'
-arch=(x86_64)
+arch=(x86_64 aarch64)
 license=(LGPL-2.0-or-later)
 url='https://kde.org/plasma-desktop/'
 
