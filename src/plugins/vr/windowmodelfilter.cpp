@@ -300,7 +300,16 @@ bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source
     }
 
     Window *window = qvariant_cast<Window *>(data);
-    if (!window || !window->isClient()) {
+    if (!window) {
+        return false;
+    }
+
+    // Route the KWin task switcher (alt+tab) — a KWin-internal window — onto the HUD plane.
+    if (window->isInternal()) {
+        return true;
+    }
+
+    if (!window->isClient()) {
         return false;
     }
 
