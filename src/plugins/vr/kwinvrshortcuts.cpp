@@ -67,6 +67,31 @@ KWinVrShortcuts::KWinVrShortcuts(QObject *parent)
                      i18nc("@action Reset View", "Reset View"),
                      {Qt::CTRL | Qt::META | Qt::Key_T},
                      &KWinVrShortcuts::resetViewTriggered);
+
+    registerShortcut(QStringLiteral("Grow VR Window"),
+                     i18nc("@action Grow VR Window", "Grow VR Window"),
+                     {Qt::CTRL | Qt::META | Qt::Key_Equal},
+                     &KWinVrShortcuts::growWindowTriggered);
+
+    registerShortcut(QStringLiteral("Shrink VR Window"),
+                     i18nc("@action Shrink VR Window", "Shrink VR Window"),
+                     {Qt::CTRL | Qt::META | Qt::Key_Minus},
+                     &KWinVrShortcuts::shrinkWindowTriggered);
+
+    registerShortcut(QStringLiteral("Increase VR Curvature"),
+                     i18nc("@action Increase VR Curvature", "Increase VR Curvature"),
+                     {Qt::CTRL | Qt::META | Qt::Key_BracketRight},
+                     &KWinVrShortcuts::increaseCurvatureTriggered);
+
+    registerShortcut(QStringLiteral("Decrease VR Curvature"),
+                     i18nc("@action Decrease VR Curvature", "Decrease VR Curvature"),
+                     {Qt::CTRL | Qt::META | Qt::Key_BracketLeft},
+                     &KWinVrShortcuts::decreaseCurvatureTriggered);
+
+    registerShortcut(QStringLiteral("Pin VR Window to HUD"),
+                     i18nc("@action Pin VR Window to HUD", "Pin VR Window to HUD"),
+                     {Qt::CTRL | Qt::META | Qt::Key_P},
+                     &KWinVrShortcuts::pinWindowTriggered);
 }
 
 void KWinVrShortcuts::registerShortcut(const QString &name, const QString &text,

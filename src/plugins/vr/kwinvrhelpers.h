@@ -83,6 +83,7 @@ public:
     Q_INVOKABLE void windowOffscreenRef(Window *window, bool ref);
     Q_INVOKABLE bool windowIsInternal(Window *window);
 
+    Q_INVOKABLE KWin::Window *activeWindow() const;
     Q_INVOKABLE void windowMove(Window *window, const QPointF &topLeft);
     Q_INVOKABLE void windowResize(Window *window, qreal dw, qreal dh);
     Q_INVOKABLE QSizeF windowSize(Window *window);

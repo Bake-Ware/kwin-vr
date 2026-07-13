@@ -323,6 +323,35 @@ Node {
     }
 
     // Uniform scale resize for pinch gestures. scale is multiplicative (1.0 = no change).
+    /* Target for shortcut actions: the grabbed window, else the focused one. */
+    function _shortcutTargetClient() {
+        const appWin = pickRay.grabbedObject as KwinApplicationWindow
+        if (appWin && appWin.client && appWin.client.vr)
+            return appWin.client
+        return KwinVrHelpers.activeWindow()
+    }
+
+    function resizeStepTarget(direction: int): void {
+        const client = _shortcutTargetClient()
+        if (!client)
+            return
+        const sz = KwinVrHelpers.windowSize(client)
+        const f = KWinVRConfig.shortcutResizeStep * direction
+        KwinVrHelpers.windowResize(client, sz.width * f, sz.height * f)
+    }
+
+    function adjustHudCurvature(direction: int): void {
+        const v = KWinVRConfig.hudCurvature + direction * KWinVRConfig.shortcutCurvatureStep
+        KWinVRConfig.hudCurvature = Math.max(0, Math.min(6, v))
+        KWinVRConfig.saveConfig()
+    }
+
+    function togglePinTarget(): void {
+        const client = _shortcutTargetClient()
+        if (client)
+            VrPinRegistry.toggle(client)
+    }
+
     function pinchResizeGrabbed(scale: real): void {
         if (!pickRay.grabbedObject)
             return

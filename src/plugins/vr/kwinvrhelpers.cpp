@@ -131,6 +131,11 @@ void KwinVrHelpers::windowMove(Window *window, const QPointF &topLeft)
     }
 }
 
+Window *KwinVrHelpers::activeWindow() const
+{
+    return workspace()->activeWindow();
+}
+
 void KwinVrHelpers::windowResize(Window *window, qreal dw, qreal dh)
 {
     if (!window) {

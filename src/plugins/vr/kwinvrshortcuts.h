@@ -42,6 +42,11 @@ Q_SIGNALS:
     void toggleRayTriggered();
     void toggleCursorTriggered();
     void resetViewTriggered();
+    void growWindowTriggered();
+    void shrinkWindowTriggered();
+    void increaseCurvatureTriggered();
+    void decreaseCurvatureTriggered();
+    void pinWindowTriggered();
 
 private:
     explicit KWinVrShortcuts(QObject *parent = nullptr);

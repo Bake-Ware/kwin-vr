@@ -124,6 +124,7 @@ qt6_add_qml_module(vr
         kwinvr.h kwinvr.cpp
         kwinvrinputfilter.h kwinvrinputfilter.cpp
         kwinvrshortcuts.h kwinvrshortcuts.cpp
+        vrpinregistry.h vrpinregistry.cpp
 
         kwininternalwindow.h kwininternalwindow.cpp
         relativemotionblocker.h relativemotionblocker.cpp

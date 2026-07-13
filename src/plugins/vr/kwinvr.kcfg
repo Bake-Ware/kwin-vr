@@ -369,6 +369,24 @@
       <label>Automatically start VR mode after auto-leased outputs are leased</label>
       <default>false</default>
     </entry>
+    <entry name="shortcutResizeStep" type="Double">
+      <label>Fraction a window grows/shrinks per resize-shortcut press</label>
+      <default>0.1</default>
+      <min>0.02</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="shortcutCurvatureStep" type="Double">
+      <label>HUD curvature change per curvature-shortcut press</label>
+      <default>0.25</default>
+      <min>0.05</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="hudPinScale" type="Double">
+      <label>Scale applied to windows pinned to the HUD plane</label>
+      <default>0.4</default>
+      <min>0.1</min>
+      <max>1.0</max>
+    </entry>
   </group>
 
   <group name="InputMapping">

@@ -5,6 +5,7 @@
 */
 
 #include "windowmodelfilter.h"
+#include "vrpinregistry.h"
 #include "window.h"
 #include "workspace.h"
 
@@ -85,6 +86,8 @@ int KwinWindowModel::rowCount(const QModelIndex &parent) const
 PrimaryWindowModelFilter::PrimaryWindowModelFilter(QObject *parent)
     : QSortFilterProxyModel{parent}
 {
+    connect(VrPinRegistry::instance(), &VrPinRegistry::pinnedChanged,
+            this, &PrimaryWindowModelFilter::invalidate);
 }
 
 bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
@@ -114,6 +117,11 @@ bool PrimaryWindowModelFilter::filterAcceptsRow(int source_row, const QModelInde
 
     // Exclude the VR compositor window to prevent recursive rendering
     if (window->resourceClass() == QLatin1String("openxr")) {
+        return false;
+    }
+
+    // Windows pinned to the HUD plane leave the primary world plane
+    if (VrPinRegistry::instance()->isPinned(window)) {
         return false;
     }
 
@@ -281,6 +289,8 @@ void AbstractTransientWindowModelFilter::setWindowModel(KwinWindowModel *newWind
 HudWindowFilter::HudWindowFilter(QObject *parent)
     : QSortFilterProxyModel{parent}
 {
+    connect(VrPinRegistry::instance(), &VrPinRegistry::pinnedChanged,
+            this, &HudWindowFilter::invalidate);
 }
 
 bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
@@ -306,6 +316,11 @@ bool HudWindowFilter::filterAcceptsRow(int source_row, const QModelIndex &source
 
     // Route the KWin task switcher (alt+tab) — a KWin-internal window — onto the HUD plane.
     if (window->isInternal()) {
+        return true;
+    }
+
+    // Windows pinned to the HUD plane (PIP)
+    if (VrPinRegistry::instance()->isPinned(window)) {
         return true;
     }
 

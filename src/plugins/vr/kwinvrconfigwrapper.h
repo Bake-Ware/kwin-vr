@@ -27,6 +27,11 @@ public:
         QQmlEngine::setObjectOwnership(config, QQmlEngine::CppOwnership);
         return config;
     }
+    Q_INVOKABLE bool saveConfig()
+    {
+        return save();
+    }
+
     static KWinVRConfigWrapper *instance()
     {
         static KWinVRConfigWrapper inst;

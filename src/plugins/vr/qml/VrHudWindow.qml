@@ -47,7 +47,14 @@ Node {
     // Window world dimensions mapped to HUD. Height maps against output height
     // (consistent in 2D and SBS); width follows the window native pixel aspect
     // so a double-wide (SBS) output cannot squish it horizontally.
-    readonly property real windowWorldH: (client.frameGeometry.height / outputGeo.height) * hudSurfaceH
+    // Pinned (PIP) windows render scaled down on the HUD
+    readonly property bool pinnedToHud: {
+        VrPinRegistry.revision
+        return VrPinRegistry.isPinned(client)
+    }
+    readonly property real pinScale: pinnedToHud ? KWinVRConfig.hudPinScale : 1
+
+    readonly property real windowWorldH: (client.frameGeometry.height / outputGeo.height) * hudSurfaceH * pinScale
     readonly property real windowWorldW: windowWorldH
         * (client.frameGeometry.height > 0 ? client.frameGeometry.width / client.frameGeometry.height : 1)
 

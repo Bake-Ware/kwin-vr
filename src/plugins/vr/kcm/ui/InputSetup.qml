@@ -44,6 +44,10 @@ Item {
                 text: i18nc("@title:tab", "VR Controller")
                 icon.name: "input-gamepad"
             }
+            Controls.TabButton {
+                text: i18nc("@title:tab", "Shortcuts")
+                icon.name: "input-keyboard"
+            }
         }
 
         StackLayout {
@@ -58,6 +62,8 @@ Item {
             KeysToMouseButtonBindings {}
 
             VrControllerBindings {}
+
+            ShortcutsSetup {}
         }
     }
 }
