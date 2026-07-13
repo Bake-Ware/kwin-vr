@@ -35,7 +35,7 @@ XrView {
         depthPrePassEnabled: KWinVRConfig.depthPrePassEnabled
         depthTestEnabled: KWinVRConfig.depthTestEnabled
         antialiasingMode: SceneEnvironment.NoAA
-        temporalAaEnabled: false
+        temporalAAEnabled: false
         aoEnabled: false
     }
 
