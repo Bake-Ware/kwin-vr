@@ -193,8 +193,10 @@ MouseArea {
         function onToggleRayTriggered() { mouseArea.ws.rayEnabled = !mouseArea.ws.rayEnabled }
         function onToggleCursorTriggered() { mouseArea.ws.cursorEnabled = !mouseArea.ws.cursorEnabled }
         function onResetViewTriggered() { mouseArea.ws.resetView() }
-        function onGrowWindowTriggered() { mouseArea.ws.resizeStepTarget(1) }
-        function onShrinkWindowTriggered() { mouseArea.ws.resizeStepTarget(-1) }
+        function onResizeWiderTriggered() { mouseArea.ws.resizeStepTarget(1, 0) }
+        function onResizeNarrowerTriggered() { mouseArea.ws.resizeStepTarget(-1, 0) }
+        function onResizeTallerTriggered() { mouseArea.ws.resizeStepTarget(0, 1) }
+        function onResizeShorterTriggered() { mouseArea.ws.resizeStepTarget(0, -1) }
         function onIncreaseCurvatureTriggered() { mouseArea.ws.adjustHudCurvature(1) }
         function onDecreaseCurvatureTriggered() { mouseArea.ws.adjustHudCurvature(-1) }
         function onPinWindowTriggered() { mouseArea.ws.togglePinTarget() }

@@ -331,13 +331,15 @@ Node {
         return KwinVrHelpers.activeWindow()
     }
 
-    function resizeStepTarget(direction: int): void {
+    function resizeStepTarget(dwDirection: int, dhDirection: int): void {
         const client = _shortcutTargetClient()
         if (!client)
             return
         const sz = KwinVrHelpers.windowSize(client)
-        const f = KWinVRConfig.shortcutResizeStep * direction
-        KwinVrHelpers.windowResize(client, sz.width * f, sz.height * f)
+        const step = KWinVRConfig.shortcutResizeStep
+        KwinVrHelpers.windowResize(client,
+                                   sz.width * step * dwDirection,
+                                   sz.height * step * dhDirection)
     }
 
     function adjustHudCurvature(direction: int): void {

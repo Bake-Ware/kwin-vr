@@ -106,20 +106,16 @@ Item {
             Layout.alignment: Qt.AlignHCenter
 
             Controls.Label {
-                Kirigami.FormData.label: i18nc("@option", "Grow window:")
-                text: "Ctrl+Meta+="
-            }
-            Controls.Label {
-                Kirigami.FormData.label: i18nc("@option", "Shrink window:")
-                text: "Ctrl+Meta+-"
+                Kirigami.FormData.label: i18nc("@option", "Resize window:")
+                text: i18nc("@info", "Ctrl+Meta+Arrows (\u2190 narrower, \u2192 wider, \u2193 taller, \u2191 shorter)")
             }
             Controls.Label {
                 Kirigami.FormData.label: i18nc("@option", "Increase curvature:")
-                text: "Ctrl+Meta+]"
+                text: "Ctrl+Meta+)"
             }
             Controls.Label {
                 Kirigami.FormData.label: i18nc("@option", "Decrease curvature:")
-                text: "Ctrl+Meta+["
+                text: "Ctrl+Meta+("
             }
             Controls.Label {
                 Kirigami.FormData.label: i18nc("@option", "Pin window to HUD:")

@@ -42,8 +42,10 @@ Q_SIGNALS:
     void toggleRayTriggered();
     void toggleCursorTriggered();
     void resetViewTriggered();
-    void growWindowTriggered();
-    void shrinkWindowTriggered();
+    void resizeWiderTriggered();
+    void resizeNarrowerTriggered();
+    void resizeTallerTriggered();
+    void resizeShorterTriggered();
     void increaseCurvatureTriggered();
     void decreaseCurvatureTriggered();
     void pinWindowTriggered();
