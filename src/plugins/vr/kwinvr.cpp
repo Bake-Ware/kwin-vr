@@ -571,6 +571,24 @@ void KwinVr::tryAutoLease()
 
     const auto outputs = snapshotOutputs();
 
+    // Auto-RELEASE (the "unlease at 2D" half of the mode-switch lifecycle):
+    // a configured output that is marked leasable but is no longer in SBS mode
+    // (dropped back to 2D, or a stale persisted lease at boot) must be released.
+    // A leased output is excluded from the desktop, so leaving it leased at 2D
+    // renders a black screen.
+    {
+        const QStringList sbsEligible = AutoLeasePolicy::eligibleOutputs(autoOutputs, outputs, config->autoLeaseMinWidth());
+        for (const AutoLeasePolicy::OutputSnapshot &output : outputs) {
+            if (autoOutputs.contains(output.name) && output.leasable && !sbsEligible.contains(output.name)) {
+                qCInfo(KWINVR) << "Auto-release: output" << output.name
+                               << "is leasable but not in SBS mode - releasing lease";
+                setOutputLeasable(output.name, false);
+                m_autoLeaseTriggered = false;
+                m_autoStartPending = false;
+            }
+        }
+    }
+
     // The latch below is one-shot per *connection*, not per session: when
     // every configured output has disappeared from the backend (glasses
     // unplugged), re-arm so the next hotplug runs the full lease+autostart
