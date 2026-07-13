@@ -44,9 +44,12 @@ Node {
         return (fg.y + fg.height / 2 - outputGeo.y - outputGeo.height / 2) / outputGeo.height
     }
 
-    // Window world dimensions mapped to HUD
-    readonly property real windowWorldW: (client.frameGeometry.width / outputGeo.width) * hudSurfaceW
+    // Window world dimensions mapped to HUD. Height maps against output height
+    // (consistent in 2D and SBS); width follows the window native pixel aspect
+    // so a double-wide (SBS) output cannot squish it horizontally.
     readonly property real windowWorldH: (client.frameGeometry.height / outputGeo.height) * hudSurfaceH
+    readonly property real windowWorldW: windowWorldH
+        * (client.frameGeometry.height > 0 ? client.frameGeometry.width / client.frameGeometry.height : 1)
 
     // Transient-chain depth: 0 = root HUD window, 1 = its popup/menu,
     // 2 = submenu… (chains are fixed at map time, capped like
