@@ -1,0 +1,6 @@
+verbosity=1
+bootlogo=true
+overlay_prefix=sun60i-a733
+fdtfile=allwinner/sun60i-a733-orangepi-zero3w.dtb
+rootdev=PARTUUID=bbf75006-01
+rootfstype=ext4
