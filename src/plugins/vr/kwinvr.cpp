@@ -5,6 +5,7 @@
 */
 
 #include "kwinvr.h"
+#include "questframebridge.h"
 
 #include "autoleasepolicy.h"
 #include "core/backendoutput.h"
@@ -43,6 +44,7 @@ namespace KWin
 
 KwinVr::KwinVr()
 {
+    new QuestFrameBridge(this);
     auto config = KWinVRConfigWrapper::instance();
     m_watcher = KConfigWatcher::create(config->sharedConfig());
     connect(m_watcher.data(), &KConfigWatcher::configChanged, config, &KWinVRConfigWrapper::load);
