@@ -122,6 +122,7 @@ qt6_add_qml_module(vr
         kwinvrhoveredwindowresolver.h kwinvrhoveredwindowresolver.cpp
         kwinvrhelpers.h kwinvrhelpers.cpp
         kwinvr.h kwinvr.cpp
+        questframebridge.h questframebridge.cpp
         kwinvrinputfilter.h kwinvrinputfilter.cpp
         kwinvrshortcuts.h kwinvrshortcuts.cpp
         vrpinregistry.h vrpinregistry.cpp
